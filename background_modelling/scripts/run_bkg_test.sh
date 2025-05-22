@@ -1,1 +1,1 @@
-python3 bkg_test.py --fit_jpsi_first --floating_signal --tag="debug" &> log
+python3 bkg_test.py --fit_jpsi_prompt --floating_signal --tag="debug"

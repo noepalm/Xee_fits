@@ -3,7 +3,7 @@ import os
 
 use_jpsi = False
 suffix = "_jpsi" if use_jpsi else "_minbias"
-f = ROOT.TFile.Open(f"dataset{suffix}.root")
+f = ROOT.TFile.Open(f"datasets/dataset{suffix}.root")
 w = f.Get("w")
 data = w.obj("data")
 m = w.obj("mass_test")

@@ -38,7 +38,7 @@ ROOT.gROOT.SetBatch(True)
 use_jpsi = False
 sample_suffix = "_jpsi" if use_jpsi else "_minbias"
 suffix = "" if not use_reduced_mass else "_reducedMass"
-f = ROOT.TFile.Open(f"dataset{sample_suffix}{suffix}_full.root")
+f = ROOT.TFile.Open(f"datasets/dataset{sample_suffix}{suffix}_full.root")
 w = f.Get("w")
 data = w.obj("data")
 m = w.obj("mass_test")

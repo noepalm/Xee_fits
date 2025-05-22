@@ -21,7 +21,7 @@ else:
 w = ROOT.RooWorkspace('w')
 
 suffix = "" if not use_reduced_mass else "_reducedMass"
-signal_ws_file = f'../signal_modelling/signal_model{suffix}.root'
+signal_ws_file = f'../signal_modelling/workspaces/signal_model{suffix}.root'
 signal_ws = ROOT.TFile.Open(signal_ws_file).Get('w')
 
 m = signal_ws.var('mass_test')
@@ -54,4 +54,4 @@ for mass, model in models.items():
 
 # save workspace to file
 sample_suffix = "_jpsi" if use_jpsi else "_minbias"
-w.writeToFile(f'dataset{sample_suffix}{suffix}.root')
+w.writeToFile(f'datasets/dataset{sample_suffix}{suffix}.root')

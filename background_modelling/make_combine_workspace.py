@@ -3,7 +3,7 @@ import os
 
 use_jpsi = False
 suffix = "_jpsi" if use_jpsi else "_minbias"
-f = ROOT.TFile.Open(f"dataset{suffix}.root")
+f = ROOT.TFile.Open(f"datasets/dataset{suffix}.root")
 w = f.Get("w")
 data = w.obj("data")
 m = w.obj("mass_test")
@@ -86,4 +86,4 @@ for region in ["Region2", "Region3"]:
     w_bkg.Import(bkg_f3)
 
 ### SAVE WORKSPACE
-w_bkg.writeToFile("workspace_background.root")
+w_bkg.writeToFile("workspaces/workspace_background.root")

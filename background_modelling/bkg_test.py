@@ -30,18 +30,19 @@ if tag != "":
 # turn on batch mode
 ROOT.gROOT.SetBatch(True)
 
+# -------- UTILIES -------- #
 
 # -------- INPUT FILES -------- #
 
 use_jpsi = False
 sample_suffix = "_jpsi" if use_jpsi else "_minbias"
 suffix = "" if not use_reduced_mass else "_reducedMass"
-f = ROOT.TFile.Open(f"dataset{sample_suffix}{suffix}.root")
+f = ROOT.TFile.Open(f"datasets/dataset{sample_suffix}{suffix}.root")
 w = f.Get("w")
 data = w.obj("data")
 m = w.obj("mass_test")
 
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit_tests/debugging"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit_tests"
 
 # ----- FIT SIDEBANDS with ENVELOPE ----- #
 # 1) fit each background model separately
@@ -202,7 +203,7 @@ else:
 
 if args.fit_jpsi_prompt:
     # retrieve prompt jpsi, psi2s dataset from other file
-    prompt_file = ROOT.TFile.Open(f"dataset_jpsi.root")
+    prompt_file = ROOT.TFile.Open(f"datasets/dataset_jpsi.root")
     prompt_w = prompt_file.Get("w")
     prompt_data = prompt_w.obj("data")
 
@@ -349,7 +350,7 @@ full_bkg_model = ROOT.RooAddPdf("full_bkg_model", "full_bkg_model",
                         ROOT.RooArgList([w.obj(var) for var in normalizations]))
 
 w.Import(full_bkg_model, ROOT.RooCmdArg())
-w.writeToFile(f"dataset{sample_suffix}{suffix}_full.root")
+w.writeToFile(f"datasets/dataset{sample_suffix}{suffix}_full.root")
 
 # 1) draw dataset around jpsi (2.5, 4.1 range)
 # set batch mode
