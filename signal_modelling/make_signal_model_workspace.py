@@ -250,7 +250,7 @@ def make_signal_model(samples, wsfile, parametrized_vars, isParametrized = False
                 print(f"{var}: {val:.3g} +/- {err:.3g}")
 
         # import model in workspace
-        w.Import(model, True)
+        w.Import(model, ROOT.RooCmdArg())
 
         # close the file
         f.Close()

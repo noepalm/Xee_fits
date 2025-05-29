@@ -175,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument("--tag", help="Tag for output files", default="")
     args = parser.parse_args()
     
-    wsfile = args.wsfile
+    wsfile = os.path.join("workspaces", args.wsfile)
 
     # update initializations if using reco mass
     # any mass range has to be shifted by the nominal mass, and all sigma ranges have to be multiplied by the nominal mass
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     if args.test_signal_model or (args.full and not args.no_test_signal_model):
         print("Testing signal model workspace for several mass points")
-        for mass in np.concatenate([np.arange(0.5, 10.5, 0.5), [3.1, 3.7]]):
+        for mass in np.concatenate([np.arange(0.5, 10.5, 0.2), [3.1, 3.7]]):
             build_signal_model_for_mass(samples, wsfile, parametrized_vars, mass, use_reco_mass = args.use_reco_mass)
 
     if args.plots or (args.full and not args.no_plots):
