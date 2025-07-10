@@ -14,9 +14,9 @@ import os
 # ------- I/O ------- #
 
 wsfile = "signal_model.root"
-# path = "../signal_model_cuts_fixed/snap/"
-# path = "../signal_model_cuts_test/snap/"
-path = "/eos/home-n/npalmeri/DiEleAnalyzer/CMGRDF_test/dp-ee-main/signal_model/zsnap/era2023/"
+# path = "/eos/home-n/npalmeri/DiEleAnalyzer/CMGRDF_test/dp-ee-main/signal_model/zsnap/era2023/"
+# path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/signal_model/zsnap/era2023/" #updated selection, no reweight
+path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/signal_model_reweighted/zsnap/era2023/" #updated selection, no reweight
 
 eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
 
@@ -42,7 +42,6 @@ samples = {
     },
     "Zd_M5" : {
         "filename" : "HAHM_13p6TeV_M5.root",
-        "file_GEN" : path + "HAHM_13p6TeV_M5_2023_0common_0_GenSelection.root",
         "nominal_mass" : 5,
         "nominal_width" : 0.02,
         "mass_range" : [5, 3.5, 6],
@@ -51,7 +50,6 @@ samples = {
     },
     "Zd_M5p5" : {
         "filename" : "HAHM_13p6TeV_M5p5.root",
-        "file_GEN" : path + "HAHM_13p6TeV_M5p5_2023_0common_0_GenSelection.root",
         "nominal_mass" : 5.5,
         "nominal_width" : 0.02,
         "mass_range" : [5.5, 4, 6.5],
@@ -60,7 +58,6 @@ samples = {
     },
     "Zd_M6" : {
         "filename" : "HAHM_13p6TeV_M6.root",
-        "file_GEN" : path + "HAHM_13p6TeV_M6_2023_0common_0_GenSelection.root",
         "nominal_mass" : 6,
         "nominal_width" : 0.02,
         "mass_range" : [6, 4.5, 7],
@@ -69,7 +66,6 @@ samples = {
     },
     "Zd_M6p5" : {
         "filename" : "HAHM_13p6TeV_M6p5.root",
-        "file_GEN" : path + "HAHM_13p6TeV_M6p5_2023_0common_0_GenSelection.root",
         "nominal_mass" : 6.5,
         "nominal_width" : 0.02,
         "mass_range" : [6.5, 5, 7.5],
@@ -78,7 +74,6 @@ samples = {
     },
     "UpsilonToEE" : {
         "filename" : "UpsilonToEE.root",
-        "file_GEN" : path + "PromptUpsilon_2023_0common_0_GenSelection.root",
         "nominal_mass" : 9.460,
         "nominal_width" : 0.02, #PDG: 54 kev
         "mass_range" : [9, 6, 12],
@@ -87,7 +82,6 @@ samples = {
     },
     "JPsiToEE" : {
         "filename" : "JPsiToEE.root",
-        "file_GEN" : path + "BuToKJpsi_2023_0common_0_GenSelection.root",
         "nominal_mass" : 3.097,
         "nominal_width" : 0.02, #54 kevfile_GEN
         "mass_range" : [3.1, 2, 3.6],
@@ -120,7 +114,6 @@ common_ranges = {
     # "response_nsgn_range" : [100, 0, 1000],
 
 
-
     # signal model parameters
     # dCB (non-parametrized, all free)
     "mean_range" : [0, -0.6, 0.6],
@@ -135,8 +128,11 @@ common_ranges = {
 }
 
 for name, sample in samples.items():
-    sample["file"] = os.path.join(path, "main_2_Final", sample["filename"])
-    sample["file_GEN"] = os.path.join(path, "main_0_GenSelection", sample["filename"])
+    sample["file"] = os.path.join(path, "base_9_GenMatching", sample["filename"])
+    sample["file_GEN"] = os.path.join(path, "base_8_GenSelection", sample["filename"])
+    # NOTE: file_GEN would require a selection with GenSelection as first step.
+    # This is not the case in the current setup, so GEN distributions will actually be post-selection.
+    # For cleanest results, run a flow with the above requirement.
 
 for name, sample in samples.items():
     # only overwrite params which are not already in dict
@@ -235,7 +231,7 @@ if __name__ == "__main__":
 
     if args.test_signal_model or (args.full and not args.no_test_signal_model):
         print("Testing signal model workspace for several mass points")
-        for mass in np.concatenate([np.arange(0.5, 10.5, 0.2), [3.1, 3.7]]):
+        for mass in np.concatenate([np.arange(0.5, 10.5, 0.1), [3.1, 3.7]]):
             build_signal_model_for_mass(samples, wsfile, parametrized_vars, mass, use_reco_mass = args.use_reco_mass)
 
     if args.plots or (args.full and not args.no_plots):

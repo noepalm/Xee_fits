@@ -12,6 +12,7 @@ cb = ch.CombineHarvester()
 cb.SetVerbosity(5)
 
 input_dir = '../background_modelling/datasets/'
+# input_dir = '../background_modelling/datasets/forPresentation_11062025/'
 
 # add workspace
 f = R.TFile.Open(input_dir + "dataset_minbias_binned_full.root", "READ")
@@ -51,7 +52,7 @@ cats = {
   'ee_2023': [ (0, 'ee_cat0') ]
 }
 
-masses = [f"{v:.1f}" for v in np.arange(0.5, 10.5, 0.2)]
+masses = [f"{v:.1f}" for v in np.arange(0.5, 10.5, 0.1)]
 # masses = ch.ValsFromRange('3.0:10.0|2.0') # can't specify number of digits after the point
 # masses = [f"M{mass:.1f}".replace(".", "p") for mass in np.arange(0.5, 10.5, 0.2)] # for old model naming convention
 
@@ -63,9 +64,14 @@ for era in eras:
         cb.AddProcesses(    ['*'],  ['Xee'], [era], [chn], bkg_procs[chn],  cats[chn+"_"+era], False )
         cb.AddProcesses(    masses, ['Xee'], [era], [chn], sig_procs,       cats[chn+"_"+era], True  )
 
-# print('>> Adding systematics...')
+print('>> Adding systematics...')
+
 # # Luminosity uncertainty (flat 1%)
 # cb.cp().AddSyst(cb, 'lumi_2023', 'lnN', ch.SystMap()(1.01))
+
+# Add a rateParam for each background process (let the yield freely float)
+cb.cp().process(['dy', 'jpsi']).AddSyst(cb, 'scale_$PROCESS', 'rateParam', ch.SystMap()(1.0))
+cb.cp().process(['psi2s']).AddSyst(cb, 'scale_psi2s', 'rateParam', ch.SystMap()(0.1))
 
 print('>> Extracting shapes...')
 # Update with actual root file and object naming convention
@@ -84,9 +90,27 @@ for era in eras:
         )
 
 print('>> Setting rate values...')
-# set all rates to -1 (will deduce from shapes)
 cb.ForEachProc(lambda p: p.set_rate(-1))
-#cb.cp().process(['Zd']).ForEachProc(lambda p: p.set_rate(100))
+
+# get signal process rates from the workspace (saved as Zd_MX_expected)
+cb.cp().signals().ForEachProc(lambda p: p.set_rate(
+    w.var(f'Zd_M{p.mass()}_expected').getValV() * 58.9/7.98
+))
+
+# get background process rates from the workspace (saved as jpsi_expected, psi2s_expected, etc.)
+cb.cp().process(["jpsi"]).ForEachProc(lambda p: p.set_rate(
+    w.var('jpsi_expected').getValV() * 2 * 58.9/7.98 #minbias norm offset * lumi rescale
+))
+
+# set psi2s to jpsi rate/10
+cb.cp().process(["psi2s"]).ForEachProc(lambda p: p.set_rate(
+    w.var('jpsi_expected').getValV() / 10 * 2 * 58.9/7.98 #minbias norm offset * lumi rescale
+))
+
+# set dy rate to 1/3 of jpsi rate
+cb.cp().process(["dy"]).ForEachProc(lambda p: p.set_rate(
+    w.var('jpsi_expected').getValV() / 3 * 2 * 58.9/7.98 #minbias norm offset * lumi rescale
+))
 
 print('>> Setting standardised bin names...')
 ch.SetStandardBinNames(cb)

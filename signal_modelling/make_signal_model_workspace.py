@@ -24,18 +24,21 @@ def make_response_function_workspace(samples, wsfile, use_reco_mass = False):
 
         # create and fill dataset
         print("Filling reduced mass dataset")
-        data = ROOT.RooDataSet(f"response_data_{name}", f"response_data_{name}", ROOT.RooArgSet(w.var(f"{observables[0]}_{name}")))
+        weightVar = ROOT.RooRealVar(f"weightVar_{name}", f"weightVar_{name}", 1.0) # create a weight variable
+        w.Import(weightVar, ROOT.RooCmdArg())
+        data = ROOT.RooDataSet(f"response_data_{name}", f"response_data_{name}", ROOT.RooArgSet(w.var(f"{observables[0]}_{name}")), ROOT.RooFit.WeightVar(f"weightVar_{name}"))
         min_val = sample[f'{observables[0]}_range'][1]
         max_val = sample[f'{observables[0]}_range'][2]
         for i in range(t.GetEntries()):
             t.GetEntry(i)
+            weight = t.weight if hasattr(t, 'weight') else 1.0
             for val in t.SelectedDiEle_fitted_mass:
                 gen_mass = t.GenZd_invMass
                 fill_value = val if use_reco_mass else val/gen_mass - 1 #val/sample["nominal_mass"] - 1
                 if fill_value < min_val or fill_value > max_val:
                     continue
                 w.var(f"{observables[0]}_{name}").setVal(fill_value)
-                data.add(ROOT.RooArgSet(w.var(f"{observables[0]}_{name}")))
+                data.add(ROOT.RooArgSet(w.var(f"{observables[0]}_{name}")), weight)
         
         # import dataset in workspace
         w.Import(data)
@@ -48,7 +51,7 @@ def make_response_function_workspace(samples, wsfile, use_reco_mass = False):
 
         # fit the model to the data
         model = w.pdf(f"response_function_{name}")
-        fitResult = model.fitTo(data)
+        fitResult = model.fitTo(data, ROOT.RooFit.Save(), ROOT.RooFit.NumCPU(8), ROOT.RooFit.SumW2Error(True))
 
         # import model in workspace
         w.Import(model)
@@ -60,7 +63,6 @@ def make_response_function_workspace(samples, wsfile, use_reco_mass = False):
 def make_signal_model(samples, wsfile, parametrized_vars, isParametrized = False, fit = False, use_reco_mass = False):
 
     for name, sample in samples.items():
-
         ### WORKSPACE 
         f = ROOT.TFile.Open(wsfile)
         w = f.Get("w")
@@ -145,17 +147,20 @@ def make_signal_model(samples, wsfile, parametrized_vars, isParametrized = False
             f = ROOT.TFile.Open(sample['file'])
             t = f.Get("Events")
 
-            data = ROOT.RooDataSet(f"data_{name}", f"data_{name}", ROOT.RooArgSet(w.var(f"mass_{name}")))
+            weightVar = ROOT.RooRealVar(f"weightVar_{name}", f"weightVar_{name}", 1.0) # create a weight variable
+            w.Import(weightVar, ROOT.RooCmdArg())
+            data = ROOT.RooDataSet(f"data_{name}", f"data_{name}", ROOT.RooArgSet(w.var(f"mass_{name}")), ROOT.RooFit.WeightVar(f"weightVar_{name}"))
             # retrieve min, max values of the mass range
             min_val = sample['mass_range'][1]
             max_val = sample['mass_range'][2]
             for i in range(t.GetEntries()):
                 t.GetEntry(i)
+                weight = t.weight if hasattr(t, 'weight') else 1.0
                 for val in t.SelectedDiEle_fitted_mass:
                     if val < min_val or val > max_val:
                         continue
                     w.var(f"mass_{name}").setVal(val)
-                    data.add(ROOT.RooArgSet(w.var(f"mass_{name}")))
+                    data.add(ROOT.RooArgSet(w.var(f"mass_{name}")), weight)
 
             print(f"Data for {name} reloaded")
 
@@ -230,7 +235,7 @@ def make_signal_model(samples, wsfile, parametrized_vars, isParametrized = False
 
         ### FIT TO SAMPLES
         if fit:
-            fitResult = model.fitTo(data, ROOT.RooFit.Save())
+            fitResult = model.fitTo(data, ROOT.RooFit.Save(), ROOT.RooFit.NumCPU(8), ROOT.RooFit.SumW2Error(True))
 
             fitResult.Print()
             w.Import(fitResult, True)
@@ -274,7 +279,7 @@ def build_signal_model_for_mass(samples, wsfile, parametrized_vars, mass, use_re
 
     print(f"Mass: {mass}")
     name = f"M{mass:.1f}"
-    name = name.replace(".", "p")        
+    name = name.replace(".", "p")
 
     all_vars = vars_dCB if use_reco_mass else vars_BW + vars_dCB
 

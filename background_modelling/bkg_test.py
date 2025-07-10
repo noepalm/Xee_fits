@@ -66,14 +66,16 @@ data = w.obj("data_obs")
 m = w.obj("mass")
 
 if args.binned:
-    m.setBins(400)
+    m.setBins(100)
     data_binned = ROOT.RooDataHist("data_obs", "data_obs", ROOT.RooArgSet(m))
     for i in range(data.numEntries()):
         m.setVal(data.get(i).getRealValue("mass"))
-        data_binned.add(ROOT.RooArgSet(m))
+        weight = data.weight()
+        data_binned.add(ROOT.RooArgSet(m))#, weight)
     data = data_binned
+    w.Import(data, True)
 
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit_tests"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit_tests_reweight"
 
 log_file = open(os.path.join(outfolder, f"post_fit_params{side_suffix}{tag}{binning_suffix}.log"), "w")
 
@@ -82,7 +84,8 @@ log_file = open(os.path.join(outfolder, f"post_fit_params{side_suffix}{tag}{binn
 
 # 4-th degree Bernstein polynomial
 bernstein_degree = 5 #4
-bernstein_inits = [0.5, 0.5, -0.5, 0.5, 0.5 ]
+# bernstein_inits = [0.5, 0.5, -0.5, 0.5, 0.5 ]
+bernstein_inits = [0.36903, 0.11880, -0.46547, 0.56438, -0.58503]
 for i in range(bernstein_degree):
     w.factory(f"a{i}[{bernstein_inits[i]}, -5, 5]")    # Bernstein coefficients # GOOD FOR DESCENDING
     # w.factory(f"a{i}[-0.5, -1, 1]")    # Bernstein coefficients # GOOD FOR DESCENDING
@@ -259,7 +262,7 @@ if args.fit_jpsi_prompt:
     # fit jpsi and psi2s model to prompt data
     fraction_psi2s = ROOT.RooRealVar("fraction_psi2s", "fraction_psi2s", 0.3, 0, 1)
     jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s", ROOT.RooArgList(jpsi_model, psi2s_model), ROOT.RooArgList(fraction_psi2s))
-    jpsi_plus_psi2s.fitTo(prompt_data, ROOT.RooFit.NumCPU(8), ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save())
+    jpsi_plus_psi2s.fitTo(prompt_data, ROOT.RooFit.NumCPU(8), ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save(), ROOT.RooFit.SumW2Error(True))
 
     logprint("Fitted jpsi and psi2s models to prompt data", log_file)
     # print fitted parameters
@@ -277,7 +280,7 @@ if args.fit_jpsi_prompt:
     # draw data
     prompt_data.plotOn(frame_prompt,
                 ROOT.RooFit.Name("prompt_data"),
-                ROOT.RooFit.Binning(300),
+                ROOT.RooFit.Binning(100),
                 # ROOT.RooFit.NormRange("unblinded"),
     )
 
@@ -311,16 +314,19 @@ if args.fit_jpsi_prompt:
     legend_prompt.SetFillStyle(0)
     legend_prompt.SetTextSize(0.04)
     legend_prompt.AddEntry(frame_prompt.findObject("data_obs"), "data_obs", "p")
-    legend_prompt.AddEntry(frame_prompt.findObject("jpsi_plus_psi2s"), f"J/psi + psi(2S) model\nchi2 = {chi2_val:.2f}", "l")
+    legend_prompt.AddEntry(frame_prompt.findObject("jpsi_plus_psi2s"), f"#splitline{{J/psi + psi(2S) model}}{{chi2 = {chi2_val:.2f}}}", "l")
     legend_prompt.AddEntry(frame_prompt.findObject("jpsi_model"), "J/psi model", "l")
     legend_prompt.AddEntry(frame_prompt.findObject("psi2s_model"), "psi(2S) model", "l")
     legend_prompt.Draw()
 
     canvas_prompt.SaveAs(os.path.join(outfolder, f"dataset_prompt{tag}.png"))
+    canvas_prompt.SaveAs(os.path.join(outfolder, f"dataset_prompt{tag}.pdf"))
 
     # set log scale
+    frame_prompt.SetMinimum(1)
     canvas_prompt.SetLogy()
     canvas_prompt.SaveAs(os.path.join(outfolder, f"dataset_prompt{tag}_log.png"))
+    canvas_prompt.SaveAs(os.path.join(outfolder, f"dataset_prompt{tag}_log.pdf"))
 
 # create S+B model summing both signals
 # sb_model = ROOT.RooAddPdf("sb_model", "sb_model", ROOT.RooArgList(jpsi_model, psi2s_model, bkg_f0), ROOT.RooArgList(ROOT.RooRealVar("nsig1", "nsig1", 1, 0, 10000), ROOT.RooRealVar("nsig2", "nsig2", 1, 0, 10000), ROOT.RooRealVar("nbkg", "bkg", 1, 0, 10000)), False)
@@ -422,7 +428,7 @@ draw_args = [
 ]
 
 if not args.binned:
-    draw_args.append(ROOT.RooFit.Binning(300))
+    draw_args.append(ROOT.RooFit.Binning(100))
 
 # Plot data
 data.plotOn(frame, *draw_args, 

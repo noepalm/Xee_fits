@@ -29,6 +29,9 @@ kYellow = ROOT.TColor.GetColor("#f89c20")
 kRed = ROOT.TColor.GetColor("#e42536")
 
 def copy_plots_to_eos(eos_folder):
+    # make dir if it does not exist
+    if not os.path.exists(eos_folder):
+        os.makedirs(eos_folder)
     # copy all plots in outfolder to eos_folder
     os.system(f"cp {plots_outfolder}/* {eos_folder}")
 
@@ -54,7 +57,7 @@ def plot_response_fit(samples, wsfile, plot_fit = True, use_reco_mass = False):
         frame = w.var(f"{obs_name}_{name}").frame(
             ROOT.RooFit.Title(f"{obs_title} distribution of {name} sample")
         )
-        data.plotOn(frame, ROOT.RooFit.Name("data"))
+        data.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
 
         paramOn_draw_args = [
             ROOT.RooFit.Format("NEU", ROOT.RooFit.AutoPrecision(2)), 
@@ -77,6 +80,9 @@ def plot_response_fit(samples, wsfile, plot_fit = True, use_reco_mass = False):
 
         # add legend with chi2
         chi2 = frame.chiSquare(f"{model.GetName()}_Norm[{w.var(f'{obs_name}_{name}').GetName()}]", "data")
+        # model.createChi2(data)
+        # chi2 = model_param.getValV()
+
         leg = ROOT.TLegend(0.15, 0.7, 0.16, 0.89)
         leg.SetBorderSize(0)
         leg.SetTextSize(0.03)
@@ -89,6 +95,7 @@ def plot_response_fit(samples, wsfile, plot_fit = True, use_reco_mass = False):
 
         # set y log scale
         c.SetLogy()
+        frame.SetMinimum(1e-1)
         c.SaveAs(f"{plots_outfolder}response_{name}_log.png")
         c.SaveAs(f"{plots_outfolder}response_{name}_log.pdf")
 
@@ -202,7 +209,7 @@ def plot_parametrization(samples, wsfile, vars, parametrized_vars, gen = False, 
         ax.errorbar(x[var], y[var], y_err[var], **plot_args)
 
         # jpsi point
-        ax.errorbar(x_jpsi, y_jpsi[var], y_jpsi_err[var], **plot_args, label = r"$B \to K J/\psi$", color = "C1")
+        ax.errorbar(x_jpsi, y_jpsi[var], y_jpsi_err[var], **plot_args, label = r"$J/\psi \to ee$", color = "C1")
 
         ### final stuff
         ax.legend()
@@ -248,7 +255,7 @@ def plot_sample_fit(samples, wsfile, plot_pre_param = False, plot_post_param = T
         frame = w.var(f"mass{tag}_{name}").frame(ROOT.RooFit.Title(f"{name} sample"))
 
         # draw invisible data (sets up frame, needed for residuals)
-        data.plotOn(frame, ROOT.RooFit.Name(f"data{tag}"), ROOT.RooFit.Invisible())
+        data.plotOn(frame, ROOT.RooFit.Name(f"data{tag}"), ROOT.RooFit.Invisible(), ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
 
         paramOn_draw_args = [
             ROOT.RooFit.Format("NEU", ROOT.RooFit.AutoPrecision(2)), 
@@ -292,6 +299,20 @@ def plot_sample_fit(samples, wsfile, plot_pre_param = False, plot_post_param = T
         frame.Draw()
 
         chi2 = frame.chiSquare(f"model{model_tag}", f"data{tag}")
+        # also compute chi2 manually
+        data_binned = data.binnedClone(f"data{tag}_binned")
+        chi2_manual = 0
+        for i in range(data_binned.numEntries()):
+            print(data_binned.get(i))
+            # value = data_binned.get(i).getRealValue(f"mass{tag}_{name}")
+            # error = data_binned.get(i).getError(f"mass{tag}_{name}")
+            # model_value = model_param.evaluate(value)
+            # chi2_manual += ((value - model_value) / error) ** 2
+        
+        print(f"Chi2 for {name} sample: {chi2:.2f} (manual: {chi2_manual:.2f} / {data_binned.numEntries()})")
+
+        # model_param.createChi2(data)
+        # chi2 = model_param.getValV()
 
         if plot_residuals:
             pad2.cd()
@@ -339,7 +360,8 @@ def plot_sample_fit(samples, wsfile, plot_pre_param = False, plot_post_param = T
         pad1.cd()
         data.plotOn(frame, 
                     ROOT.RooFit.Name("data"),
-                    ROOT.RooFit.MarkerSize(0.8))
+                    ROOT.RooFit.MarkerSize(0.8),
+                    ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
         frame.Draw()
 
         leg = ROOT.TLegend(0.15, 0.7, 0.3, 0.89)
@@ -355,6 +377,7 @@ def plot_sample_fit(samples, wsfile, plot_pre_param = False, plot_post_param = T
 
         # set y log scale
         pad1.SetLogy()
+        frame.SetMinimum(1e-1)
         c.SaveAs(f"{plots_outfolder}{outname}{name}_log.png")
         c.SaveAs(f"{plots_outfolder}{outname}{name}_log.pdf")
 
@@ -372,7 +395,7 @@ def plot_model_only(samples, wsfile, parametrized_vars):
     tag = "test"
 
     # retrieve all models in workspace of the type model_{tag}_Mxxx
-    models = [key.GetName() for key in w.allGenericObjects() if f"model_test_M" in key.GetName()]
+    models = [key.GetName() for idx, key in enumerate(w.allGenericObjects()) if f"model_test_M" in key.GetName() and idx % 3 == 0]
     samples = {model.split("_")[-1] : model for model in models}
 
     # retrieve mass_test variable and create frame
@@ -445,6 +468,8 @@ def compare_zd_jpsi_shape(samples, wsfile, plot_fit = True, use_reco_mass = Fals
     else:
         keys = ["reduced_mass", "mass"]
 
+    print(keys)
+
     for var in keys:
         for name, sample in samples.items():
             f = ROOT.TFile.Open(sample['file'])
@@ -481,7 +506,9 @@ def compare_zd_jpsi_shape(samples, wsfile, plot_fit = True, use_reco_mass = Fals
         # "gen_mass" : "GEN M(ee)"
     }
 
-    for var, dataset in datasets.items():
+    for key in keys:
+        var = key
+        dataset = datasets[key]
 
         c = ROOT.TCanvas(var, var, 900, 900)
 
