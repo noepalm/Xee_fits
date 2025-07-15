@@ -49,6 +49,10 @@ class PlotManager:
         """Create directory structure for given base path"""
         subdirs = ["response", "model_test", "GEN_test"]#, "shape_comparison"]
         
+        # Ensure base_path is a Path object
+        if not isinstance(base_path, Path):
+            base_path = Path(base_path)
+        
         for subdir in subdirs:
             for category in categories:
                 dir_path = base_path / subdir / category
@@ -69,143 +73,6 @@ class PlotManager:
 
         # Actually copy files      
         os.system(f"cp -r {self.output_folder}/* {eos_path}")
-
-
-class ResponsePlotter:
-    """Handles plotting of response functions"""
-    
-    def __init__(self, analyzer: SignalModelAnalyzer, plot_manager: PlotManager):
-        self.analyzer = analyzer
-        self.plot_manager = plot_manager
-        self.workspace = analyzer.workspace_manager.workspace
-    
-    def plot_response_fits(self, use_reco_mass: bool = False, plot_fit: bool = True, plot_residuals: bool = True):
-        """Plot response function fits for all samples and categories"""
-        print("Plotting response function fits...")
-        
-        # Create output directories
-        self.plot_manager.create_output_directories([category.name for category in self.analyzer.categories.values()])
-        
-        for name, sample in self.analyzer.samples.items():
-            for category_label, category in self.analyzer.categories.items():
-                self._plot_single_response_fit(sample, category, category_label, 
-                                             use_reco_mass, plot_fit, plot_residuals)
-    
-    def _plot_single_response_fit(self, sample: SampleConfig, category: CategoryConfig, 
-                                category_label: str, use_reco_mass: bool, plot_fit: bool, plot_residuals: bool):
-        """Plot response fit for a single sample and category"""
-
-        # Get data and model
-        data = self.workspace.data(f"response_data_{sample.label}{category.label}")
-        if not data:
-            print(f"Warning: No data found for {sample.label}{category.label}")
-            return
-        
-        # Create canvas
-        c = ROOT.TCanvas(f"c{sample.label}{category.label}", f"c{sample.label}{category.label}", 900, 900)
-        
-        # Setup pads for residuals if needed
-        if plot_residuals and plot_fit:
-            pad1 = ROOT.TPad("pad1", "pad1", 0, 0.3, 1, 1)
-            pad1.SetBottomMargin(0.01)
-            pad2 = ROOT.TPad("pad2", "pad2", 0, 0, 1, 0.3)
-            pad2.SetTopMargin(0.01)
-            pad2.SetBottomMargin(0.3)
-            pad1.Draw()
-            pad2.Draw()
-            pad1.cd()
-        
-        # Create frame
-        obs_name = "mass" if use_reco_mass else "reduced_mass"
-        obs_title = "Mass" if use_reco_mass else "Reduced mass"
-        obs_var = self.workspace.var(f"{obs_name}_{sample.label}")
-        
-        # frame = obs_var.frame(
-        #     ROOT.RooFit.Title(f"{obs_title} distribution of {sample.label} sample, category {category_label}")
-        # )
-        frame = obs_var.frame(sample.mass_range[1], sample.mass_range[2])
-        frame.SetTitle(f"{obs_title} distribution of {sample.label} sample, category {category_label}")
-        
-        # Plot invisible data first (for residuals) if needed
-        if plot_residuals and plot_fit:
-            data.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.Invisible(), 
-                       ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
-        
-        # Plot fit if requested
-        model = None
-        if plot_fit:
-            model = self.workspace.pdf(f"response_function_{sample.label}{category.label}")
-            if model:
-                model.plotOn(frame, ROOT.RooFit.Name("model"), ROOT.RooFit.LineWidth(3))
-            else:
-                print(f"WARNING: No model found for response_function_{sample.label}{category.label}")
-        
-        # Plot residuals if requested
-        if plot_residuals and plot_fit and model:
-            pad2.cd()
-            pad2.SetGrid()
-            
-            residuals = frame.residHist("data", "model", True, True)
-            residuals.SetMarkerColor(ROOT.kBlue)
-            residuals.SetLineColor(ROOT.kBlue)
-            residuals.SetMarkerStyle(20)
-            residuals.SetMarkerSize(0.8)
-            
-            residuals.GetYaxis().SetTitle("Pulls")
-            residuals.GetYaxis().SetTitleSize(0.1)
-            residuals.GetYaxis().SetTitleOffset(0.3)
-            residuals.GetYaxis().SetLabelSize(0.1)
-            residuals.GetXaxis().SetTitleSize(0.1)
-            residuals.GetXaxis().SetTitleOffset(0.9)
-            residuals.GetXaxis().SetLabelSize(0.1)
-            
-            obs_latex = r"m(ee) [GeV]" if use_reco_mass else r"(m(ee) - mX)/mX"
-            residuals.GetXaxis().SetTitle(obs_latex)
-            residuals.SetTitle("")
-            residuals.GetXaxis().SetRangeUser(frame.GetXaxis().GetXmin(), frame.GetXaxis().GetXmax())
-            residuals.SetMinimum(-5)
-            residuals.SetMaximum(5)
-            residuals.GetYaxis().SetNdivisions(505)
-            residuals.Draw("AP")
-            
-            pad1.cd()
-        
-        # Plot actual data
-        if not (plot_residuals and plot_fit):
-            data.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
-        else:
-            data.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.MarkerSize(0.8),
-                       ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
-                        
-        # Set axis labels
-        obs_latex = r"m(ee) [GeV]" if use_reco_mass else r"(m(ee) - mX)/mX"
-        frame.GetXaxis().SetTitle(obs_latex)
-        frame.Draw()
-
-        # Plot legend
-        leg = ROOT.TLegend(0.15, 0.7, 0.16, 0.89)
-        leg.SetBorderSize(0)
-        leg.SetTextSize(0.03)
-        leg.AddEntry("data", "Data", "P")
-        if plot_fit and model:
-            ndof = len(self.analyzer.param_manager.response_vars)
-            chi2 = frame.chiSquare("model", "data", ndof)
-            leg.AddEntry("model", f"Fit, #chi^2/ndf = {chi2:.2f} (ndf = {ndof})", "L")
-        leg.Draw()
-        
-        # Save plots
-        output_dir = self.plot_manager.output_folder / "response"
-        for ext in ["png", "pdf"]:
-            c.SaveAs(str(output_dir / category.name / f"response_{sample.label}{category.label}.{ext}"))
-        
-        # Log scale version
-        if plot_residuals and plot_fit:
-            pad1.SetLogy()
-        else:
-            c.SetLogy()
-        frame.SetMinimum(1e-1)
-        for ext in ["png", "pdf"]:
-            c.SaveAs(str(output_dir / category.name / f"response_{sample.label}{category.label}_log.{ext}"))
 
 
 class ParametrizationPlotter:
@@ -457,39 +324,84 @@ class ParametrizationPlotter:
 
 
 class ModelPlotter:
-    """Handles plotting of fitted models"""
+    """Unified plotter for both response functions and signal models"""
     
-    def __init__(self, analyzer: SignalModelAnalyzer, plot_manager: PlotManager):
+    def __init__(self, analyzer: SignalModelAnalyzer, plot_manager: PlotManager, plotter_parent=None):
         self.analyzer = analyzer
         self.plot_manager = plot_manager
         self.workspace = analyzer.workspace_manager.workspace
+        self.plotter_parent = plotter_parent  # Reference to SignalModelPlotter for logging
+    
+    def plot_response_fits(self, use_reco_mass: bool = False, plot_fit: bool = True, plot_residuals: bool = True):
+        """Plot response function fits for all samples and categories"""
+        print("Plotting response function fits...")
+        
+        # Create output directories
+        self.plot_manager.create_output_directories([category.name for category in self.analyzer.categories.values()])
+        
+        for name, sample in self.analyzer.samples.items():
+            for category_label, category in self.analyzer.categories.items():
+                self._plot_single_fit(sample, category, category_label, 
+                                    plot_type="response", use_reco_mass=use_reco_mass, 
+                                    plot_fit=plot_fit, plot_residuals=plot_residuals)
     
     def plot_sample_fits(self, plot_residuals: bool = True, gen: bool = False):
         """Plot model fits to sample data"""
         print(f"Plotting sample fits {'(GEN)' if gen else ''}...")
         
-        tag = "_GEN" if gen else ""
-        
         for name, sample in self.analyzer.samples.items():
             for category_label, category in self.analyzer.categories.items():
-                self._plot_single_sample_fit(sample, category, category_label, 
-                                           plot_residuals, gen, tag)
+                self._plot_single_fit(sample, category, category_label, 
+                                    plot_type="signal", gen=gen, plot_residuals=plot_residuals)
     
-    def _plot_single_sample_fit(self, sample: SampleConfig, category: CategoryConfig,
-                              category_label: str, plot_residuals: bool, gen: bool, tag: str):
-        """Plot fit for a single sample and category"""
-
+    def _plot_single_fit(self, sample: SampleConfig, category: CategoryConfig, 
+                        category_label: str, plot_type: str = "signal", gen: bool = False,
+                        use_reco_mass: bool = False, plot_fit: bool = True, plot_residuals: bool = True):
+        """Unified plotting method for both response and signal fits"""
+        
+        # Configure based on plot type
+        if plot_type == "response":
+            data_name = f"response_data_{sample.label}{category.label}"
+            model_name = f"response_function_{sample.label}{category.label}"
+            obs_name = "mass" if use_reco_mass else "reduced_mass"
+            obs_title = "Mass" if use_reco_mass else "Reduced mass"
+            obs_var = self.workspace.var(f"{obs_name}_{sample.label}")
+            output_subdir = "response"
+            file_prefix = "response_"
+            canvas_name = f"c{sample.label}{category.label}"
+            frame_title = f"{obs_title} distribution of {sample.label} sample, category {category_label}"
+            x_axis_label = r"m(ee) [GeV]" if use_reco_mass else r"(m(ee) - mX)/mX"
+            data_legend_name = "data"
+            model_legend_name = "model"
+            color = ROOT.kBlue
+            log_type = "response_fit"
+        else:  # signal model
+            tag = "_GEN" if gen else ""
+            model_tag = "_GEN" if gen else "_param"
+            data_name = f"data{tag}_{sample.label}{category.label}"
+            model_name = f"model{model_tag}_{sample.label}{category.label}"
+            obs_var = self.workspace.var(f"mass{tag}_{sample.label}")
+            output_subdir = "model_test"
+            file_prefix = "GEN_test_BW_" if gen else "signal_model_"
+            canvas_name = f"c_{sample.label}{category.label}"
+            frame_title = f"{sample.label} sample, cat. {category_label}"
+            x_axis_label = f"M(ee){tag} [GeV]"
+            data_legend_name = f"data{tag}"
+            model_legend_name = f"model{model_tag}"
+            color = self.plot_manager.kBlue if gen else self.plot_manager.kYellow
+            log_type = "signal_model"
+        
         # Get data
-        data = self.workspace.obj(f"data{tag}_{sample.label}{category.label}")
+        data = self.workspace.data(data_name) if plot_type == "response" else self.workspace.obj(data_name)
         if not data:
-            print(f"Warning: No data found for data{tag}_{sample.label}{category.label}")
+            print(f"Warning: No data found for {data_name}")
             return
         
         # Create canvas
-        c = ROOT.TCanvas(f"c_{sample.label}{category.label}", f"c_{sample.label}{category.label}", 900, 900)
+        c = ROOT.TCanvas(canvas_name, canvas_name, 900, 900)
         
         # Setup pads for residuals if needed
-        if plot_residuals:
+        if plot_residuals and plot_fit:
             pad1 = ROOT.TPad("pad1", "pad1", 0, 0.3, 1, 1)
             pad1.SetBottomMargin(0.01)
             pad2 = ROOT.TPad("pad2", "pad2", 0, 0, 1, 0.3)
@@ -500,29 +412,30 @@ class ModelPlotter:
             pad1.cd()
         
         # Create frame
-        mass_var = self.workspace.var(f"mass{tag}_{sample.label}")
-        # frame = mass_var.frame(ROOT.RooFit.Title(f"{sample.label} sample, cat. {category_label}"))
-        frame = mass_var.frame(sample.mass_range[1], sample.mass_range[2])
-        frame.SetTitle(f"{sample.label} sample, cat. {category_label}")
+        frame = obs_var.frame(sample.mass_range[1], sample.mass_range[2])
+        frame.SetTitle(frame_title)
         
-        # Plot invisible data first (for residuals)
-        data.plotOn(frame, ROOT.RooFit.Name(f"data{tag}"), ROOT.RooFit.Invisible(), 
-                   ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
+        # Plot invisible data first (for residuals) if needed
+        if plot_residuals and plot_fit:
+            data.plotOn(frame, ROOT.RooFit.Name(data_legend_name), ROOT.RooFit.Invisible(), 
+                       ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
         
-        # Plot models
-        model_tag = "_GEN" if gen else "_param"
-        model = self.workspace.obj(f"model{model_tag}_{sample.label}{category.label}")
-        if model:
-            color = self.plot_manager.kBlue if gen else self.plot_manager.kYellow
-            model.plotOn(frame, ROOT.RooFit.LineColor(color), 
-                        ROOT.RooFit.Name(f"model{model_tag}"), ROOT.RooFit.LineWidth(3))
+        # Plot fit if requested
+        model = None
+        if plot_fit:
+            model = self.workspace.pdf(model_name) if plot_type == "response" else self.workspace.obj(model_name)
+            if model:
+                model.plotOn(frame, ROOT.RooFit.Name(model_legend_name), 
+                           ROOT.RooFit.LineWidth(3), ROOT.RooFit.LineColor(color))
+            else:
+                print(f"WARNING: No model found for {model_name}")
         
         # Plot residuals if requested
-        if plot_residuals and model:
+        if plot_residuals and plot_fit and model:
             pad2.cd()
             pad2.SetGrid()
             
-            residuals = frame.residHist(f"data{tag}", f"model{model_tag}", True, True)
+            residuals = frame.residHist(data_legend_name, model_legend_name, True, True)
             residuals.SetMarkerColor(color)
             residuals.SetLineColor(color)
             residuals.SetMarkerStyle(20)
@@ -535,7 +448,7 @@ class ModelPlotter:
             residuals.GetXaxis().SetTitleSize(0.1)
             residuals.GetXaxis().SetTitleOffset(0.9)
             residuals.GetXaxis().SetLabelSize(0.1)
-            residuals.GetXaxis().SetTitle(f"M(ee){tag} [GeV]")
+            residuals.GetXaxis().SetTitle(x_axis_label)
             residuals.SetTitle("")
             residuals.GetXaxis().SetRangeUser(frame.GetXaxis().GetXmin(), frame.GetXaxis().GetXmax())
             residuals.SetMinimum(-5)
@@ -546,36 +459,54 @@ class ModelPlotter:
             pad1.cd()
         
         # Plot actual data
-        data.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.MarkerSize(0.8),
-                   ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
+        if not (plot_residuals and plot_fit):
+            data.plotOn(frame, ROOT.RooFit.Name(data_legend_name), ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
+        else:
+            data.plotOn(frame, ROOT.RooFit.Name(data_legend_name), ROOT.RooFit.MarkerSize(0.8),
+                       ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
+        
+        # Set axis labels and draw
+        frame.GetXaxis().SetTitle(x_axis_label)
         frame.Draw()
 
-        # Add legend with chi2
-        if model:
-            chi2 = frame.chiSquare(f"model{model_tag}", f"data")
-            print(f"Chi2 for sample {sample.label}, cat. {category_label}: {chi2}")
-            leg = ROOT.TLegend(0.15, 0.7, 0.3, 0.89)
-            leg.SetBorderSize(0)
-            leg.SetTextSize(0.03)
-            leg.AddEntry(f"data{tag}", "Data", "P")
-            leg.AddEntry(f"model{model_tag}", f"Fit, #chi^2/ndf = {chi2:.2f}", "L")
-            leg.Draw()
+        # Plot legend
+        leg = ROOT.TLegend(0.15, 0.7, 0.16 if plot_type == "response" else 0.3, 0.89)
+        leg.SetBorderSize(0)
+        leg.SetTextSize(0.03)
+        leg.AddEntry(data_legend_name, "Data", "P")
+        
+        if plot_fit and model:
+            # Compute chi2 using the analyzer's fit manager  
+            chi2_result = self.analyzer.fit_manager.compute_chi2(model, data)
+            if chi2_result is not None:
+                chi2_ndf, ndof = chi2_result
+                leg.AddEntry(model_legend_name, f"Fit, #chi^2/ndf = {chi2_ndf:.2f} (ndf = {ndof})", "L")
+                # Log Chi2 value
+                if self.plotter_parent:
+                    self.plotter_parent.log_plotting_chi2(sample.label, category.name, chi2_ndf, plot_type=log_type)
+            else:
+                # Fallback to original method if compute_chi2 fails
+                chi2_ndf = frame.chiSquare(model_legend_name, data_legend_name)
+                leg.AddEntry(model_legend_name, f"Fit, #chi^2/ndf = {chi2_ndf:.2f}", "L")
+                # Log Chi2 value
+                if self.plotter_parent:
+                    self.plotter_parent.log_plotting_chi2(sample.label, category.name, chi2_ndf, plot_type=log_type)
+        
+        leg.Draw()
         
         # Save plots
-        outname = "GEN_test_BW_" if gen else "signal_model_"
-        output_dir = self.plot_manager.output_folder / "model_test"
-        
+        output_dir = self.plot_manager.output_folder / output_subdir
         for ext in ["png", "pdf"]:
-            c.SaveAs(str(output_dir / category.name / f"{outname}{sample.label}{category.label}.{ext}"))
+            c.SaveAs(str(output_dir / category.name / f"{file_prefix}{sample.label}{category.label}.{ext}"))
         
         # Log scale version
-        if plot_residuals:
+        if plot_residuals and plot_fit:
             pad1.SetLogy()
         else:
             c.SetLogy()
         frame.SetMinimum(1e-1)
         for ext in ["png", "pdf"]:
-            c.SaveAs(str(output_dir / category.name / f"{outname}{sample.label}{category.label}_log.{ext}"))
+            c.SaveAs(str(output_dir / category.name / f"{file_prefix}{sample.label}{category.label}_log.{ext}"))
     
     def plot_models_only(self):
         """Plot parametric models for different mass points"""
@@ -642,13 +573,17 @@ class SignalModelPlotter:
         self.plot_manager = PlotManager(output_folder)
         
         # Initialize specialized plotters
-        self.response_plotter = ResponsePlotter(analyzer, self.plot_manager)
+        self.model_plotter = ModelPlotter(analyzer, self.plot_manager, self)
         self.param_plotter = ParametrizationPlotter(analyzer, self.plot_manager)
-        self.model_plotter = ModelPlotter(analyzer, self.plot_manager)
+    
+    def log_plotting_chi2(self, sample_name: str, category_name: str, chi2: float, plot_type: str = "model"):
+        """Log Chi2 value computed during plotting"""
+        logger = self.analyzer.get_logger()
+        logger.log_info(f"PLOTTING CHI2 - {plot_type.upper()} - Sample: {sample_name}, Category: {category_name}: {chi2:.4f}")
     
     def plot_all_response_fits(self, use_reco_mass: bool = False, plot_residuals: bool = True):
         """Plot all response function fits"""
-        self.response_plotter.plot_response_fits(use_reco_mass, plot_fit=True, plot_residuals=plot_residuals)
+        self.model_plotter.plot_response_fits(use_reco_mass, plot_fit=True, plot_residuals=plot_residuals)
     
     def plot_all_parametrizations(self, vars_to_plot: Optional[List[str]] = None, gen: bool = False):
         """Plot parameter parametrizations"""

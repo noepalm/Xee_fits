@@ -8,9 +8,216 @@ in particle physics analysis, replacing the previous function-based approach.
 import ROOT
 import numpy as np
 import os
+import logging
+import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from pathlib import Path
+
+
+class FitLogger:
+    """Manages comprehensive logging of fit results and analysis progress"""
+    
+    def __init__(self, log_file_path: str = "signal_model_analysis.log", eos_folder: Optional[str] = None):
+        self.log_file_path = Path(log_file_path)
+        self.eos_folder = Path(eos_folder) if eos_folder else None
+        self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Setup logging
+        self.logger = logging.getLogger('SignalModelAnalyzer')
+        self.logger.setLevel(logging.INFO)
+        
+        # Clear existing handlers
+        self.logger.handlers.clear()
+        
+        # File handler
+        file_handler = logging.FileHandler(self.log_file_path, mode='w')
+        file_handler.setLevel(logging.INFO)
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        
+        # Formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(console_handler)
+        
+        # Start log
+        self.logger.info("="*80)
+        self.logger.info("Signal Model Analysis Log Started")
+        self.logger.info(f"Timestamp: {datetime.datetime.now()}")
+        self.logger.info("="*80)
+    
+    def log_analysis_start(self, samples: Dict[str, Any], categories: Dict[str, Any], 
+                          parametrized_vars: List[str]):
+        """Log analysis configuration"""
+        self.logger.info("\nANALYSIS CONFIGURATION:")
+        self.logger.info(f"Number of samples: {len(samples)}")
+        self.logger.info(f"Samples: {list(samples.keys())}")
+        self.logger.info(f"Number of categories: {len(categories)}")
+        self.logger.info(f"Categories: {list(categories.keys())}")
+        self.logger.info(f"Parametrized variables: {parametrized_vars}")
+    
+    def log_fit_result(self, sample_name: str, category_name: str, 
+                      model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet,
+                      fit_type: str = "response", model_type: str = "param",
+                      fit_result: Optional[ROOT.RooFitResult] = None,
+                      chi2_ndf: Optional[Tuple[float, int]] = None):
+        """Log fit results for response or signal models
+        
+        Args:
+            sample_name: Name of the sample
+            category_name: Name of the category
+            model: The fitted model
+            dataset: The dataset used for fitting
+            fit_type: Type of fit ("response" or "signal")
+            model_type: Type of model (e.g., "param", "dcb", etc.) - used for signal fits
+            fit_result: Optional RooFitResult object
+            chi2_ndf: Optional tuple of (chi2/ndf, ndof)
+        """
+        # Create appropriate header
+        if fit_type == "response":
+            header = f"\nRESPONSE FIT RESULT - Sample: {sample_name}, Category: {category_name}"
+        else:
+            header = f"\n{fit_type.upper()} FIT RESULT ({model_type.upper()}) - Sample: {sample_name}, Category: {category_name}"
+        
+        self.logger.info(header)
+        self.logger.info("-" * 60)
+        
+        # Log dataset info
+        self.logger.info(f"Dataset entries: {dataset.numEntries()}")
+        self.logger.info(f"Dataset sum of weights: {dataset.sumEntries():.2f}")
+        
+        # Log parameters
+        params = model.getParameters(ROOT.RooArgSet())
+        self.logger.info("Parameters:")
+        for param in params:
+            if hasattr(param, 'getVal'):
+                min_val = param.getMin() if hasattr(param, 'getMin') else "N/A"
+                max_val = param.getMax() if hasattr(param, 'getMax') else "N/A"
+                
+                # Show constant status for non-response fits
+                if fit_type != "response":
+                    is_constant = param.isConstant() if hasattr(param, 'isConstant') else False
+                    const_str = " (CONSTANT)" if is_constant else ""
+                else:
+                    const_str = ""
+                
+                # Add warning if best fit value is too close to boundary
+                if isinstance(min_val, float) and isinstance(max_val, float):
+                    if abs(param.getVal() - min_val)/(min_val + 1e-6) < 1e-2 or abs(param.getVal() - max_val)/(max_val + 1e-6) < 1e-2:
+                        const_str += " (WARNING: bounded)"
+                
+                self.logger.info(f"  {param.GetName()}: {param.getVal():.6f} ± {param.getError():.6f} "
+                               f"[{min_val}, {max_val}]{const_str}")
+        
+        # Log Chi2
+        if chi2_ndf is not None:
+            self.logger.info(f"Chi2/NDF: {chi2_ndf[0]:.4f}/{chi2_ndf[1]:.0f}")
+        
+        # Log fit result status if available
+        if fit_result:
+            self.logger.info(f"Fit status: {fit_result.status()}")
+            self.logger.info(f"Covariance quality: {fit_result.covQual()}")
+            self.logger.info(f"EDM: {fit_result.edm():.2e}")
+    
+    def log_response_fit_result(self, sample_name: str, category_name: str, 
+                               model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet,
+                               fit_result: Optional[ROOT.RooFitResult] = None,
+                               chi2_ndf: Optional[Tuple[float, int]] = None):
+        """Log response function fit results (wrapper for backwards compatibility)"""
+        self.log_fit_result(sample_name, category_name, model, dataset, 
+                           "response", "param", fit_result, chi2_ndf)
+    
+    def log_signal_fit_result(self, sample_name: str, category_name: str,
+                             model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet,
+                             fit_result: Optional[ROOT.RooFitResult] = None,
+                             model_type: str = "param",
+                             chi2_ndf: Optional[Tuple[float, int]] = None):
+        """Log signal model fit results (wrapper for backwards compatibility)"""
+        self.log_fit_result(sample_name, category_name, model, dataset, 
+                           "signal", model_type, fit_result, chi2_ndf)
+    
+    def log_parametrization_result(self, category_name: str, var_name: str, 
+                                  fit_func: ROOT.TF1, is_constant: bool = False,
+                                  const_value: float = None, const_error: float = None):
+        """Log parameter vs mass fit results"""
+        if is_constant:
+            self.logger.info(f"\nPARAMETRIZATION RESULT - Category: {category_name}, Variable: {var_name} (CONSTANT)")
+            self.logger.info("-" * 60)
+            self.logger.info(f"Constant value: {const_value:.6f} ± {const_error:.6f}")
+        else:
+            self.logger.info(f"\nPARAMETRIZATION RESULT - Category: {category_name}, Variable: {var_name}")
+            self.logger.info("-" * 60)
+            self.logger.info(f"Fit function: {fit_func.GetTitle()}")
+            self.logger.info(f"Chi2/NDF: {fit_func.GetChisquare():.4f}/{fit_func.GetNDF():.0f} = {fit_func.GetChisquare()/fit_func.GetNDF():.4f}")
+            self.logger.info("Parameters:")
+            for i in range(fit_func.GetNpar()):
+                param_name = "intercept" if i == 0 else "slope"
+                self.logger.info(f"  {param_name}: {fit_func.GetParameter(i):.6f} ± {fit_func.GetParError(i):.6f}")
+    
+    def log_entry_counts(self, entry_counts: Dict[str, int], category_name: str, 
+                        dataset_type: str = "response"):
+        """Log entry counts for samples in a category"""
+        self.logger.info(f"\nENTRY COUNTS - Category: {category_name}, Dataset: {dataset_type}")
+        self.logger.info("-" * 40)
+        for sample_cat, count in entry_counts.items():
+            self.logger.info(f"  {sample_cat}: {count} entries")
+    
+    def log_analysis_step(self, step_name: str):
+        """Log analysis step"""
+        self.logger.info(f"\n{'='*20} {step_name.upper()} {'='*20}")
+    
+    def log_warning(self, message: str):
+        """Log warning message"""
+        self.logger.warning(message)
+    
+    def log_error(self, message: str):
+        """Log error message"""
+        self.logger.error(message)
+    
+    def log_info(self, message: str):
+        """Log info message"""
+        self.logger.info(message)
+    
+    def finalize_log(self):
+        """Finalize the log"""
+        self.logger.info("\n" + "="*80)
+        self.logger.info("Signal Model Analysis Completed")
+        self.logger.info(f"Log saved to: {self.log_file_path.absolute()}")
+        if self.eos_folder:
+            self.copy_log_to_eos()
+        self.logger.info("="*80)
+    
+    def copy_log_to_eos(self):
+        """Copy log file to EOS directory"""
+        if not self.eos_folder:
+            self.logger.warning("No EOS folder specified, cannot copy log file")
+            return
+        
+        try:
+            # Ensure EOS directory exists
+            self.eos_folder.mkdir(parents=True, exist_ok=True)
+            
+            # Copy log file to EOS folder
+            eos_log_path = self.eos_folder / self.log_file_path.name
+            
+            # Use os.system for copy to handle potential EOS mounting issues
+            import shutil
+            shutil.copy2(str(self.log_file_path), str(eos_log_path))
+            
+            self.logger.info(f"Log file copied to EOS: {eos_log_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to copy log file to EOS: {e}")
+    
+    def update_eos_folder(self, eos_folder: str):
+        """Update the EOS folder path"""
+        self.eos_folder = Path(eos_folder) if eos_folder else None
 
 
 class SampleConfig:
@@ -365,11 +572,44 @@ class ModelBuilder:
 class FitManager:
     """Manages fitting operations"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace):
+    def __init__(self, workspace: ROOT.RooWorkspace, logger: Optional['FitLogger'] = None):
         self.workspace = workspace
+        self.logger = logger
+    
+    def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet) -> Optional[float]:
+        """Compute Chi2/NDF for model-dataset comparison"""
+        try:
+            # Get the observable
+            obs_set = dataset.get()
+            if obs_set.getSize() != 1:
+                return None
+            
+            obs = obs_set.first()
+            
+            # Create frame and plot (no drawing needed)
+            frame = obs.frame()
+            dataset.plotOn(frame, ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson))
+            model.plotOn(frame)
+            
+            # Get number of fit parameters (same method as in plotting_oo.py)
+            params = model.getParameters(ROOT.RooArgSet(obs))
+            nparams = 0
+            for param in params:
+                if hasattr(param, 'isConstant') and not param.isConstant():
+                    nparams += 1
+            
+            # Compute chi2
+            chi2_ndf = frame.chiSquare(nparams)
+            return chi2_ndf, nparams
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.log_warning(f"Could not compute Chi2: {e}")
+            return None
     
     def fit_model(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet, 
-                 save_result: bool = True, **fit_options) -> Optional[ROOT.RooFitResult]:
+                 save_result: bool = True, sample_name: str = "", category_name: str = "",
+                 fit_type: str = "response", **fit_options) -> Optional[ROOT.RooFitResult]:
         """Fit model to dataset"""
         default_options = {
             'Save': True,
@@ -392,13 +632,25 @@ class FitManager:
         if save_result and result:
             self.workspace.Import(result, True)
         
+        # Compute Chi2
+        chi2_ndf = self.compute_chi2(model, dataset)
+        
+        # Log fit result
+        if self.logger:
+            if fit_type == "response":
+                self.logger.log_response_fit_result(sample_name, category_name, model, dataset, result, chi2_ndf)
+            elif fit_type == "signal":
+                model_type = "param"  # Could be extended to support different types
+                self.logger.log_signal_fit_result(sample_name, category_name, model, dataset, result, model_type, chi2_ndf)
+        
         return result
     
     def fit_parameters_vs_mass(self, samples: Dict[str, SampleConfig], 
                              category: CategoryConfig, vars_to_fit: List[str], 
                              parametrized_vars: List[str], gen: bool = False,
                              min_entries: int = 10,
-                             entry_counts: Optional[Dict[str, int]] = None) -> Dict[str, ROOT.TF1]:
+                             entry_counts: Optional[Dict[str, int]] = None,
+                             logger: Optional['FitLogger'] = None) -> Dict[str, ROOT.TF1]:
         """Fit parameters as function of mass
         
         Args:
@@ -455,6 +707,12 @@ class FitManager:
                     param_obj.setError(fit_func.GetParError(i))
                     param_obj.setConstant()
                     self.workspace.Import(param_obj, True)
+                
+                # Log parametrization result
+                if logger:
+                    logger.log_parametrization_result(
+                        category.name, var, fit_func, is_constant=False
+                    )
         
         # Handle constant variables
         const_vars = set(vars_to_fit) - set(parametrized_vars)
@@ -472,6 +730,13 @@ class FitManager:
             const_obj.setError(err)
             const_obj.setConstant()
             self.workspace.Import(const_obj, True)
+            
+            # Log constant parametrization result
+            if logger:
+                logger.log_parametrization_result(
+                    category.name, var, None, is_constant=True, 
+                    const_value=mean, const_error=err
+                )
         
         return fits
 
@@ -480,21 +745,30 @@ class SignalModelAnalyzer:
     """Main class that orchestrates the signal modeling analysis"""
     
     def __init__(self, samples: Dict[str, SampleConfig], categories: Dict[str, CategoryConfig], 
-                 wsfile: str, parametrized_vars: List[str]):
+                 wsfile: str, parametrized_vars: List[str], log_file: str = "signal_model_analysis.log",
+                 eos_folder: Optional[str] = None):
         self.samples = samples
         self.categories = categories
         self.parametrized_vars = parametrized_vars
+        
+        # Initialize logger
+        self.logger = FitLogger(log_file, eos_folder)
+        self.logger.log_analysis_start(samples, categories, parametrized_vars)
         
         # Initialize managers
         self.workspace_manager = WorkspaceManager(wsfile)
         self.dataset_loader = DatasetLoader(self.workspace_manager.workspace)
         self.param_manager = ParameterManager(self.workspace_manager.workspace)
         self.model_builder = ModelBuilder(self.workspace_manager.workspace, self.param_manager)
-        self.fit_manager = FitManager(self.workspace_manager.workspace)
+        self.fit_manager = FitManager(self.workspace_manager.workspace, self.logger)
         
         # Analysis state
         self._response_functions_built = False
         self._parameters_fitted = False
+    
+    def get_logger(self) -> FitLogger:
+        """Get the logger instance for external use (e.g., plotting)"""
+        return self.logger
     
     def delete_workspace(self):
         """Delete existing workspace file"""
@@ -502,15 +776,15 @@ class SignalModelAnalyzer:
     
     def build_response_functions(self, use_reco_mass: bool = False):
         """Build response function workspace and fit parameters"""
-        print("Building response function workspace...")
+        self.logger.log_analysis_step("Building Response Functions")
         
         observables = ["mass" if use_reco_mass else "reduced_mass"]
         
         for name, sample in self.samples.items():
-            print(f"Processing sample: {name}")
+            self.logger.log_info(f"Processing sample: {name}")
             
             for category_label, category in self.categories.items():
-                print(f"\tCategory: {category_label}")
+                self.logger.log_info(f"Processing category: {category_label}")
                 
                 # Create variables
                 self.param_manager.create_variables(sample, category, 
@@ -519,20 +793,19 @@ class SignalModelAnalyzer:
                 # Load dataset
                 obs_name = f"{observables[0]}_{sample.label}"
                 dataset = self.dataset_loader.load_response_dataset(sample, category, obs_name, use_reco_mass)
-                print("\t\tLoaded dataset")
+                self.logger.log_info(f"Loaded dataset with {dataset.numEntries()} entries")
                 
                 # Build and fit model
                 model = self.model_builder.build_response_function(sample, category, obs_name)
-                self.fit_manager.fit_model(model, dataset)
-                print("\t\tFitted model", model.GetName())
-                # print all parameters, their names and post-fit values
-                for var in model.getParameters(ROOT.RooArgSet()):
-                    print(f"\t\tParameter {var.GetName()}: value = {var.getVal()}, error = {var.getError()}")
+                self.fit_manager.fit_model(model, dataset, sample_name=sample.label, 
+                                         category_name=category.name, fit_type="response")
+                
+                self.logger.log_info(f"Fitted model: {model.GetName()}")
 
         
         self.workspace_manager.save()
         self._response_functions_built = True
-        print("Response function workspace built successfully!")
+        self.logger.log_info("Response function workspace built successfully!")
     
     def fit_parameters(self, vars_list: Optional[List[str]] = None, gen: bool = False, 
                       min_entries: int = 10):
@@ -546,13 +819,13 @@ class SignalModelAnalyzer:
         if not self._response_functions_built and not gen:
             raise RuntimeError("Response functions must be built before fitting parameters")
         
-        print("Fitting parameters...")
+        self.logger.log_analysis_step("Fitting Parameters vs Mass")
         
         if vars_list is None:
             vars_list = self.param_manager.dcb_vars if not gen else self.param_manager.bw_vars
         
         for category_label, category in self.categories.items():
-            print(f"Fitting parameters for category: {category_label}")
+            self.logger.log_info(f"Fitting parameters for category: {category_label}")
             
             # Get entry counts for this category
             dataset_type = "signal" if gen else "response"
@@ -560,29 +833,27 @@ class SignalModelAnalyzer:
                 self.samples, category, dataset_type
             )
             
-            # Print entry counts for debugging
-            for key, count in entry_counts.items():
-                if "JPsi" not in key:  # Only show non-JPsi samples
-                    print(f"Sample {key}: {count} entries")
+            # Log entry counts
+            self.logger.log_entry_counts(entry_counts, category.name, dataset_type)
             
             fits = self.fit_manager.fit_parameters_vs_mass(
                 self.samples, category, vars_list, self.parametrized_vars, gen,
-                min_entries, entry_counts
+                min_entries, entry_counts, self.logger
             )
         
         self.workspace_manager.save()
         self._parameters_fitted = True
-        print("Parameter fitting completed!")
+        self.logger.log_info("Parameter fitting completed!")
     
     def build_signal_models(self, use_reco_mass: bool = False, fit_models: bool = False):
         """Build parametric signal models"""
         if not self._parameters_fitted:
             raise RuntimeError("Parameters must be fitted before building signal models")
         
-        print("Building signal models...")
+        self.logger.log_analysis_step("Building Signal Models")
         
         for name, sample in self.samples.items():
-            print(f"Building signal model for: {name}")
+            self.logger.log_info(f"Building signal model for: {name}")
             
             # Create mass observable
             mass_range = ",".join(map(str, sample.mass_range))
@@ -603,10 +874,11 @@ class SignalModelAnalyzer:
                 
                 # Optionally fit model
                 if fit_models:
-                    self.fit_manager.fit_model(model, dataset)
+                    self.fit_manager.fit_model(model, dataset, sample_name=sample.label,
+                                             category_name=category.name, fit_type="signal")
         
         self.workspace_manager.save()
-        print("Signal models built successfully!")
+        self.logger.log_info("Signal models built successfully!")
     
     def _create_parametric_variables(self, sample: SampleConfig, category: CategoryConfig, 
                                    use_reco_mass: bool):
@@ -651,14 +923,14 @@ class SignalModelAnalyzer:
     
     def test_model_for_masses(self, mass_points: List[float], use_reco_mass: bool = False):
         """Test signal model for different mass points"""
-        print("Testing signal model for various mass points...")
+        self.logger.log_analysis_step("Testing Model for Various Mass Points")
         
         # Create common mass variable
         mass_var = ROOT.RooRealVar("mass_test", "mass_test", 0, 11)
         self.workspace_manager.workspace.Import(mass_var)
         
         for mass in mass_points:
-            print(f"Testing mass: {mass:.1f} GeV")
+            self.logger.log_info(f"Testing mass: {mass:.1f} GeV")
             name = f"M{mass:.1f}".replace(".", "p")
             
             for category_label, category in self.categories.items():
@@ -672,7 +944,7 @@ class SignalModelAnalyzer:
                 )
         
         self.workspace_manager.save()
-        print("Mass testing completed!")
+        self.logger.log_info("Mass testing completed!")
     
     def _create_test_variables(self, mass: float, name: str, category: CategoryConfig, 
                              use_reco_mass: bool):
@@ -726,7 +998,7 @@ class SignalModelAnalyzer:
     def run_full_analysis(self, use_reco_mass: bool = False, 
                          test_mass_points: Optional[List[float]] = None):
         """Run complete analysis pipeline"""
-        print("Starting full signal modeling analysis...")
+        self.logger.log_analysis_step("Full Analysis Pipeline")
         
         # Step 1: Build response functions
         self.build_response_functions(use_reco_mass)
@@ -741,4 +1013,6 @@ class SignalModelAnalyzer:
         if test_mass_points:
             self.test_model_for_masses(test_mass_points, use_reco_mass)
         
-        print("Full analysis completed successfully!")
+        # Finalize log
+        self.logger.finalize_log()
+        self.logger.log_info("Full analysis completed successfully!")

@@ -1,0 +1,1 @@
+python3 main_oo.py --full --delete_ws --use_reco_mass --copy_eos --tag="withReweight_Categories" &> log_reco_triggerReweight_Categories.log

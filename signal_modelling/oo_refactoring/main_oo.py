@@ -227,7 +227,8 @@ class AnalysisRunner:
             self.config.samples,
             self.config.categories,
             wsfile,
-            self.config.parametrized_vars
+            self.config.parametrized_vars,
+            eos_folder=self.config.eos_folder
         )
         
         # Setup plotter
@@ -308,6 +309,9 @@ class AnalysisRunner:
         if args.copy_eos:
             print("=== Copying Plots to EOS ===")
             self.plotter.copy_plots_to_eos(self.config.eos_folder)
+        
+        # Finalize log and copy to EOS if needed
+        self.analyzer.logger.finalize_log()
         
         print("=== Analysis Complete! ===")
 
