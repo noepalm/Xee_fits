@@ -8,8 +8,10 @@ parser.add_argument('-i', '--input', type=str, default='Xee_ee_0_2023.root', hel
 parser.add_argument('-f', '--fit_file', type=str, default='fitDiagnosticsTest.root', help='File containing fit results')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
 parser.add_argument('-m', '--mass', type=float, default=3.0, help='Mass value to plot')
+parser.add_argument('-c', '--cat_id', type=int, default=0, help='Category ID to plot')
 
 args = parser.parse_args()
+cat_id = args.cat_id
 
 # print all arguments
 print("Arguments:")
@@ -23,15 +25,15 @@ dataset = f1.Get("w").data("data_obs")
 
 # finally, retrieve total S+B fit distribution from last file
 f2 = ROOT.TFile.Open(args.fit_file, "READ")
-total_distro = f2.Get("shapes_fit_b/Xee_ee_0_2023/total_background")
-dy_bkg = f2.Get("shapes_fit_b/Xee_ee_0_2023/dy")
-psi2s_bkg = f2.Get("shapes_fit_b/Xee_ee_0_2023/psi2s")
-jpsi_bkg = f2.Get("shapes_fit_b/Xee_ee_0_2023/jpsi")
+total_distro = f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/total_background")
+dy_bkg = f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/dy")
+psi2s_bkg = f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/psi2s")
+jpsi_bkg = f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/jpsi")
 
-dy_n = f2.Get("norm_fit_b").selectByName("Xee_ee_0_2023/dy").first().getValV()
-psi2s_n = f2.Get("norm_fit_b").selectByName("Xee_ee_0_2023/psi2s").first().getValV()
-jpsi_n = f2.Get("norm_fit_b").selectByName("Xee_ee_0_2023/jpsi").first().getValV()
-total_n = f2.Get("norm_fit_b").selectByName("Xee_ee_0_2023/total_background").first().getValV()
+dy_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/dy").first().getValV()
+psi2s_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/psi2s").first().getValV()
+jpsi_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/jpsi").first().getValV()
+total_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/total_background").first().getValV()
 
 # draw
 ROOT.gROOT.SetBatch()
@@ -139,17 +141,17 @@ line.Draw("same")
 for ext in ['png', 'pdf']:
     c.SaveAs(os.path.join(args.output_folder, "b", f"mu0_fit_b_M{args.mass:.1f}.{ext}"))
 
-total_distro = f2.Get("shapes_fit_s/Xee_ee_0_2023/total")
-dy_bkg = f2.Get("shapes_fit_s/Xee_ee_0_2023/dy")
-psi2s_bkg = f2.Get("shapes_fit_s/Xee_ee_0_2023/psi2s")
-jpsi_bkg = f2.Get("shapes_fit_s/Xee_ee_0_2023/jpsi")
-signal = f2.Get("shapes_fit_s/Xee_ee_0_2023/Zd")
+total_distro = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/total")
+dy_bkg = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/dy")
+psi2s_bkg = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/psi2s")
+jpsi_bkg = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/jpsi")
+signal = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/Zd")
 
-total_n = f2.Get("norm_fit_s").selectByName("Xee_ee_0_2023/total").first().getValV()
-dy_n = f2.Get("norm_fit_s").selectByName("Xee_ee_0_2023/dy").first().getValV()
-psi2s_n = f2.Get("norm_fit_s").selectByName("Xee_ee_0_2023/psi2s").first().getValV()
-jpsi_n = f2.Get("norm_fit_s").selectByName("Xee_ee_0_2023/jpsi").first().getValV()
-signal_n = f2.Get("norm_fit_s").selectByName("Xee_ee_0_2023/Zd").first().getValV()
+total_n = f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/total").first().getValV()
+dy_n = f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/dy").first().getValV()
+psi2s_n = f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/psi2s").first().getValV()
+jpsi_n = f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/jpsi").first().getValV()
+signal_n = f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/Zd").first().getValV()
 
 c2 = ROOT.TCanvas("c2", "c2", 800, 800)
 

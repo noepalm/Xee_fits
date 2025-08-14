@@ -4,12 +4,17 @@ import mplhep as hep
 import os
 import argparse
 
+plt.style.use(hep.style.CMS)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--mu', type=float, default=0, help='Value of mu to plot')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder for the plots')
+parser.add_argument('-c', '--category', type=str, default='etaHigh', help='Category to plot (default: etaHigh)')
+parser.add_argument('-t', '--tag', type=str, default="", help='Optional additional tag for output files')
 args = parser.parse_args()
 mu = args.mu
 outfolder = args.output_folder
+tag = f"_{args.tag}" if args.tag != "" else args.tag
 
 r_values = {}
 
@@ -27,7 +32,7 @@ for folder in os.listdir(outfolder):
     # iterate over files in the subfolder
     for file in os.listdir(folder_path):
         # find fitDiagnostics.log
-        if "fitDiagnostics" in file and "log" in file:
+        if file == f"fitDiagnostics_{args.category}.log":
             with open(os.path.join(folder_path, file), 'r') as f:
                 lines = f.readlines()
                 # find the line starting with "Best fit r"
@@ -80,6 +85,6 @@ ax.grid()
 
 suffix = "_injectedSignal" if mu > 0 else ""
 
-plt.savefig(os.path.join(outfolder, f"mu_fit{suffix}_results.png"))
-plt.savefig(os.path.join(outfolder, f"mu_fit{suffix}_results.pdf"))
+for ext in ["png", "pdf"]:
+    plt.savefig(os.path.join(outfolder, f"mu_fit{suffix}_results{tag}.{ext}"))
 

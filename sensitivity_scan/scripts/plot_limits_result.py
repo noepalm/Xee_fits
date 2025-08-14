@@ -7,8 +7,18 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-o', '--output_folder', type=str, default='/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics/mu0', help='Output folder for the plots')
+parser.add_argument('-c', '--category', type=str, default='etaHigh', help='Category to plot (default: etaHigh)')
+parser.add_argument('-t', '--tag', type=str, default="", help='Optional additional tag for output files')
 args = parser.parse_args()
+# print all arguments
+print("Arguments:")
+print(f"  Output folder: {args.output_folder}")
+print(f"  Category: {args.category}")
+print(f"  Tag: {args.tag}")
+
+
 outfolder = args.output_folder
+tag = f"_{args.tag}" if args.tag != "" else args.tag
 
 plt.style.use(hep.style.CMS)
 
@@ -19,6 +29,12 @@ for folder in os.listdir(outfolder):
     if not folder.startswith("M") or not folder[1:].replace(".", "").isdigit():
         continue
     
+    # exclude limits outside 2.2-4 GeV
+    mass_value = float(folder[1:])
+    print("  Processing mass value:", mass_value)
+    if mass_value < 2.2 or mass_value > 4:
+        continue
+
     folder_path = os.path.join(outfolder, folder)
     
     # check if it's a directory
@@ -28,7 +44,7 @@ for folder in os.listdir(outfolder):
     # iterate over files in the subfolder
     for file in os.listdir(folder_path):
         # find fitDiagnostics.log
-        if file == "fitAsymptotic.log":
+        if file == f"fitAsymptotic_{args.category}{tag}.log":
             with open(os.path.join(folder_path, file), 'r') as f:
                 lines = f.readlines()
                 # find the line starting with "Best fit r"
@@ -39,14 +55,26 @@ for folder in os.listdir(outfolder):
                 limit["observed"] = lines[idx+1].split("r < ")[1].strip()
 
                 # check if "Expected" lines are found at all (may not be computed)
-                if "Expected" not in lines[idx+2]:
-                    print("WARNING: no expected limits produced for mass", folder[1:])
+                if "Expected" in lines[idx+2]:
+                    limit["expected_2p5"] = lines[idx+2].split("r < ")[1].strip()
+                    limit["expected_16"] = lines[idx+3].split("r < ")[1].strip()
+                    limit["expected_50"] = lines[idx+4].split("r < ")[1].strip()
+                    limit["expected_84"] = lines[idx+5].split("r < ")[1].strip()
+                    limit["expected_97p5"] = lines[idx+6].split("r < ")[1].strip()
+                else:
+                    print("WARNING: no expected limits produced for mass", folder[1:], "; will use median and sigma.")
                     continue
-                limit["expected_2p5"] = lines[idx+2].split("r < ")[1].strip()
-                limit["expected_16"] = lines[idx+3].split("r < ")[1].strip()
-                limit["expected_50"] = lines[idx+4].split("r < ")[1].strip()
-                limit["expected_84"] = lines[idx+5].split("r < ")[1].strip()
-                limit["expected_97p5"] = lines[idx+6].split("r < ")[1].strip()
+                    # # find line "Median for expected limits = "
+                    # for line in lines:
+                    #     if "Median for expected limits = " in line:
+                    #         median = float(line.split("Median for expected limits = ")[1].split(",")[0])
+                    #         sigma = float(line.split("Sigma for expected limits = ")[1].strip())
+                    #         limit["expected_2p5"] = median - 2 * sigma
+                    #         limit["expected_16"] = median - sigma
+                    #         limit["expected_50"] = median
+                    #         limit["expected_84"] = median + sigma
+                    #         limit["expected_97p5"] = median + 2 * sigma
+                    #         break
 
                 # retrieve mass value as float
                 mass = folder[1:]
@@ -74,10 +102,8 @@ plt.ylabel(r"$\mu$")
 plt.yscale("log")
 plt.legend()
 
-plt.savefig(os.path.join(outfolder, "mu_limit_results.png"))
-plt.savefig(os.path.join(outfolder, "mu_limit_results.pdf"))
-print("Saved mu_limit_results.png to:", outfolder)
-
+for ext in ['png', 'pdf']:
+    plt.savefig(os.path.join(outfolder, f"mu_limit_results{tag}.{ext}"))
 
 # Now convert these to model-independent limits
 
@@ -115,8 +141,9 @@ plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee)$ [pb]")
 plt.yscale("log")
 plt.legend()
 
-plt.savefig(os.path.join(outfolder, "mu_limit_results_indep_xsecBR.png"))
-plt.savefig(os.path.join(outfolder, "mu_limit_results_indep_xsecBR.pdf"))
+
+for ext in ['png', 'pdf']:
+    plt.savefig(os.path.join(outfolder, f"mu_limit_results_indep_xsecBR{tag}.{ext}"))
 
 expected_50_indep_accept = np.array([float(r_values[mass]["expected_50"]) * r_values[mass]["Nexpected"] / (luminosity) for mass in sorted(r_values.keys(), key=float)])
 expected_16_indep_accept = np.array([float(r_values[mass]["expected_16"]) * r_values[mass]["Nexpected"] / (luminosity) for mass in sorted(r_values.keys(), key=float)])
@@ -136,9 +163,8 @@ plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]")
 plt.yscale("log")
 plt.legend()
 
-plt.savefig(os.path.join(outfolder, "mu_limit_results_indep_xsecBRAcceptance.png"))
-plt.savefig(os.path.join(outfolder, "mu_limit_results_indep_xsecBRAcceptance.pdf"))
-
+for ext in ['png', 'pdf']:
+    plt.savefig(os.path.join(outfolder, f"mu_limit_results_indep_xsecBRAcceptance{tag}.{ext}"))
 
 # Finally, for each mass point, print the number of expected events, xsec, efficiency and mu upper limit
 print("\nModel-independent limits:")
@@ -147,7 +173,7 @@ for idx, mass in enumerate(sorted(r_values.keys(), key=float)):
     print(f"Mass: {mass} GeV")
     print(f"  N_expected: {limit['Nexpected']:.2f}")
     print(f"  xsec: {limit['xsec']:.2f} pb")
-    print(f"  efficiency: {limit['efficiency']:.2f} %")
+    print(f"  efficiency: {limit['efficiency'] * 100:.2f} %")
     print(f"  mu_50: {limit['expected_50']}")
     print(f"  mu_16: {limit['expected_16']}")
     print(f"  mu_84: {limit['expected_84']}")
