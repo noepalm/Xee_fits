@@ -220,7 +220,7 @@ class AnalysisRunner:
         self.analyzer = None
         self.plotter = None
     
-    def setup_analyzer(self):
+    def setup_analyzer(self, use_reweighting: bool = True):
         """Setup the signal model analyzer"""
         wsfile = os.path.join("workspaces", self.config.wsfile)
         self.analyzer = SignalModelAnalyzer(
@@ -228,7 +228,8 @@ class AnalysisRunner:
             self.config.categories,
             wsfile,
             self.config.parametrized_vars,
-            eos_folder=self.config.eos_folder
+            eos_folder=self.config.eos_folder,
+            use_reweighting=use_reweighting
         )
         
         # Setup plotter
@@ -255,7 +256,8 @@ class AnalysisRunner:
     def run_mass_testing(self, use_reco_mass: bool = False):
         """Run mass point testing"""
         print("=== Running Mass Point Testing ===")
-        mass_points = np.concatenate([np.arange(0.5, 10.5, 0.1), [3.1, 3.7]])
+        # mass_points = np.concatenate([np.arange(0.5, 10.5, 0.1), [3.1, 3.7]])
+        mass_points = np.concatenate([np.arange(0.1, 11.1, 0.1), [3.1, 3.7]])
         self.analyzer.test_model_for_masses(mass_points.tolist(), use_reco_mass)
     
     def generate_plots(self, args):
@@ -279,7 +281,8 @@ class AnalysisRunner:
         print("=== Starting Full Signal Modeling Analysis ===")
         
         # Setup
-        self.setup_analyzer()
+        use_reweighting = not args.no_reweighting
+        self.setup_analyzer(use_reweighting)
         
         # Delete existing workspace if requested
         if args.delete_ws:
@@ -331,6 +334,8 @@ def create_argument_parser():
     parser.add_argument("--parametrized_vars", help="Parametrized variables", nargs="+", 
                        default=["mean", "sigma", "alphaL", "alphaR", "nL", "nR"])
     parser.add_argument("--use_reco_mass", help="Derive signal model from reco mass rather than reduced", 
+                       action="store_true", default=False)
+    parser.add_argument("--no_reweighting", help="Disable reweighting (set all weights to 1)", 
                        action="store_true", default=False)
     
     # Individual step options

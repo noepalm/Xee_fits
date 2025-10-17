@@ -43,7 +43,7 @@ class BackgroundPlotter:
         
         # Create frame
         xmin, xmax = fit_region.range
-        frame = self.fitter.mass_var.frame(xmin, xmax)
+        frame = self.fitter.mass_var.frame(xmin, xmax) #xmin-1, xmax+1 for debug margin
         frame.SetTitle("")
         
         # Setup drawing arguments
@@ -60,16 +60,25 @@ class BackgroundPlotter:
             
         # Plot data
         self.fitter.data.plotOn(frame, *draw_args)
+
+        # print(f"DEBUG: bin content:", flush=True)
+        # for i in range(500):
+        #     self.fitter.data.get(i)
+        #     print(f"  bin {i}: {self.fitter.data.weight()}", flush=True)
+        print(f"DEBUG: mass var range = ({xmin}, {xmax})", flush=True)
         
-        # Plot background models or combined model
-        if fit_region.name == "region1":  # Main region with combined background
-            plotted_functions = self._plot_combined_model(frame, fit_region)
-        else:  # Sideband regions with background only
-            plotted_functions = self._plot_background_models(frame, fit_region)
+        # Plot combined background model
+        plotted_functions = self._plot_combined_model(frame, fit_region)
+        
+        # if fit_region.name == "region1" or True:  # Main region with combined background #FIXME
+        #     plotted_functions = self._plot_combined_model(frame, fit_region)
+        #     # pass
+        # else:  # Sideband regions with background only
+        #     plotted_functions = self._plot_background_models(frame, fit_region)
             
         # Calculate chi2 values
         chi2_values = self._calculate_chi2_values(frame, results)
-        
+       
         # Add legend
         # legend = self._create_legend(fit_region, results, chi2_values)
         legend = ROOT.TLegend(0.2, 0.15, 0.9, 0.45)
@@ -85,6 +94,8 @@ class BackgroundPlotter:
 
         # Draw everything
         frame.Draw()
+        # change minimum to 1
+        frame.SetMinimum(1)
         frame.GetXaxis().SetTitle("m(ee) [GeV]")
         legend.Draw()
         
@@ -115,22 +126,32 @@ class BackgroundPlotter:
         # Plot components with category-specific names
         category_label = self.category.label if self.category else ""
         
-        if "jpsi" in self.fitter.resonant_backgrounds:
-            jpsi_component_name = f"jpsi_resonant_bkg{category_label}"
+        colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        for idx, res_bkg in enumerate(self.fitter.resonant_backgrounds.keys()):
+            component_name = f"{res_bkg}_resonant_bkg{category_label}"
             self.fitter.combined_model.plotOn(frame, 
-                                            ROOT.RooFit.Components(jpsi_component_name),
-                                            ROOT.RooFit.LineColor(ROOT.kRed), 
-                                            ROOT.RooFit.Name("jpsi_bkg"), 
+                                            ROOT.RooFit.Components(component_name),
+                                            ROOT.RooFit.LineColor(colors[idx % len(colors)]), 
+                                            ROOT.RooFit.Name(f"{res_bkg}_bkg"),
+                                            ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
                                             ROOT.RooFit.NormRange(fit_region.name))
+
+        # if "jpsi" in self.fitter.resonant_backgrounds:
+        #     jpsi_component_name = f"jpsi_resonant_bkg{category_label}"
+        #     self.fitter.combined_model.plotOn(frame, 
+        #                                     ROOT.RooFit.Components(jpsi_component_name),
+        #                                     ROOT.RooFit.LineColor(ROOT.kRed), 
+        #                                     ROOT.RooFit.Name("jpsi_bkg"), 
+        #                                     ROOT.RooFit.NormRange(fit_region.name))
                                             
-        if "psi2s" in self.fitter.resonant_backgrounds:
-            psi2s_component_name = f"psi2s_resonant_bkg{category_label}"
-            self.fitter.combined_model.plotOn(frame, 
-                                            ROOT.RooFit.Components(psi2s_component_name),
-                                            ROOT.RooFit.LineColor(ROOT.kBlue), 
-                                            ROOT.RooFit.Name("psi2s_bkg"), 
-                                            ROOT.RooFit.NormRange(fit_region.name))
-                                            
+        # if "psi2s" in self.fitter.resonant_backgrounds:
+        #     psi2s_component_name = f"psi2s_resonant_bkg{category_label}"
+        #     self.fitter.combined_model.plotOn(frame, 
+        #                                     ROOT.RooFit.Components(psi2s_component_name),
+        #                                     ROOT.RooFit.LineColor(ROOT.kBlue), 
+        #                                     ROOT.RooFit.Name("psi2s_bkg"), 
+        #                                     ROOT.RooFit.NormRange(fit_region.name))
+
         chosen_bkg = self.fitter.get_chosen_background_function()
         if chosen_bkg:
             nonres_bkg_name = self.fitter.get_chosen_background_function().GetTitle()
@@ -140,12 +161,17 @@ class BackgroundPlotter:
                                             ROOT.RooFit.Components(nonres_bkg_name),
                                             ROOT.RooFit.LineColor(ROOT.kGreen), 
                                             ROOT.RooFit.Name("nonresonant_bkg"), 
+                                            ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
                                             ROOT.RooFit.NormRange(fit_region.name))
         
         # Replot data on top
         frame.drawAfter("nonresonant_bkg", "data_obs")
 
-        plot_name_list = ["full_bkg_model", "jpsi_bkg", "psi2s_bkg", "nonresonant_bkg"]
+        plot_name_list = ["full_bkg_model", "nonresonant_bkg"]
+        for res_bkg in self.fitter.resonant_backgrounds.keys():
+            plot_name_list.append(f"{res_bkg}_bkg")
+
+        # plot_name_list = ["full_bkg_model", "jpsi_bkg", "psi2s_bkg", "nonresonant_bkg"]
         return plot_name_list
         
     def _plot_background_models(self, frame: ROOT.RooPlot, fit_region: FitRegion):
@@ -170,9 +196,25 @@ class BackgroundPlotter:
         
         for name, result in results.items():
             if result.n_free_params > 0:
+                print(f"DEBUG: computing chi2 between data_obs and {name} with {result.n_free_params} free params", flush=True)
                 # Get chi2 from frame
                 chi2_val = frame.chiSquare(name, "data_obs", result.n_free_params)
                 chi2_values[name] = chi2_val
+                print(f"  Chi2 for {name}: {chi2_val} (n. free params = {result.n_free_params})", flush=True)
+
+                # DEBUG: compute using createChi2 
+                # first: create binned clone of data
+                binned_data = self.fitter.data.binnedClone()
+                model_to_compute = self.fitter.combined_model if name == "full_bkg_model" else self.fitter.background_functions.get(name)
+                chi2_obj = model_to_compute.createChi2(binned_data,
+                                           ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
+                # chi2_obj = ROOT.RooChi2Var(f"chi2_{name}", f"chi2_{name}", 
+                #                            model_to_compute,
+                #                            binned_data,
+                #                            ROOT.RooFit.Range(self.config.chosen_fit_region.name),
+                #                            ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
+                chi2_over_ndf = chi2_obj.getVal() / result.n_free_params
+                print(f"  (DEBUG) Chi2 for {name} using RooChi2Var: {chi2_obj.getVal()} (chi2/ndf = {chi2_over_ndf})", flush=True)
                 
                 # Update result object
                 result.calculate_chi2_ndf(chi2_val * result.n_free_params, result.n_free_params)
@@ -208,7 +250,7 @@ class BackgroundPlotter:
         }
         
         # Determine which entries to show
-        if fit_region.name == "region1":
+        if fit_region.name == "region1" or True: #FIXME
             keys_to_plot = ["full_bkg_model"]
         else:
             keys_to_plot = [func.name for func in self.config.background_functions]
@@ -280,11 +322,11 @@ class BackgroundPlotter:
         print("Creating prompt J/psi resonant background fit plots...")
         
         # Check if prompt data and models are available
-        if not hasattr(self.fitter, 'prompt_data') or not self.fitter.prompt_data:
+        if not hasattr(self.fitter, 'resonant_data') or not self.fitter.resonant_data:
             print("  Warning: No prompt data available for plotting")
             return []
             
-        if not hasattr(self.fitter, 'prompt_combined_model') or not self.fitter.prompt_combined_model:
+        if not hasattr(self.fitter, 'resonant_combined_model') or not self.fitter.resonant_combined_model:
             print("  Warning: No prompt combined model available for plotting")
             return []
             
@@ -295,51 +337,70 @@ class BackgroundPlotter:
         canvas_prompt.SetGrid()
         
         # Get mass variable range for unblinded region
-        xmin, xmax = self.fitter.mass_var.getRange("unblinded")
-        frame_prompt = self.fitter.mass_var.frame(xmin, xmax)
-        frame_prompt.SetTitle("")
+        xmin, xmax = self.config.chosen_fit_region.range
+        # xmin, xmax = self.fitter.mass_var.getRange("unblinded")
+        # xmin = 2
+        # xmax = 4.2
+        frame_resonant = self.fitter.mass_var.frame(xmin, xmax)
+        print(f"DEBUG: Plotting resonant data in range [{xmin}, {xmax}]", flush=True)
+        frame_resonant.SetTitle("")
         
         # Plot prompt data
-        print("DEBUG: prompt data = ", self.fitter.prompt_data, flush=True)
-        self.fitter.prompt_data.plotOn(frame_prompt,
-                    ROOT.RooFit.Name("prompt_data"),
+        print("DEBUG: resonant data = ", self.fitter.resonant_data, "; entries = ", self.fitter.resonant_data.sumEntries(), flush=True)
+        for i in range(100):
+            self.fitter.resonant_data.get(i)
+            print(f"  bin {i}: {self.fitter.resonant_data.weight()}", flush=True)
+        self.fitter.resonant_data.plotOn(frame_resonant,
+                    ROOT.RooFit.Name("resonant_data"),
                     ROOT.RooFit.Binning(100),
                     ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
-        
+                            
         # Plot combined model
-        print("DEBUG: prompt combined model = ", self.fitter.prompt_combined_model, flush=True)
-        self.fitter.prompt_combined_model.plotOn(frame_prompt, 
+        print("DEBUG: resonant combined model = ", self.fitter.resonant_combined_model, flush=True)
+        self.fitter.resonant_combined_model.plotOn(frame_resonant,
                     ROOT.RooFit.LineColor(ROOT.kBlack), 
-                    ROOT.RooFit.Name("jpsi_plus_psi2s"), 
-                    ROOT.RooFit.NormRange("unblinded"))
+                    ROOT.RooFit.Name("resonant_combined_model"),
+                    ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
         
         # Plot components
         print("DEBUG: plotting J/psi and psi2S models", flush=True)
         print("DEBUG: self.fitter.resonant_backgrounds = ", self.fitter.resonant_backgrounds, flush=True)
         jpsi_model = self.fitter.resonant_backgrounds.get("jpsi")
         psi2s_model = self.fitter.resonant_backgrounds.get("psi2s")
-        
+
         if jpsi_model:
-            self.fitter.prompt_combined_model.plotOn(frame_prompt, 
-                        ROOT.RooFit.Components(jpsi_model.GetName()), 
-                        ROOT.RooFit.LineColor(ROOT.kRed), 
-                        ROOT.RooFit.Name("jpsi_model"), 
+            self.fitter.resonant_combined_model.plotOn(frame_resonant,
+                        ROOT.RooFit.Components(jpsi_model.GetName()),
+                        ROOT.RooFit.LineColor(ROOT.kRed),
+                        ROOT.RooFit.Name("jpsi_model"),
                         ROOT.RooFit.NormRange("unblinded"))
         
         if psi2s_model:
-            self.fitter.prompt_combined_model.plotOn(frame_prompt, 
+            self.fitter.resonant_combined_model.plotOn(frame_resonant,
                         ROOT.RooFit.Components(psi2s_model.GetName()),
-                        ROOT.RooFit.LineColor(ROOT.kBlue), 
-                        ROOT.RooFit.Name("psi2s_model"), 
+                        ROOT.RooFit.LineColor(ROOT.kBlue),
+                        ROOT.RooFit.Name("psi2s_model"),
                         ROOT.RooFit.NormRange("unblinded"))
+
+        print(f"DEBUG: plotting components: {self.config.chosen_fit_region.backgrounds}", flush=True)
+        
+        colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+
+        for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
+            print(f"DEBUG: resonant model = {model.GetName()}", flush=True)
+            self.fitter.resonant_combined_model.plotOn(frame_resonant,
+                        ROOT.RooFit.Components(model.GetName()),
+                        ROOT.RooFit.LineColor(colors[idx]),
+                        ROOT.RooFit.Name(model_name),
+                        ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
         
         # Draw frame
-        frame_prompt.Draw()
-        frame_prompt.GetXaxis().SetTitle("m(ee) [GeV]")
+        frame_resonant.Draw()
+        frame_resonant.GetXaxis().SetTitle("m(ee) [GeV]")
         
         # Compute chi2
-        npar = self.fitter.prompt_combined_model.getParameters(self.fitter.prompt_data).selectByAttrib("Constant", False).getSize()
-        chi2_val = frame_prompt.chiSquare("jpsi_plus_psi2s", "prompt_data", int(npar))
+        npar = self.fitter.resonant_combined_model.getParameters(self.fitter.resonant_data).selectByAttrib("Constant", False).getSize()
+        chi2_val = frame_resonant.chiSquare("resonant_combined_model", "resonant_data", int(npar))
         
         self.fitter.log_print(f"chi2 = {chi2_val} (n. free params = {npar})")
         
@@ -349,13 +410,16 @@ class BackgroundPlotter:
         legend_prompt.SetFillColor(0)
         legend_prompt.SetFillStyle(0)
         legend_prompt.SetTextSize(0.04)
-        legend_prompt.AddEntry(frame_prompt.findObject("prompt_data"), "Prompt J/psi data", "p")
-        legend_prompt.AddEntry(frame_prompt.findObject("jpsi_plus_psi2s"), 
-                             f"#splitline{{J/psi + psi(2S) model}}{{chi2 = {chi2_val:.2f}}}", "l")
-        if jpsi_model:
-            legend_prompt.AddEntry(frame_prompt.findObject("jpsi_model"), "J/psi model", "l")
-        if psi2s_model:
-            legend_prompt.AddEntry(frame_prompt.findObject("psi2s_model"), "psi(2S) model", "l")
+        legend_prompt.AddEntry(frame_resonant.findObject("resonant_data"), "Data for resonant bkg", "p")
+        legend_prompt.AddEntry(frame_resonant.findObject("resonant_combined_model"), 
+                             f"#splitline{{Combined resonant model}}{{chi2 = {chi2_val:.2f}}}", "l")
+
+        for model_name, model in self.fitter.resonant_backgrounds.items():
+            legend_prompt.AddEntry(frame_resonant.findObject(model_name), f"{model.GetTitle()} model", "l")
+        # if jpsi_model:
+        #     legend_prompt.AddEntry(frame_resonant.findObject("jpsi_model"), "J/psi model", "l")
+        # if psi2s_model:
+        #     legend_prompt.AddEntry(frame_resonant.findObject("psi2s_model"), "psi(2S) model", "l")
         legend_prompt.Draw()
         
         # Save plots
@@ -372,7 +436,7 @@ class BackgroundPlotter:
         created_plots.append(str(plot_path))
         
         # Log scale
-        frame_prompt.SetMinimum(1)
+        frame_resonant.SetMinimum(1)
         canvas_prompt.SetLogy()
         
         plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}_log.png"
@@ -383,7 +447,7 @@ class BackgroundPlotter:
         canvas_prompt.SaveAs(str(plot_path))
         created_plots.append(str(plot_path))
         
-        print(f"  Created {len(created_plots)} prompt J/psi plots")
+        print(f"  Created {len(created_plots)} resonant fit plots")
         return created_plots
         
     def create_all_plots(self, fit_region: FitRegion, 

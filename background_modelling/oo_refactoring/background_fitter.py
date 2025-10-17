@@ -64,7 +64,8 @@ class FitResult:
 class BackgroundFitter:
     """Main class for fitting background models"""
     
-    def __init__(self, config: BackgroundModelConfig, category: CategoryConfig = None):
+    def __init__(self, config: BackgroundModelConfig, category: CategoryConfig = None, 
+                 output_workspace: "ROOT.RooWorkspace" = None):
         self.config = config
         
         # Storage for fit results
@@ -74,6 +75,9 @@ class BackgroundFitter:
         self.workspace: Optional[ROOT.RooWorkspace] = None
         self.data: Optional[ROOT.RooDataSet] = None
         self.mass_var: Optional[ROOT.RooRealVar] = None
+        
+        # Centralized output workspace (shared across categories)
+        self.output_workspace = output_workspace
 
         # Category
         if category is None:
@@ -97,8 +101,8 @@ class BackgroundFitter:
         self.combined_model: Optional[ROOT.RooAbsPdf] = None
         
         # Prompt data and models (for resonant background fitting)
-        self.prompt_data: Optional[ROOT.RooDataSet] = None
-        self.prompt_combined_model: Optional[ROOT.RooAbsPdf] = None
+        self.resonant_data: Optional[ROOT.RooDataSet] = None
+        self.resonant_combined_model: Optional[ROOT.RooAbsPdf] = None
         
         # Log file
         self.log_file: Optional[object] = None
@@ -143,9 +147,9 @@ class BackgroundFitter:
         print(f"  Loaded dataset '{dataset_name}' with {self.data.numEntries()} entries")
         print(f"  Mass variable range: [{self.mass_var.getMin():.2f}, {self.mass_var.getMax():.2f}] GeV")
         
-        # Convert to binned data if requested
-        if self.config.use_binned:
-            self.data = self._convert_to_binned()
+        # # Convert to binned data if requested
+        # if self.config.use_binned:
+        #     self.data = self._convert_to_binned()
             
         return True
         
@@ -289,27 +293,28 @@ class BackgroundFitter:
 
     def setup_resonant_backgrounds(self):
         """Setup resonant background models (J/psi, psi(2S), etc.) for a specific category"""
-        print(f"Setting up resonant background models for category: {self.category.display_name}...")
+        print(f"Setting up resonant background models for category {self.category.display_name}, region: {self.config.chosen_fit_region.name}...")
         
-        # Get category-specific resonant background templates from workspace
-        jpsi_template = self.workspace.obj(f"Zd_M3.1{self.category.label}")  # J/psi template
-        print("DEBUG: jpsi_template = ", jpsi_template, flush = True)
-        psi2s_template = self.workspace.obj(f"Zd_M3.7{self.category.label}")  # psi(2S) template
-        print("DEBUG: psi2s_template = ", psi2s_template, flush = True)
-        
-        if not jpsi_template or not psi2s_template:
-            print(f"Warning: Resonant background templates not found in workspace for category {self.category.display_name}")
-            print(f"  Looking for: Zd_M3.1{self.category.label}, Zd_M3.7{self.category.label}")
-            return
-        else:
-            jpsi_template.SetName("jpsi_model")
-            psi2s_template.SetName("psi2s_model")
-            
         if self.config.floating_resonant:
             print("DEBUG: creating floating resonant models", flush = True)
             # Create floating resonant background models
             self.resonant_backgrounds = self._create_floating_resonant_models()
         else:
+            # FIXME: make also this flexible
+            # Get category-specific resonant background templates from workspace
+            jpsi_template = self.workspace.obj(f"Zd_M3.1{self.category.label}")  # J/psi template
+            print("DEBUG: jpsi_template = ", jpsi_template, flush = True)
+            psi2s_template = self.workspace.obj(f"Zd_M3.7{self.category.label}")  # psi(2S) template
+            print("DEBUG: psi2s_template = ", psi2s_template, flush = True)
+            
+            if not jpsi_template or not psi2s_template:
+                print(f"Warning: Resonant background templates not found in workspace for category {self.category.display_name}")
+                print(f"  Looking for: Zd_M3.1{self.category.label}, Zd_M3.7{self.category.label}")
+                return
+            else:
+                jpsi_template.SetName("jpsi_model")
+                psi2s_template.SetName("psi2s_model")
+
             # Use fixed resonant background templates from workspace
             self.resonant_backgrounds["jpsi"] = jpsi_template
             self.resonant_backgrounds["psi2s"] = psi2s_template
@@ -324,9 +329,13 @@ class BackgroundFitter:
     def _create_floating_resonant_models(self) -> Dict[str, ROOT.RooAbsPdf]:
         """Create floating resonant background models with configurable parameters"""
         models = {}
-        
-        for model_name, model_config in self.config.resonant_models.items():
-            print(f"    Creating floating {model_name} resonant background for category {self.category.display_name}...", flush=True) #FIXME: remove flush
+
+        # retrieve list of resonant backgrounds 
+        resonant_bkg_list = self.config.chosen_fit_region.backgrounds
+
+        for model_name in resonant_bkg_list:
+            print(f"    Creating floating {model_name} resonant background for category {self.category.display_name}, region {self.config.chosen_fit_region}...", flush=True) #FIXME: remove flush
+            model_config = self.config.resonant_models.get(model_name)        
             
             # Create parameters and import them into workspace for ownership
             params = {}
@@ -356,11 +365,13 @@ class BackgroundFitter:
                 self.workspace.Import(param, ROOT.RooCmdArg())
                 # Get the parameter back from workspace to ensure proper ownership
                 params[param_name] = self.workspace.obj(var_name)
+
+                print(f"DEBUG: imported parameter {var_name} into workspace (is constant? {params[param_name].isConstant()})", flush = True)
                 
             # Create double-sided Crystal Ball (typical resonant background shape)
             full_model_name = f"{model_name}_resonant_bkg{self.category.label}"
             model = ROOT.RooCrystalBall(
-                full_model_name, full_model_name,
+                full_model_name, model_config["title"],
                 self.mass_var,
                 params["mean"], params["sigma"],
                 params["alphaL"], params["nL"],
@@ -374,6 +385,7 @@ class BackgroundFitter:
             # Get the model back from workspace to ensure proper ownership
             models[model_name] = self.workspace.obj(full_model_name)
             
+        print(f"DEBUG: Resonant models = {models}", flush = True)
         return models
         
     def setup_normalizations(self):
@@ -383,8 +395,16 @@ class BackgroundFitter:
         # Create normalization variables
         for comp_type, params in self.config.normalization_settings.items():
             for var_name, settings in params.items():
-                var = ROOT.RooRealVar(f"{var_name}{self.category.label}", var_name, 
-                                    settings["init"], settings["min"], settings["max"])
+                if "init_param" in settings.keys():
+                    # extract maximum value from self.data
+                    # first, extract bin width from mass var
+                    max_val = self.data.sumEntries()
+                    var = ROOT.RooRealVar(f"{var_name}{self.category.label}", var_name, 
+                                        max_val * settings["init_param"], max_val * settings["min_param"], max_val * settings["max_param"])
+                else:
+                    var = ROOT.RooRealVar(f"{var_name}{self.category.label}", var_name, 
+                                        settings["init"], settings["min"], settings["max"])
+                print(f"DEBUG: created normalization variable {var}", flush = True)
                 self.workspace.Import(var, ROOT.RooCmdArg())
                 
     def fit_background_to_sidebands(self, fit_region: FitRegion) -> Dict[str, FitResult]:
@@ -393,7 +413,7 @@ class BackgroundFitter:
         
         print("DEBUG: setting sidebands range", flush = True)
         sideband_range = self.setup_mass_ranges(fit_region)
-        print(f"DEBUG:  Sideband range: {sideband_range}", flush=True)        
+        print(f"DEBUG:  Sideband range: {sideband_range}", flush=True)
         results = {}
         
         background_funcs = self.config.background_functions if self.config.chosen_bkg_function < 0 else [self.config.get_chosen_background_function()]
@@ -412,7 +432,7 @@ class BackgroundFitter:
             
             # Perform fit
             print("DEBUG: fitting sidebands first", flush = True)
-            print("DEBUG: data = ", self.data, flush = True)
+            print(f"DEBUG: data = {self.data}; num entries = {self.data.sumEntries()}", flush = True)
             print("DEBUG: func = ", func, flush = True)
             print("DEBUG: range = ", sideband_range, flush = True)
 
@@ -436,6 +456,9 @@ class BackgroundFitter:
                 result.add_parameter(param_name, param)
                 
             results[func_name] = result
+            print(f"    DEBUG: post-sidebands fit parameters:", flush = True)
+            for pname, pval in result.parameters.items():
+                print(f"      {pname} = {pval:.4f} ± {result.parameter_errors[pname]:.4f}", flush = True)
             print(f"    Fit status: {result.fit_status}, free params: {n_free}", flush = True)
             
         return results
@@ -453,14 +476,20 @@ class BackgroundFitter:
         model_list = ROOT.RooArgList([model for model in self.resonant_backgrounds.values()] + [chosen_bkg])
         norm_list = ROOT.RooArgList([
             self.workspace.obj(f"{norm_name}{self.category.label}") for norm_name in self.config.normalization_settings["background_components"].keys()
+            if norm_name[1:] in self.resonant_backgrounds.keys() or norm_name == "ndy"
         ])
+        # # FIXME: doesn't work with fractions anymore 
+        # norm_list = ROOT.RooArgList([
+        #     self.workspace.obj(f"{norm_name}{self.category.label}") for norm_name in self.config.normalization_settings["fractions"].keys()
+        # ])
 
-        # for norm in norm_list:
-        #     print("DEBUG: norm ", norm.GetName(), " = ", norm.getValV(), flush = True)
-        # for model in model_list:
-        #     print("DEBUG: model", model, flush=True)
+        for norm in norm_list:
+            print("DEBUG: norm ", norm.GetName(), " = ", norm.getValV(), flush = True)
+        for model in model_list:
+            print("DEBUG: model", model, flush=True)
 
-        self.combined_model = ROOT.RooAddPdf("full_bkg_model", "full_bkg_model", model_list, norm_list)
+        self.combined_model = ROOT.RooAddPdf(f"full_bkg_model{self.category.label}", f"full_bkg_model{self.category.label}", model_list, norm_list)
+        # self.combined_model = ROOT.RooAddPdf(f"full_bkg_model{self.category.label}", f"full_bkg_model{self.category.label}", model_list, norm_list, True)
         
         print("  Combined background model created", flush = True)
         
@@ -482,6 +511,12 @@ class BackgroundFitter:
         for param in params:
             prefit_values[param.GetName()] = param.getValV()
             
+        print("DEBUG: fitting combined model", flush = True)
+        print(f"DEBUG: data entries = {self.data.sumEntries()}", flush = True)
+        print(f"DEBUG: normalizations:", flush = True)
+        for norm_name in self.config.normalization_settings['background_components'].keys():
+            print(f"  {norm_name}: {self.workspace.obj(f'{norm_name}{self.category.label}').getValV()}", flush = True)
+
         # Perform fit
         fit_result_obj = self.combined_model.fitTo(self.data,
                                                  ROOT.RooFit.Range(fit_region.name),
@@ -502,7 +537,10 @@ class BackgroundFitter:
             param_name = param.GetName()
             prefit_val = prefit_values.get(param_name)
             result.add_parameter(param_name, param, prefit_val)
-            
+        
+        print(f"  DEBUG: post-total fit parameters:", flush = True)
+        for pname, pval in result.parameters.items():
+            print(f"      {pname} = {pval:.4f} ± {result.parameter_errors[pname]:.4f}", flush = True)
         print(f"  Fit status: {result.fit_status}, free params: {n_free}")
         return result
         
@@ -525,37 +563,69 @@ class BackgroundFitter:
         """Fit floating resonant background models to prompt J/psi dataset"""
         print("Fitting floating resonant background models to prompt J/psi dataset...")
         
-        # Load prompt J/psi dataset
-        prompt_file = ROOT.TFile.Open("datasets/dataset_jpsi.root")
-        if not prompt_file or prompt_file.IsZombie():
-            raise FileNotFoundError("Cannot open prompt J/psi dataset file")
+        # # Load prompt J/psi dataset
+        # resonant_file = ROOT.TFile.Open("datasets/dataset_jpsi_test.root") #FIXME: must match output format in dataset_creator.py
+        # if not resonant_file or resonant_file.IsZombie():
+        #     raise FileNotFoundError("Cannot open prompt J/psi dataset file")
             
-        prompt_w = prompt_file.Get("w")
-        if not prompt_w:
-            raise ValueError("Workspace 'w' not found in prompt dataset file")
+        # resonant_w = resonant_file.Get("w")
+        # if not resonant_w:
+        #     raise ValueError("Workspace 'w' not found in prompt dataset file")
             
-        prompt_data = prompt_w.obj(f'data_obs{self.category.label}')
-        print(f"DEBUG: loading dataset 'data_obs{self.category.label}' from prompt workspace", flush=True)
+        # resonant_data = resonant_w.obj(f'data_obs{self.category.label}')
+        # print(f"DEBUG: loading dataset 'data_obs{self.category.label}' from prompt workspace", flush=True)
 
-        if not prompt_data:
-            raise ValueError(f"Data 'data_obs{self.category.label}' not found in prompt workspace")
+        # if not resonant_data:
+        #     raise ValueError(f"Data 'data_obs{self.category.label}' not found in prompt workspace")
+
+        resonant_data = self.workspace.data(f"data_obs{self.category.label}_resonant")
+        if not resonant_data:
+            print(f"DEBUG: ERROR LOADING PROMPT DATASET. Workspace content:", flush=True)
+            for obj in self.workspace.allData():
+                print(f"  {obj.GetName()}", flush=True)
+            raise ValueError(f"Prompt dataset 'data_obs{self.category.label}_resonant' not found in workspace")
             
-        print(f"  Loaded prompt dataset with {prompt_data.numEntries()} entries")
+        print(f"  Loaded prompt dataset with {resonant_data.numEntries()} entries")
         
-        # Get resonant background models
-        if "jpsi" not in self.resonant_backgrounds or "psi2s" not in self.resonant_backgrounds:
-            raise ValueError("Resonant background models not setup")
+        for resonant_bkg in self.config.chosen_fit_region.backgrounds:
+            if resonant_bkg not in self.resonant_backgrounds:
+                raise ValueError(f"Resonant background model '{resonant_bkg}' not setup")
+
+        # # Get resonant background models
+        # if "jpsi" not in self.resonant_backgrounds or "psi2s" not in self.resonant_backgrounds:
+        #     raise ValueError("Resonant background models not setup")
+
+        # jpsi_model = self.resonant_backgrounds["jpsi"]
+        # psi2s_model = self.resonant_backgrounds["psi2s"]
+        
+        # # Create fraction parameter for psi(2S) component
+        # fraction_psi2s = ROOT.RooRealVar("fraction_psi2s", "fraction_psi2s", 0.7, 0, 1)
+
+        # # Create combined model
+        # jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s", 
+        #                                 ROOT.RooArgList(jpsi_model, psi2s_model), 
+        #                                 ROOT.RooArgList(fraction_psi2s))
+
+        models = self.resonant_backgrounds.values()
+        fractions = []
+        for model_name, frac in zip(self.config.chosen_fit_region.backgrounds[:-1],
+                                    self.config.chosen_fit_region.background_fractions):
+            frac_var = ROOT.RooRealVar(f"fraction_{model_name}", f"fraction_{model_name}", frac, 0, 1)
+            fractions.append(frac_var)
+
+        print(f"DEBUG: creating addPdf with models:")
+        for model in models:
+            print(model, flush=True)
+        print(f"DEBUG: and fractions:")
+        for frac in fractions:
+            print(frac, flush=True)
             
-        jpsi_model = self.resonant_backgrounds["jpsi"]
-        psi2s_model = self.resonant_backgrounds["psi2s"]
-        
-        # Create fraction parameter for psi(2S) component
-        fraction_psi2s = ROOT.RooRealVar("fraction_psi2s", "fraction_psi2s", 0.3, 0, 1)
-        
-        # Create combined model
-        jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s", 
-                                        ROOT.RooArgList(jpsi_model, psi2s_model), 
-                                        ROOT.RooArgList(fraction_psi2s))
+        # FIXME: change model name to combined_resonant_bkg AND FIX THIS IN PLOTTER TOO
+        jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s",
+                                         ROOT.RooArgList(*models),
+                                         ROOT.RooArgList(*fractions))
+
+        print(f"DEBUG: combined resonant bkg model: {jpsi_plus_psi2s}", flush=True)
         
         # Import the combined model into workspace to maintain ownership
         self.workspace.Import(jpsi_plus_psi2s, ROOT.RooCmdArg())
@@ -564,27 +634,41 @@ class BackgroundFitter:
         
         # Store prefit parameter values
         prefit_values = {}
-        params = jpsi_plus_psi2s.getParameters(prompt_data)
+        params = jpsi_plus_psi2s.getParameters(resonant_data)
         for param in params:
+            print(f"DEBUG: resonant param before fit: {param.GetName()} = {param.getValV()} (is constant? {param.isConstant()})", flush=True)
             prefit_values[param.GetName()] = param.getValV()
+
+        print(f"DEBUG: fitting resonant model in range {self.config.chosen_fit_region.range[0]} - {self.config.chosen_fit_region.range[1]}", flush=True)
             
         # Perform fit
-        fit_result_obj = jpsi_plus_psi2s.fitTo(prompt_data, 
-                                             ROOT.RooFit.NumCPU(8), 
-                                             ROOT.RooFit.Range("unblinded"), 
-                                             ROOT.RooFit.Save(), 
-                                             ROOT.RooFit.SumW2Error(True))
+        fit_result_obj = jpsi_plus_psi2s.fitTo(resonant_data, 
+                                               ROOT.RooFit.NumCPU(8), 
+                                               ROOT.RooFit.Range(self.config.chosen_fit_region.name), 
+                                               ROOT.RooFit.Save())
+                                            #    ROOT.RooFit.SumW2Error(True))
+                                            #    ROOT.RooFit.RecoverFromUndefinedRegions(4),
         
+        print(f"DEBUG: resonant model fit completed", flush=True)
+        print(f"DEBUG: fit_result_obj = {fit_result_obj}", flush=True)
+
         # Store results
-        result = FitResult("jpsi_plus_psi2s_prompt", "unblinded")
-        result.fit_status = int(fit_result_obj.status())
+        print(f"DEBUG: storing fit results", flush=True)
+        result = FitResult("jpsi_plus_psi2s_prompt", self.config.chosen_fit_region.name)
+        if not fit_result_obj:
+            print("Warning: Fit result object is None")
+            result.fit_status = -1
+        else:
+            result.fit_status = int(fit_result_obj.status())
         
         # Get parameters
-        params = jpsi_plus_psi2s.getParameters(prompt_data)
+        print("DEBUG: getting fit parameters", flush=True)
+        params = jpsi_plus_psi2s.getParameters(resonant_data)
         n_free = params.selectByAttrib("Constant", False).getSize()
         result.n_free_params = n_free
         
         for param in params:
+            print("DEBUG: processing param", param.GetName(), flush=True)
             param_name = param.GetName()
             prefit_val = prefit_values.get(param_name)
             result.add_parameter(param_name, param, prefit_val)
@@ -594,17 +678,22 @@ class BackgroundFitter:
             self.log_print(f"param: {param.GetName()}, value: {param.getValV():.5f}, error: {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])")
             
         # Freeze resonant background parameters after fitting to prompt data
-        for param in jpsi_model.getParameters(prompt_data):
-            param.setConstant(True)
-        for param in psi2s_model.getParameters(prompt_data):
-            param.setConstant(True)
+        print(f"DEBUG: freezing resonant background parameters", flush=True)
+        for model in models:
+            for param in model.getParameters(resonant_data):
+                param.setConstant(True)
+
+        # for param in jpsi_model.getParameters(resonant_data):
+        #     param.setConstant(True)
+        # for param in psi2s_model.getParameters(resonant_data):
+        #     param.setConstant(True)
             
-        print(f"  Prompt fit status: {result.fit_status}, free params: {n_free}")
-        print("  Resonant background parameters frozen after prompt fit")
+        print(f"  Prompt fit status: {result.fit_status}, free params: {n_free}", flush = True)
+        print("  Resonant background parameters frozen after prompt fit", flush = True)
         
         # Store the combined model for potential plotting
-        self.prompt_combined_model = jpsi_plus_psi2s
-        self.prompt_data = prompt_data
+        self.resonant_combined_model = jpsi_plus_psi2s
+        self.resonant_data = resonant_data
         
         return result
 
@@ -631,30 +720,68 @@ class BackgroundFitter:
         return integrals
         
     def save_workspace(self):
-        """Save the workspace with fitted models"""
-        print("Saving workspace...")
+        """Save fitted models to the centralized output workspace"""
+        print(f"Adding fitted models to centralized workspace for category {self.category.name}...")
         
-        # Import fitted models to workspace
-        if "jpsi" in self.resonant_backgrounds:
-            self.workspace.Import(self.resonant_backgrounds["jpsi"], 
-                                ROOT.RooFit.RenameVariable(f"jpsi_resonant_bkg", f"jpsi_bkg{self.category.label}"))
-        if "psi2s" in self.resonant_backgrounds:
-            self.workspace.Import(self.resonant_backgrounds["psi2s"], 
-                                ROOT.RooFit.RenameVariable(f"psi2s_resonant_bkg", f"psi2s_bkg{self.category.label}"))
+        if not self.output_workspace:
+            print("⚠️  Warning: No centralized output workspace available, using local workspace")
+            # Fallback to old behavior
+            output_path = self.config.get_output_workspace_path()
+            self.workspace.writeToFile(str(output_path))
+            print(f"  Workspace saved to: {output_path}")
+            return
+        
+        # Import fitted models to centralized output workspace with category-specific names
+        category_label = self.category.label
+        
+        for model_name, model in self.resonant_backgrounds.items():
+            print(f"DEBUG: resonant background model {model_name}: {model}", flush=True)
+            self.output_workspace.Import(model, ROOT.RooFit.RenameVariable(model.GetName(), f"{model_name}{category_label}"))
+            print(f"  ✅ Added {model_name} model: {model_name}{category_label}")
+
+        # # Import resonant background models
+        # if "jpsi" in self.resonant_backgrounds:
+        #     model_name = f"jpsi{category_label}"
+        #     # self.resonant_backgrounds["jpsi"].SetName(model_name)
+        #     self.output_workspace.Import(self.resonant_backgrounds["jpsi"],
+        #                                  ROOT.RooFit.RenameVariable(self.resonant_backgrounds["jpsi"].GetName(), model_name))
+        #     print(f"  ✅ Added J/psi model: {model_name}")
+            
+        # if "psi2s" in self.resonant_backgrounds:
+        #     model_name = f"psi2s{category_label}"
+        #     # self.resonant_backgrounds["psi2s"].SetName(model_name)
+        #     self.output_workspace.Import(self.resonant_backgrounds["psi2s"], 
+        #                                  ROOT.RooFit.RenameVariable(self.resonant_backgrounds["psi2s"].GetName(), model_name))
+        #     print(f"  ✅ Added ψ(2S) model: {model_name}")
                                 
+        # Import non-resonant background function
         chosen_bkg = self.get_chosen_background_function()
         if chosen_bkg:
-            self.workspace.Import(chosen_bkg, 
-                                ROOT.RooFit.RenameVariable("bkg_function", "dy"))
+            print(f"DEBUG: IMPORTING CHOSEN BACKGROUND FUNCTION: {chosen_bkg.GetName()}", flush=True)
+            model_name = f"dy{category_label}"
+            self.output_workspace.Import(chosen_bkg, ROOT.RooFit.RenameVariable(chosen_bkg.GetName(), model_name))
+            print(f"  ✅ Added non-resonant background: {model_name}")
                                 
+        # Import combined model
         if self.combined_model:
-            self.workspace.Import(self.combined_model, 
-                                ROOT.RooFit.RenameVariable(f"full_bkg_model", f"complete_background_model{self.category.label}"))
+            model_name = f"full_bkg_model{category_label}"
+            self.output_workspace.Import(self.combined_model, ROOT.RooCmdArg()) #True)#ROOT.RooFit.RenameVariable(self.combined_model.GetName(), model_name))
+            print(f"  ✅ Added combined model: {model_name}")
+            
+        # Import category-specific dataset if available
+        if self.data:
+            self.output_workspace.Import(self.data)
+            print(f"  ✅ Added dataset: {self.data.GetName()}")
+
+        # print parameter values for each model:
+        for model in self.output_workspace.allPdfs():
+            print(f"  Model: {model.GetName()}")
+            params = model.getParameters(self.data)
+            print(f"DEBUG: Parameters for model {model.GetName()}, category {category_label}:")
+            for param in params:
+                print(f"    {param.GetName()}: {param.getValV():.5f} ± {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])", flush = True)
         
-        # Save to file
-        output_path = self.config.get_output_workspace_path()
-        self.workspace.writeToFile(str(output_path))
-        print(f"  Workspace saved to: {output_path}")
+        print(f"✅ Category {self.category.name} models added to centralized workspace")
         
     def open_log_file(self, fit_region: str, tag: str = "", category: str = ""):
         """Open log file for writing results"""

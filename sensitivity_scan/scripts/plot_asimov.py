@@ -3,11 +3,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/combine/CMSSW_14_1_0_pre4/src/my_analysis/cards/ee/3.1")
+# infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/combine/CMSSW_14_1_0_pre4/src/my_analysis/cards/ee/3.1")
+# infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_x100sgn/ee/2.5")
+infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_x2wgt/ee/3.5")
+# infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_div100wgt/ee/2.4")
+
 
 # asimov_file = infolder / "higgsCombine_etaHigh.AsymptoticLimits.mH120.123456.root" # should be exactly the one used by asymptotic limit
-asimov_file = infolder / "higgsCombine_etaHigh_bonly_asimov.GenerateOnly.mH120.123456.root" # GENERATED, uses results of b-only MultiDimFit
-dataset_file = infolder / "Xee_ee_0_2023.root"
+# asimov_file = infolder / "higgsCombine_etaHigh_bonly_asimov.GenerateOnly.mH120.123456.root" # GENERATED, uses results of b-only MultiDimFit
+# asimov_file = infolder / "higgsCombine_test.AsymptoticLimits.mH120.123456.root" # GENERATED, uses results of b-only MultiDimFit
+asimov_file = infolder / "higgsCombine_inclusive_Bonly_asimov.GenerateOnly.mH120.123456.root" # GENERATED, uses results of b-only MultiDimFit
+dataset_file = infolder / "Xee_ee_4_2023.root"
 # dataset_file = infolder / "../common/Xee_ee.input.root" #same as above
 
 asimov_dataset = ROOT.TFile.Open(str(asimov_file)).Get("toys/toy_asimov")
@@ -47,16 +53,20 @@ dataset_sum = 1
 asimov_dataset.plotOn(frame, ROOT.RooFit.Name("asimov"), 
                              ROOT.RooFit.LineColor(ROOT.kRed), 
                              ROOT.RooFit.MarkerColor(ROOT.kRed),
-                             ROOT.RooFit.DataError(ROOT.RooAbsData.Poisson),
+                             ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2),
                              ROOT.RooFit.Rescale(1.0 / asimov_dataset_sum))
 dataset.plotOn(frame, ROOT.RooFit.Name("data"),
                       ROOT.RooFit.LineColor(ROOT.kBlue), 
                       ROOT.RooFit.MarkerColor(ROOT.kBlue),
-                      ROOT.RooFit.Rescale(1.0 / dataset_sum))
+                      ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2),
+                      ROOT.RooFit.Rescale(1.0 / dataset_sum),)
 
 # create canvas and plot
 canvas = ROOT.TCanvas("canvas", "Asimov Dataset Comparison", 800, 600)
 frame.Draw()
+
+# change minimum
+frame.SetMinimum(1e-4)
 
 # draw legend
 legend = ROOT.TLegend(0.6, 0.7, 0.9, 0.9)

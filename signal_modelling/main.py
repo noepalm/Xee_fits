@@ -113,7 +113,6 @@ common_ranges = {
     # "response_nR_range" : [8, 0, 10],
     # "response_nsgn_range" : [100, 0, 1000],
 
-
     # signal model parameters
     # dCB (non-parametrized, all free)
     "mean_range" : [0, -0.6, 0.6],
@@ -144,6 +143,42 @@ vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
 # parametrized_vars = ["sigma", "alphaL", "nL"]
 parametrized_vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
 # parametrized_vars = []
+
+# ------ CATEGORIES ------ #
+
+# TODO: implement more complex selections for event, electron, ...?
+categories = {
+    "inclusive" : {
+        "name" : "",
+        "cuts" : {}
+    },
+    "dR<0.3" : {
+        "name" : "dRm0p3",
+        "cuts" : {
+            "SelectedDiEle_lep_deltaR" : [[-1, 0.3]],
+        }
+    },
+    "dR>0.3" : {
+        "name" : "dRp0p3",
+        "cuts" : {
+            "SelectedDiEle_lep_deltaR" : [[0.3, 1000]],
+        }
+    },
+    "|eta|<0.6" : {
+        "name" : "etam0p6",
+        "cuts" : {
+            "DiElectron_eta" : [[-0.6, 0.6]],
+        }
+    },
+    "|eta|>0.6" : {
+        "name" : "etap0p6",
+        "cuts" : {
+            "DiElectron_eta" : [[-1000, -0.6], [0.6, 1000]],
+        }
+    }
+}
+
+# ------ RUNNING ------ #
 
 if __name__ == "__main__":
     ### INPUT ARGUMENTS ###
@@ -201,21 +236,21 @@ if __name__ == "__main__":
 
     if args.response or (args.full and not args.no_response):
         print("Making response function workspace")
-        make_response_function_workspace(samples, wsfile, use_reco_mass = args.use_reco_mass)
+        make_response_function_workspace(samples, categories, wsfile, use_reco_mass = args.use_reco_mass)
 
         print("Fitting parameters")
-        fit_parameters(samples, wsfile, vars, parametrized_vars)
+        fit_parameters(samples, categories, wsfile, vars, parametrized_vars)
 
     if args.gen or (args.full and not args.no_gen):
         print("Testing GEN distribution of signal")
-        test_BW_GEN(samples, wsfile, parametrized_vars, fit = False)
+        test_BW_GEN(samples, categories, wsfile, parame"""  """trized_vars, fit = False)
 
         print("Fitting GEN distribution of signal")
-        test_BW_GEN(samples, wsfile, parametrized_vars, fit = True)
+        test_BW_GEN(samples, categories, wsfile, parametrized_vars, fit = True)
 
     if (args.gen and args.response) or (args.full and not (args.no_gen or args.no_response)):
         print("Fitting GEN model parameters")
-        fit_parameters(samples, wsfile, ["mean_BW", "width_BW"], ["mean_BW", "width_BW"], gen = True)
+        fit_parameters(samples, categories, wsfile, ["mean_BW", "width_BW"], ["mean_BW", "width_BW"], gen = True)
 
     if args.signal_model or (args.full and not args.no_signal_model):
         # ## DEBUGGING ONLY: fit signal model parameters to check best agreement
@@ -223,28 +258,28 @@ if __name__ == "__main__":
         # make_signal_model(samples, wsfile, parametrized_vars, fit = True)
 
         print("Testing full signal model (parametric)")
-        make_signal_model(samples, wsfile, parametrized_vars, isParametrized = True, use_reco_mass = args.use_reco_mass) # no fit, just saving and displaying
+        make_signal_model(samples, categories, wsfile, parametrized_vars, isParametrized = True, use_reco_mass = args.use_reco_mass) # no fit, just saving and displaying
 
     if args.compare_response or (args.full and not args.no_compare_response):
         print("Comparing response function workspace for M = 3.1 GeV (Zd vs Jpsi)")
-        compare_zd_jpsi_shape(samples, wsfile, plot_fit = True, use_reco_mass = args.use_reco_mass)
+        compare_zd_jpsi_shape(samples, categories, wsfile, plot_fit = True, use_reco_mass = args.use_reco_mass)
 
     if args.test_signal_model or (args.full and not args.no_test_signal_model):
         print("Testing signal model workspace for several mass points")
         for mass in np.concatenate([np.arange(0.5, 10.5, 0.1), [3.1, 3.7]]):
-            build_signal_model_for_mass(samples, wsfile, parametrized_vars, mass, use_reco_mass = args.use_reco_mass)
+            build_signal_model_for_mass(samples, categories, wsfile, parametrized_vars, mass, use_reco_mass = args.use_reco_mass)
 
     if args.plots or (args.full and not args.no_plots):
         print("Plotting")
         if not (args.gen or args.test_signal_model):
-            plot_response_fit(samples, wsfile, use_reco_mass = args.use_reco_mass)
-            plot_parametrization(samples, wsfile, vars, parametrized_vars, plot_post_param = False)
-            plot_sample_fit(samples, wsfile, plot_pre_param = False)
+            plot_response_fit(samples, categories, wsfile, use_reco_mass = args.use_reco_mass)
+            plot_parametrization(samples, categories, wsfile, vars, parametrized_vars, plot_post_param = False)
+            plot_sample_fit(samples, categories, wsfile, plot_pre_param = False)
         if not args.no_test_signal_model and not args.gen:
-            plot_model_only(samples, wsfile, parametrized_vars)
+            plot_model_only(samples, categories, wsfile, parametrized_vars)
         if not args.no_gen and not args.test_signal_model:
-            plot_parametrization(samples, wsfile, ["mean_BW", "width_BW"], ["mean_BW", "width_BW"], gen = True, plot_post_param = False)
-            plot_sample_fit(samples, wsfile, plot_pre_param = True, gen = True, plot_post_param = True)
+            plot_parametrization(samples, categories, wsfile, ["mean_BW", "width_BW"], ["mean_BW", "width_BW"], gen = True, plot_post_param = False)
+            plot_sample_fit(samples, categories, wsfile, plot_pre_param = True, gen = True, plot_post_param = True)
     
     if args.copy_eos:
         print("Copying plots to EOS")

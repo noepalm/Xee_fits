@@ -3,26 +3,38 @@ import os
 import numpy as np
 from scipy.optimize import curve_fit
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import argparse
 
 # Import the utilities
 import sys
 sys.path.append('utilities')
-from utilities.get_signal_effs_xsecs import effs, effs_err, xsecs, xsecs_err
+# from utilities.get_signal_effs_xsecs import effs, effs_err, xsecs, xsecs_err
+from utilities.get_signal_effs_xsecs import fit_effs, fit_xsecs
 
 # Import shared configuration
 from shared_config import CategoryConfig, get_default_categories
+from background_config import FitRegion
 
 
 class DatasetCreator:
     """This module handles the creation of RooDatasets from root files,
     importing resonant background templates, and interpolating cross-sections and efficiencies."""
 
-    def __init__(self, use_jpsi: bool = False, use_reduced_mass: bool = False, 
-                 categories: Dict[str, CategoryConfig] = None):
+    def __init__(self, use_jpsi: bool = False, use_reduced_mass: bool = False,
+                 categories: Dict[str, CategoryConfig] = None,
+                 fit_region: FitRegion = None,
+                 output_workspace: "ROOT.RooWorkspace" = None, use_reweighting: bool = True,
+                 use_binned: bool = False, weight_multiplier: float = 1.0,
+                 tag: str = ""):
+
         self.use_jpsi = use_jpsi
         self.use_reduced_mass = use_reduced_mass
+        self.use_reweighting = use_reweighting
+        self.use_binned = use_binned
+        self.fit_region = fit_region
+        print(f"DEBUG REMOVEME: fit_region = {fit_region}")
+        self.tag = tag
         
         # Category definitions (use shared configuration)
         if categories is None:
@@ -37,11 +49,29 @@ class DatasetCreator:
         for name, cat_config in self.categories.items():
             print(f"  {name}: {cat_config.cuts}")
         
+        # Use shared workspace or create new one
+        if output_workspace is not None:
+            self.workspace = output_workspace
+            self._using_shared_workspace = True
+            print("Using shared output workspace from main analysis")
+        else:
+            # Create single workspace (like signal modeling) - fallback for standalone usage
+            self.workspace = ROOT.RooWorkspace('w')
+            self._using_shared_workspace = False
+            print("Creating new workspace for standalone usage")
+
         # Set file paths based on sample type
         if use_jpsi:
-            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Jpsi_reweight/zsnap/era2023/base_8_TriggerPSReweight/'
+            self.filepath = fit_region.background_resonant_data
         else:
-            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/'
+            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/'
+
+        if use_reweighting:
+            self.filepath += 'base_8_TriggerPSReweight/'
+        else:
+            self.filepath += 'base_7_ID/'
+
+        self.weight_multiplier = weight_multiplier
             
         # Output settings
         self.output_dir = Path("datasets")
@@ -49,10 +79,11 @@ class DatasetCreator:
         
         # Resonant background workspace settings
         suffix = "" if not use_reduced_mass else "_reducedMass"
-        self.signal_ws_file = f'../../signal_modelling/oo_refactoring/workspaces/signal_model_withReweight_Categories{suffix}.root'
-        
-        # Create single workspace (like signal modeling)
-        self.workspace = ROOT.RooWorkspace('w')
+        # TODO FIXME: all file names are hardcoded. Write them in common config file.
+        if self.use_reweighting:
+            self.signal_ws_file = f'../../signal_modelling/oo_refactoring/workspaces/signal_model_withReweight_Categories{suffix}.root'
+        else:
+            self.signal_ws_file = f'../../signal_modelling/oo_refactoring/workspaces/signal_model_no_reweight{suffix}.root'
         
         # Luminosity and cross-section data
         self.luminosity = 7.98 * 1e3  # pb-1
@@ -61,14 +92,28 @@ class DatasetCreator:
         print(f"Dataset creator initialized:")
         print(f"  Sample type: {'J/psi' if use_jpsi else 'MinBias'}")
         print(f"  Mass type: {'Reduced' if use_reduced_mass else 'Fitted'}")
+        print(f"  Use reweighting: {use_reweighting}")
+        print(f"  Use binned: {use_binned}")
+        print(f"  Tag: {tag if tag else '(none)'}")
         print(f"  Input path: {self.filepath}")
         print(f"  Signal workspace: {self.signal_ws_file}")
+        
+    def set_reweighting(self, use_reweighting: bool):
+        """Update the reweighting flag"""
+        self.use_reweighting = use_reweighting
+        print(f"Updated reweighting setting: {use_reweighting}")
         
     def setup_mass_variable(self) -> ROOT.RooRealVar:
         """Setup the shared mass variable from signal workspace"""
         print("Setting up shared mass variable...")
         
-        # Open signal workspace
+        # Check if mass variable already exists in workspace (from main analysis)
+        existing_mass_var = self.workspace.var("mass")
+        if existing_mass_var:
+            print("  Using existing mass variable from shared workspace")
+            return existing_mass_var
+        
+        # Open signal workspace to get mass variable definition
         if not os.path.exists(self.signal_ws_file):
             raise FileNotFoundError(f"Signal workspace not found: {self.signal_ws_file}")
             
@@ -78,19 +123,22 @@ class DatasetCreator:
         if not signal_ws:
             raise ValueError(f"Workspace 'w' not found in {self.signal_ws_file}")
         
-        # Get mass variable
-        mass_var = signal_ws.obj("mass_test")
-        if not mass_var:
+        # Get mass variable and setup for background analysis (following create_dataset.py pattern)
+        m = signal_ws.var("mass_test")
+        if not m:
+            signal_file.Close()
             raise ValueError("Variable 'mass_test' not found in resonant background workspace")
             
-        # Clone and setup shared mass variable
-        shared_mass_var = mass_var.Clone("mass")
-        shared_mass_var.SetName("mass")
-        shared_mass_var.setMin(2.0)
-        shared_mass_var.setMax(4.2)
+        # Set up mass variable like in create_dataset.py
+        m.SetName("mass")
+        if self.fit_region:
+            m.setMin(self.fit_region.range[0])
+            m.setMax(self.fit_region.range[1])
+        else:
+            print(f"  No fit region specified, using full range from signal workspace")
         
         # Import to workspace (single shared variable)
-        self.workspace.Import(shared_mass_var, ROOT.RooCmdArg())
+        self.workspace.Import(m, ROOT.RooCmdArg())
         mass_var_final = self.workspace.var("mass")
         
         signal_file.Close()
@@ -110,28 +158,33 @@ class DatasetCreator:
                     return False
         return True
         
-    def create_dataset_from_files(self, mass_var: ROOT.RooRealVar) -> Dict[str, ROOT.RooDataSet]:
+    def create_dataset_from_files(self, mass_var: ROOT.RooRealVar) -> Dict[str, Any]:
         """Create RooDataSet from root files for each category using shared mass variable"""
         print("Creating datasets from files for all categories...")
         
+        mass_var.setBins(100)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
+
         # Create datasets for each category (using signal modeling naming convention)
         datasets = {}
         for category_name, category_config in self.categories.items():
             # Dataset name with category label (like signal modeling)
-            dataset_name = f'data_obs{category_config.label}'
+            dataset_name = f'data_obs{category_config.label}{"_resonant" if self.use_jpsi else ""}'
             
             # Setup dataset arguments using shared mass variable
             dataset_args = [ROOT.RooArgSet(mass_var)]
             
-            # Add weight variable if not using jpsi
-            if not self.use_jpsi or True: #FIXME: write better if reweight works for jpsi
+            # Add weight variable if dataset not binned
+            if not self.use_binned:
                 weight_var_name = f"weight{category_config.label}"
                 weight_var = ROOT.RooRealVar(weight_var_name, weight_var_name, 1)
                 self.workspace.Import(weight_var, ROOT.RooCmdArg())
                 dataset_args.append(ROOT.RooFit.WeightVar(weight_var))
                 
             # Create dataset
-            datasets[category_name] = ROOT.RooDataSet(dataset_name, dataset_name, *dataset_args)
+            if self.use_binned:
+                datasets[category_name] = ROOT.RooDataHist(dataset_name, dataset_name, *dataset_args)
+            else:
+                datasets[category_name] = ROOT.RooDataSet(dataset_name, dataset_name, *dataset_args)
         
         # Process files
         n_files = 0
@@ -165,7 +218,7 @@ class DatasetCreator:
                     tree.GetEntry(i)
 
                     # Calculate weight
-                    weight = tree.weight * self.lumi_rescale
+                    weight = tree.weight * self.lumi_rescale * self.weight_multiplier #NOTE: weight includes lumi [7.98/fb] * xsec * filter eff. for minbias; depending on file, trigger PS is also there.
                     
                     # Get category variables for this event
                     cat_vars = {}
@@ -187,10 +240,10 @@ class DatasetCreator:
                         # Add to appropriate datasets using shared mass variable
                         for category_name in event_categories:
                             mass_var.setVal(mass_val)
-                            if not self.use_jpsi or True: #FIXME: write better if reweight works for jpsi
-                                datasets[category_name].add(ROOT.RooArgSet(mass_var), weight)
-                            else:
-                                datasets[category_name].add(ROOT.RooArgSet(mass_var))
+                            if self.fit_region:
+                                if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
+                                    continue
+                            datasets[category_name].add(ROOT.RooArgSet(mass_var), weight)
                             file_events[category_name] += 1
                         
                 for cat in self.category_names:
@@ -252,39 +305,45 @@ class DatasetCreator:
     def interpolate_efficiencies_xsecs(self, imported_models: Dict[str, List[str]], datasets: Dict[str, ROOT.RooDataSet]):
         """Interpolate and store efficiencies and cross-sections for each category"""
         print("Interpolating efficiencies and cross-sections for all categories...")
+
+        print(f"DEBUG: interpolating xsec, effs for fit region {self.fit_region} (name: {self.fit_region.name if self.fit_region else 'none'})")
         
-        # Mass points for interpolation
-        mass_points = np.array([1, 3.1, 5, 5.5, 6, 6.5])
+        eff_fit_func, eff_fit_params = fit_effs(use_old=False, 
+                                                use_crystalball = (self.fit_region.name == "region2")).values()
+        xsec_fit_func, xsec_fit_params = fit_xsecs(use_old=False).values()
+
+        # # Mass points for interpolation
+        # mass_points = np.array([1, 3.1, 5, 5.5, 6, 6.5])
         
-        # Fit efficiency with polynomial
-        try:
-            popt_eff, _ = curve_fit(
-                lambda x, a, b, c, d: np.polyval((a, b, c, d), x), 
-                mass_points, effs, 
-                sigma=effs_err, 
-                absolute_sigma=True
-            )
-            print(f"  Efficiency fit coefficients: {popt_eff}")
+        # # Fit efficiency with polynomial
+        # try:
+        #     popt_eff, _ = curve_fit(
+        #         lambda x, a, b, c, d: np.polyval((a, b, c, d), x), 
+        #         mass_points, effs, 
+        #         sigma=effs_err, 
+        #         absolute_sigma=True
+        #     )
+        #     print(f"  Efficiency fit coefficients: {popt_eff}")
             
-        except Exception as e:
-            print(f"  Warning: Efficiency fit failed: {e}")
-            # Use simple interpolation as fallback
-            popt_eff = np.polyfit(mass_points, effs, 3)
+        # except Exception as e:
+        #     print(f"  Warning: Efficiency fit failed: {e}")
+        #     # Use simple interpolation as fallback
+        #     popt_eff = np.polyfit(mass_points, effs, 3)
             
-        # Fit cross-section with polynomial
-        try:
-            popt_xsec, _ = curve_fit(
-                lambda x, a, b, c, d, e: np.polyval((a, b, c, d, e), x), 
-                mass_points, xsecs, 
-                sigma=xsecs_err, 
-                absolute_sigma=True
-            )
-            print(f"  Cross-section fit coefficients: {popt_xsec}")
+        # # Fit cross-section with polynomial
+        # try:
+        #     popt_xsec, _ = curve_fit(
+        #         lambda x, a, b, c, d, e: np.polyval((a, b, c, d, e), x), 
+        #         mass_points, xsecs, 
+        #         sigma=xsecs_err, 
+        #         absolute_sigma=True
+        #     )
+        #     print(f"  Cross-section fit coefficients: {popt_xsec}")
             
-        except Exception as e:
-            print(f"  Warning: Cross-section fit failed: {e}")
-            # Use simple interpolation as fallback
-            popt_xsec = np.polyfit(mass_points, xsecs, 4)
+        # except Exception as e:
+        #     print(f"  Warning: Cross-section fit failed: {e}")
+        #     # Use simple interpolation as fallback
+        #     popt_xsec = np.polyfit(mass_points, xsecs, 4)
             
         # Calculate category fractions from inclusive dataset
         inclusive_events = datasets["inclusive"].sumEntries() if "inclusive" in datasets else 1.0
@@ -308,8 +367,14 @@ class DatasetCreator:
                 mass_val = float(mass_str)
                 
                 # Calculate expected signal events
-                efficiency = np.polyval(popt_eff, mass_val)
-                cross_section = np.polyval(popt_xsec, mass_val)
+                efficiency = eff_fit_func(mass_val, *eff_fit_params)
+                cross_section = xsec_fit_func(mass_val, *xsec_fit_params)
+
+                print(f"DEBUG: efficiency for M={mass_val} GeV: {efficiency}, cross-section: {cross_section} pb", flush=True)
+
+                # efficiency = np.polyval(popt_eff, mass_val)
+                # cross_section = np.polyval(popt_xsec, mass_val)
+
                 n_expected_total = self.luminosity * efficiency * cross_section
                 n_expected = n_expected_total * category_fractions[category_name]
                 
@@ -340,6 +405,7 @@ class DatasetCreator:
         n_jpsi_exp_total = self.luminosity  # pb-1
         n_jpsi_exp_total *= 5.352e5  # xsec * filter eff (/pb)
         n_jpsi_exp_total *= 5.971/100  # branching ratio Jpsi -> ee
+        # TODO FIXME: retrieve efficiency dynamically from csv in input fw output folder
         n_jpsi_exp_total *= 0.677/100  # analyzer selection efficiency
         
         # Calculate category fractions
@@ -375,7 +441,7 @@ class DatasetCreator:
             
             print(f"  {category_name}: {n_data:.1f} events")
         
-    def create_full_dataset(self) -> Dict[str, str]:
+    def create_full_dataset(self) -> str:
         """Main method to create the complete dataset for all categories"""
         print("="*60)
         print("CREATING DATASETS FOR ALL CATEGORIES")
@@ -392,7 +458,9 @@ class DatasetCreator:
         # Apply mass cuts and import datasets to single workspace
         for category_name, category_config in self.categories.items():
             # Apply mass cuts
-            datasets[category_name] = datasets[category_name].reduce(ROOT.RooFit.Cut("mass > 2 && mass < 4.2"))
+            if self.fit_region:
+                print(f"  Applying mass cut for {category_name}: {self.fit_region.range[0]} < mass < {self.fit_region.range[1]}", flush=True)
+                datasets[category_name] = datasets[category_name].reduce(ROOT.RooFit.Cut(f"mass > {self.fit_region.range[0]} && mass < {self.fit_region.range[1]}"))
             
             # Import dataset to single workspace (datasets already have correct names with category labels)
             self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
@@ -410,16 +478,27 @@ class DatasetCreator:
         # Add data normalization
         self.add_data_normalization(datasets)
         
-        # Save single workspace
-        sample_suffix = "_jpsi" if self.use_jpsi else "_minbias"
-        mass_suffix = "_reducedMass" if self.use_reduced_mass else ""
-        
-        output_file = self.output_dir / f"dataset{sample_suffix}{mass_suffix}.root"
-        self.workspace.writeToFile(str(output_file))
+        # Save workspace
+        output_file = None
+        if not hasattr(self, '_using_shared_workspace') or not self._using_shared_workspace or self.use_jpsi:
+            sample_suffix = "_jpsi" if self.use_jpsi else "_minbias"
+            mass_suffix = "_reducedMass" if self.use_reduced_mass else ""
+            binning_suffix = "_binned" if self.use_binned else ""            
+            reweight_suffix = "_reweight" if self.use_reweighting else "_noReweight"
+            tag_suffix = f"_{self.tag}" if self.tag else ""
+            
+            output_file = self.output_dir / f"dataset{sample_suffix}{mass_suffix}{binning_suffix}{reweight_suffix}{tag_suffix}.root"
+            self.workspace.writeToFile(str(output_file))
+            print(f"Dataset workspace saved to: {output_file}")
+        else:
+            print("Dataset added to shared workspace (no separate file created)")
         
         print("="*60)
         print(f"DATASET CREATION COMPLETE")
-        print(f"Output file: {output_file}")
+        if output_file:
+            print(f"Output file: {output_file}")
+        else:
+            print("Objects added to shared workspace")
         for category_name in self.category_names:
             n_entries = datasets[category_name].numEntries()
             n_models = len(imported_models.get(category_name, []))
@@ -427,7 +506,7 @@ class DatasetCreator:
             print(f"  {category_name}: {n_entries} entries, {n_models} models {mass_range} GeV")
         print("="*60)
         
-        return str(output_file)
+        return str(output_file) if output_file else "shared_workspace"
 
 
 def main():
@@ -437,6 +516,12 @@ def main():
                        help='Use J/psi sample instead of MinBias sample')
     parser.add_argument('--use_reduced_mass', action='store_true', default=False,
                        help='Use reduced mass instead of fitted mass')
+    parser.add_argument('--binned', action='store_true', default=False,
+                       help='Use binned data (RooDataHist) instead of unbinned (RooDataSet)')
+    parser.add_argument('--no_reweighting', action='store_true', default=False,
+                       help='Disable reweighting (set weights to luminosity rescale only)')
+    parser.add_argument('--tag', type=str, default="",
+                       help='Tag to append to output files')
     parser.add_argument('--categories', nargs='+', default=None,
                        help='Categories to create (specify as key=value pairs, e.g. central="pt_1>20&&pt_2>20")')
     
@@ -450,10 +535,14 @@ def main():
     
     try:
         # Create dataset creator
+        use_reweighting = not args.no_reweighting
         creator = DatasetCreator(
             use_jpsi=args.use_jpsi,
             use_reduced_mass=args.use_reduced_mass,
-            categories=categories
+            categories=categories,
+            use_reweighting=use_reweighting,
+            use_binned=args.binned,
+            tag=args.tag
         )
         
         # Create datasets

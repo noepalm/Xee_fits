@@ -71,7 +71,7 @@ if args.binned:
     for i in range(data.numEntries()):
         m.setVal(data.get(i).getRealValue("mass"))
         weight = data.weight()
-        data_binned.add(ROOT.RooArgSet(m))#, weight)
+        data_binned.add(ROOT.RooArgSet(m), weight)
     data = data_binned
     w.Import(data, True)
 
@@ -86,6 +86,8 @@ log_file = open(os.path.join(outfolder, f"post_fit_params{side_suffix}{tag}{binn
 bernstein_degree = 5 #4
 # bernstein_inits = [0.5, 0.5, -0.5, 0.5, 0.5 ]
 bernstein_inits = [0.36903, 0.11880, -0.46547, 0.56438, -0.58503]
+# bernstein_inits = [0.98203,1.37481,-0.12785,0.18853,0.06589]
+
 for i in range(bernstein_degree):
     w.factory(f"a{i}[{bernstein_inits[i]}, -5, 5]")    # Bernstein coefficients # GOOD FOR DESCENDING
     # w.factory(f"a{i}[-0.5, -1, 1]")    # Bernstein coefficients # GOOD FOR DESCENDING
@@ -262,7 +264,7 @@ if args.fit_jpsi_prompt:
     # fit jpsi and psi2s model to prompt data
     fraction_psi2s = ROOT.RooRealVar("fraction_psi2s", "fraction_psi2s", 0.3, 0, 1)
     jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s", ROOT.RooArgList(jpsi_model, psi2s_model), ROOT.RooArgList(fraction_psi2s))
-    jpsi_plus_psi2s.fitTo(prompt_data, ROOT.RooFit.NumCPU(8), ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save(), ROOT.RooFit.SumW2Error(True))
+    jpsi_plus_psi2s.fitTo(prompt_data, ROOT.RooFit.NumCPU(8), ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save(), ROOT.RooFit.SumW2Error(True)) #FIXME: trying False SumW2
 
     logprint("Fitted jpsi and psi2s models to prompt data", log_file)
     # print fitted parameters
@@ -281,6 +283,7 @@ if args.fit_jpsi_prompt:
     prompt_data.plotOn(frame_prompt,
                 ROOT.RooFit.Name("prompt_data"),
                 ROOT.RooFit.Binning(100),
+                ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2) #Poisson
                 # ROOT.RooFit.NormRange("unblinded"),
     )
 
@@ -331,9 +334,12 @@ if args.fit_jpsi_prompt:
 # create S+B model summing both signals
 # sb_model = ROOT.RooAddPdf("sb_model", "sb_model", ROOT.RooArgList(jpsi_model, psi2s_model, bkg_f0), ROOT.RooArgList(ROOT.RooRealVar("nsig1", "nsig1", 1, 0, 10000), ROOT.RooRealVar("nsig2", "nsig2", 1, 0, 10000), ROOT.RooRealVar("nbkg", "bkg", 1, 0, 10000)), False)
 normalizations = ["nsig1", "nsig2", "nbkg"]
-initializations = [2e2, 2e2, 1e4]
+# initializations = [2e2, 2e2, 1e4]
+# mins = [2e2, 1e1, 3e2]
+# maxes = [1e6, 1e5, 1e6]
+initializations = [2e4, 2e4, 1e6]
 mins = [2e2, 1e1, 3e2]
-maxes = [1e6, 1e5, 1e6]
+maxes = [1e8, 1e7, 1e8]
 for var, init, min_, max_ in zip(normalizations, initializations, mins, maxes):
     w.factory(f"{var}[{init}, {min_}, {max_}]")
 
@@ -398,7 +404,7 @@ if args.freeze_bkg_sidebands:
     # w.obj("nbkg").setConstant(True)
 
 if fit_range == "unblinded":
-    sb_fitres = sb_model.fitTo(data, ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save(), ROOT.RooFit.NumCPU(8), ROOT.RooFit.SumW2Error(True))
+    sb_fitres = sb_model.fitTo(data, ROOT.RooFit.Range("unblinded"), ROOT.RooFit.Save(), ROOT.RooFit.NumCPU(8), ROOT.RooFit.SumW2Error(True))  #FIXME: trying False SumW2
 
 # Import SB model to workspace as full_bkg_model
 w.Import(jpsi_model, ROOT.RooFit.RenameVariable("jpsi_model", "jpsi"))

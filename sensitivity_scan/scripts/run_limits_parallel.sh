@@ -15,6 +15,8 @@ INPUT_FOLDER="cards"  # Default input folder
 USE_REWEIGHT=true     # Default to using reweighting
 PLOT_ONLY=false
 FREEZE_JPSI=false
+RUN_COMBINATION=false  # Default to individual categories
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --tag)
@@ -33,7 +35,7 @@ while [[ $# -gt 0 ]]; do
             CATEGORY_TYPE="$2"
             if [[ "$CATEGORY_TYPE" != "eta" && "$CATEGORY_TYPE" != "dR" && "$CATEGORY_TYPE" != "inclusive" ]]; then
                 echo "Error: Category type must be 'eta', 'dR' or 'inclusive'"
-                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--no_reweight] [--plot_only]"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--no_reweight] [--plot_only] [--freeze_jpsi] [--combination]"
                 return 1
             fi
             shift # past argument
@@ -41,11 +43,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --region)
             REGION="$2"
-            if [["$REGION" != "region0" && "$REGION" != "region1" && "$REGION" != "region2" ]]; then
+            if [[ "$REGION" != "region0" && "$REGION" != "region1" && "$REGION" != "region2" ]]; then
                 echo "Error: Region must be region0, 1 or 2"
                 return 1
             fi
-            INPUT_FOLDER="$INPUT_FOLDER"_"$REGION"
             shift # past argument
             shift # past value
             ;;
@@ -64,11 +65,16 @@ while [[ $# -gt 0 ]]; do
             echo "Freezing J/psi scale parameter in fits."
             shift # past argument
             ;;
+        --combination)
+            RUN_COMBINATION=true
+            echo "Running combination of categories instead of individual fits."
+            shift # past argument
+            ;;
         *)
             # Check if there are actually arguments to process
             if [[ -n "$1" ]]; then
                 echo "Unknown argument: $1"
-                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--no_reweight] [--plot_only]"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--no_reweight] [--plot_only] [--freeze_jpsi] [--combination]"
                 return 1
             else
                 # No more arguments, break out of the loop
@@ -78,8 +84,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Set input folder
+INPUT_FOLDER="$INPUT_FOLDER"_"$REGION"
+
 # Set output folder based on reweighting setting
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/forPresentation_160925/fitDiagnostics"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
+# echo "WARNING: using temporary output folder fitDiagnostics_test. Change me in production"
 if [ "$USE_REWEIGHT" = true ]; then
     OUTFOLDER="${OUTFOLDER}_reweight_categories"
 else
@@ -151,7 +161,7 @@ case "$REGION" in
         MIN_MASS=0
         MIN_MASS_LIMIT=0
         MAX_MASS=2.0
-        MAX_MASS_LIMIT=2.2
+        MAX_MASS_LIMIT=1.8
         ;;
     "region1")
         MIN_MASS=2.0
@@ -171,12 +181,171 @@ case "$REGION" in
         ;;
 esac
 
+# Function to get points based on mass value and region
+# Points are tuned per region for optimal scan resolution
+get_points_for_mass() {
+    local mass=$1
+    local region=$2
+    
+    case "$region" in
+        "region0")
+            # Region 0: 0-2.0 GeV
+            # TODO: edit
+            # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
+            if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
+                echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15"
+            elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
+                echo "0.01 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.27 0.3 0.35 0.4 0.5 0.9 1 10"
+            else
+                # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
+                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 15 20"
+            fi
+            ;;
+        "region1")
+            # Region 1: 2.0-4.2 GeV
+            # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
+            if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
+                echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15"
+            elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
+                echo "0.01 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.27 0.3 0.35 0.4 0.5 0.9 1 10"
+            else
+                # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
+                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 15 20"
+            fi
+            ;;
+        "region2")
+            # Region 2: 4.2-11.0 GeV
+            if (( $(echo "$mass >= 7 && $mass < 8" | bc -l) )); then
+                echo "0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
+            elif (( $(echo "$mass >= 8 && $mass < 9" | bc -l) )); then
+                echo "0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
+            elif (( $(echo "$mass >= 9 && $mass < 12" | bc -l) )); then
+                echo "1 2 3 4 5 6 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 110"
+            else
+                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3"
+            fi
+            ;;
+        *)
+            echo "ERROR: Unknown region $region" >&2
+            return 1
+            ;;
+    esac
+}
+
+# echo "WARNING!! Temporarily dividing grid single points by 10 to run on 1/100 bkg sample. CHANGE BACK FOR PRODUCTION!"
+# # TEMPORARY: Function to get points based on mass value DIVIDED BY 10 (for div100wgt sample)
+# get_points_for_mass() {
+#     local mass=$1
+#     # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
+#     if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
+#         echo "0.1 0.15 0.17 0.19 0.21 0.23 0.25 0.27 0.3 0.31 0.33 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.44 0.45 0.46 0.47 0.48 0.49 0.50 0.51 0.515 0.517 0.518 0.519 0.52 0.53 0.54 0.55 0.57 0.6 1.0 1.5"
+#     elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
+#         echo "0.01 0.015 0.02 0.025 0.027 0.03 0.035 0.04 0.05"
+#     else
+#         # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
+#         echo "0.00100 0.00113 0.00127 0.00144 0.00162 0.00183 0.00207 0.00234 0.00264 0.00298 0.00336 0.00379 0.00428 0.00483 0.00546 0.00616 0.00695 0.00785 0.00886 0.01000 0.02 0.03 0.04 0.05 0.06 0.07 0.08 0.09 0.1"
+#     fi
+# }
+
+# Unified helper to run grid-based AsymptoticLimits for a target (category or combination)
+# Snapshot usage matches original logic: snapshot is ONLY used when freezing parameters
+# Args:
+#   $1 = target label (e.g. etaHigh, etaLow, dRHigh, dRLow, inclusive, or etaCombination/dRCombination/inclusiveCombination)
+#   $2 = input ROOT path to use (either workspace .root or MultiDimFit snapshot .root)
+#   $3 = freeze_params (comma-separated) or empty; if non-empty, snapshot mode is enabled
+#   $4 = mass (used to choose points and output folder)
+run_combine_limits() {
+    local label="$1"
+    local input_root="$2"
+    local freeze_params="$3"
+    local mass="$4"
+
+    # Build per-mass points list (region-specific)
+    local points
+    points=$(get_points_for_mass "$mass" "$REGION")
+
+    # =============================================================
+    # ALTERNATIVE: SIMPLE AsymptoticLimits (no grid)
+    #
+    # Uncomment one of the blocks below and comment out the grid block
+    # further down if you want to run the classic single AsymptoticLimits
+    # instead of the grid + getLimitFromGrid workflow.
+    #
+    # if [[ -n "$freeze_params" ]]; then
+    #     combine -M AsymptoticLimits "$input_root" --rMin 0 --rMax 20 \
+    #             --snapshotName MultiDimFit \
+    #             --freezeParameters "$freeze_params" \
+    #             -n "_${label}${FIT_TAG_LABEL}" \
+    #             -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+    # fi
+    # else
+    #     # OLD IMPLEMENTATION: uses original workspace
+    #     combine -M AsymptoticLimits "$input_root" \
+    #             -n "_${label}${FIT_TAG_LABEL}" \
+    #             -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+    
+    #     # CAT TEST: use extra minimizer arguments (optional)
+    #     # combine -M AsymptoticLimits "$input_root" \
+    #     #         -n "_${label}${FIT_TAG_LABEL}" \
+    #     #         --cminDefaultMinimizerStrategy 0 --cminFallbackAlgo Minuit2,Migrad,0:1.0 \
+    #     #         --cminFallbackAlgo Minuit2,Migrad,1:1.0 --cminFallbackAlgo Minuit2,Migrad,0:5.0 \
+    #     #         --cminApproxPreFitTolerance=100 --X-rtd MINIMIZER_MaxCalls=9999999 --X-rtd MINIMIZER_analytic \
+    #     #         --X-rtd FAST_VERTICAL_MORPH --cminDefaultMinimizerPrecision 1E-8 \
+    #     #         -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+    # fi
+    # =============================================================
+
+    ### LIMIT FROM GRID
+    # Single-point runs with caching
+    for point in $points; do
+        local output_file="higgsCombine_${label}${FIT_TAG_LABEL}_point_${point}.AsymptoticLimits.mH120.root"
+        # if [ -f "$output_file" ]; then
+        #     echo "    Point $point already exists for target $label, skipping..."
+        # else 
+        combine -M AsymptoticLimits "$input_root" --rMin 0 --rMax 110 \
+                --singlePoint "$point" \
+                -n "_${label}${FIT_TAG_LABEL}_point_$point" \
+                -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
+        # fi
+    done
+
+    # Merge grid and compute final limit from grid
+    local grid_files=()
+    for point in $points; do
+        grid_files+=("higgsCombine_${label}${FIT_TAG_LABEL}_point_${point}.AsymptoticLimits.mH120.root")
+    done
+        
+    hadd -f limits_from_grid_${label}.root "${grid_files[@]}"
+
+    # Adjust rMin for high mass points
+    local rmin_val=0
+    if (( $(echo "$mass > 9" | bc -l) )); then
+        rmin_val=1
+        echo "Setting rMin to $rmin_val for mass $mass"
+    fi
+
+    combine -M AsymptoticLimits "$input_root" --rMin $rmin_val --rMax 110 \
+            --getLimitFromGrid limits_from_grid_${label}.root \
+            -n "_${label}${FIT_TAG_LABEL}" \
+            -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+
+    tail -n 10 "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+
+    # Ship outputs to outfolder
+    mkdir -p "$OUTFOLDER/$label/M$mass"
+    cp "fitAsymptotic_${label}${FIT_TAG_LABEL}.log" "higgsCombine_${label}${FIT_TAG_LABEL}.AsymptoticLimits.mH120.root" "$OUTFOLDER/$label/M$mass/"
+    [ -f combine_logger.out ] && cp combine_logger.out "$OUTFOLDER/$label/M$mass/combine_logger_${label}${FIT_TAG_LABEL}.out"
+}
+
+
 # Export the functions so parallel processes can use them
 export -f get_category_name
 export -f get_category_label
 export -f get_all_category_ids
+export -f get_points_for_mass
+export -f run_combine_limits
 # Export the category type so parallel processes can access it
-export CATEGORY_TYPE TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT FREEZE_JPSI PLOT_ONLY
+export CATEGORY_TYPE TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT FREEZE_JPSI PLOT_ONLY RUN_COMBINATION REGION
 export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
 
 # Print configuration
@@ -189,14 +358,21 @@ echo "  Category type: $CATEGORY_TYPE"
 echo "  Categories: $(get_all_category_ids)"
 echo "  Region: $REGION (mass min: $MIN_MASS [limit from $MIN_MASS_LIMIT], max: $MAX_MASS [limit up to $MAX_MASS_LIMIT])"
 echo "  Plot only: $PLOT_ONLY"
+echo "  Run combination: $RUN_COMBINATION"
 
 # Create output folders for each category
-for cat_id in $(get_all_category_ids); do
-    cat_name=$(get_category_name "$cat_id")
-    echo "Creating output folders $OUTFOLDER/$cat_name/s, b"
-    mkdir -p $OUTFOLDER/$cat_name/s
-    mkdir -p $OUTFOLDER/$cat_name/b
-done
+if [ "$RUN_COMBINATION" = true ]; then
+    echo "Creating output folders $OUTFOLDER/${CATEGORY_TYPE}Combination/s, b"
+    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination/s
+    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination/b
+else
+    for cat_id in $(get_all_category_ids); do
+        cat_name=$(get_category_name "$cat_id")
+        echo "Creating output folders $OUTFOLDER/$cat_name/s, b"
+        mkdir -p $OUTFOLDER/$cat_name/s
+        mkdir -p $OUTFOLDER/$cat_name/b
+    done
+fi
 
 # copy input .root file
 cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/
@@ -216,78 +392,104 @@ process_dir() {
         return
     fi
 
-    # TEMPORARY: run only on 3.1
-    if (( $(echo "$mass != 3.1" | bc -l) )); then
-        echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
-        return
-    fi    
+    # # TEMPORARY: run only on 3.1
+    # if (( $(echo "$mass < 9" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
+    #     return
+    # fi    
 
     echo "Processing directory: $dir"
-    cd "$dir" || return
-    
-    # Process each category
-    for cat_id in $(get_all_category_ids); do
-        cat_name=$(get_category_name "$cat_id")
-        txt_file="Xee_ee_${cat_id}_2023.txt"
-        root_file="Xee_ee_${cat_id}_2023.root"
-        
-        if [ -f "$txt_file" ]; then
-            if [ "$PLOT_ONLY" == false ]; then
-                echo "  Processing category $cat_id ($cat_name): $txt_file"
-                echo "    Running AsymptoticLimits for category $cat_name"
-                text2workspace.py "$txt_file"
 
-                if [ "$FREEZE_JPSI" = true ]; then
-                    echo "Freezing parameters scale_jpsi_$(get_category_label $cat_name),scale_psi2s_$(get_category_label $cat_name)"
+    # If only plotting is requested, skip running combine jobs here
+    if [ "$PLOT_ONLY" == true ]; then
+        return
+    fi
 
-                    combine -M AsymptoticLimits higgsCombine_${cat_name}_Bonly.MultiDimFit.mH120.root --rMin 0 --rMax 40 \
-                            --snapshotName MultiDimFit \
-                            -n "_${cat_name}${FIT_TAG_LABEL}" \
-                            --freezeParameters scale_jpsi_$(get_category_label "$cat_name") \
-                            -v 3 &> "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}.log"
-                            # --minosAlgo bisection \
-                            # --freezeParameters scale_jpsi_$(get_category_label "$cat_name"),scale_psi2s_$(get_category_label "$cat_name") \
-                else
-                    # OLD IMPLEMENTATION: uses original workspace
-                    ### NB: rMax was 1 before -- shouldn't change anything when it's reasonable
-                    ### could bear an impact when fitting over peaks
-                    combine -M AsymptoticLimits "$root_file" \
-                            -n "_${cat_name}${FIT_TAG_LABEL}" \
-                            -v 3 &> "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}.log"
-                            # --minosAlgo bisection \
-                            # --genBinnedChannels Xee_ee_${cat_id}_2023 \
+    # Operate in the mass directory and return when done
+    pushd "$dir" > /dev/null || { echo "Failed to cd into $dir"; return 1; }
 
-                    # # # GRID TEST
-                    # # for point in 1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15; do
-                    # for point in 1.5 1.7 1.9 2.1 2.3 2.5 2.7; do
-                    #     combine -M AsymptoticLimits "$root_file" --rMin 0 --rMax 20 \
-                    #             --singlePoint $point \
-                    #             -n "_${cat_name}${FIT_TAG_LABEL}_point_$point" \
-                    #             -v 3 &> "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}_point_$point.log"
-                    # done
-
-                    # hadd -f limits_from_grid_${cat_name}.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_point_*AsymptoticLimits* 
-                    # combine -M AsymptoticLimits "$root_file" --rMin 0 --rMax 20 \
-                    #         --getLimitFromGrid limits_from_grid_${cat_name}.root \
-                    #         -n "_${cat_name}${FIT_TAG_LABEL}" \
-                    #         -v 3 &> "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}.log"
-                    #         # --minosAlgo bisection \
-                    #         # --genBinnedChannels Xee_ee_${cat_id}_2023 \
-                fi
-
-                tail -n 10 "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}.log"
-                
-                # Create category-specific output folder
-                mkdir -p "$OUTFOLDER/$cat_name/M$mass"
-                cp "fitAsymptotic_${cat_name}${FIT_TAG_LABEL}.log" "higgsCombine_${cat_name}${FIT_TAG_LABEL}.AsymptoticLimits.mH120.root" "$OUTFOLDER/$cat_name/M$mass/"
-                [ -f combine_logger.out ] && cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_${cat_name}${FIT_TAG_LABEL}.out"
+    if [ "$RUN_COMBINATION" = true ]; then
+        # Build combination datacard by combining category datacards with the expected names
+        # Exactly match naming in run_limits_combination_parallel.sh
+        local card_files=()
+        for cat_id in $(get_all_category_ids); do
+            local card_name="Xee_ee_${cat_id}_2023.txt"
+            if [[ -f "$card_name" ]]; then
+                card_files+=("$card_name")
+            else
+                echo "  Warning: missing datacard $card_name at mass ${mass}; skipping this directory"
+                popd > /dev/null; return
             fi
-        else
-            echo "  $txt_file not found for category $cat_id ($cat_name)"
+        done
+
+        local txt_file="Xee_ee_${CATEGORY_TYPE}Combination_2023.txt"
+        local root_file="Xee_ee_${CATEGORY_TYPE}Combination_2023.root"
+        echo "  Combining the categories into ${txt_file}"
+        combineCards.py "${card_files[@]}" > "$txt_file"
+
+        echo "  Building workspace: ${root_file}"
+        text2workspace.py "$txt_file"
+
+        local freeze_params=""
+        local input_root="$root_file"
+        if [ "$FREEZE_JPSI" = true ]; then
+            echo "  Running MultiDimFit (B-only snapshot) for ${CATEGORY_TYPE} combination"
+            combine -M MultiDimFit "$root_file" \
+                    --saveWorkspace \
+                    --setParameters r=0 \
+                    --freezeParameters r \
+                    -n "_${CATEGORY_TYPE}Combination_Bonly${FIT_TAG_LABEL}" \
+                    -v 3 &> "fitMultiDimFit_Bonly_${CATEGORY_TYPE}Combination${FIT_TAG_LABEL}.log"
+
+            # Freeze J/psi scale parameters for all categories in this combination
+            local freeze_list=()
+            for cid in $(get_all_category_ids); do
+                local cname
+                cname=$(get_category_name "$cid")
+                freeze_list+=("scale_jpsi_$(get_category_label "$cname")")
+            done
+            freeze_params=$(IFS=,; echo "${freeze_list[*]}")
+            input_root="higgsCombine_${CATEGORY_TYPE}Combination_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
         fi
-    done
-    
-    cd - > /dev/null || exit
+
+        run_combine_limits "${CATEGORY_TYPE}Combination" "$input_root" "$freeze_params" "$mass"
+    else
+        # Per-category loop
+        for cat_id in $(get_all_category_ids); do
+            local cat_name
+            cat_name=$(get_category_name "$cat_id")
+            txt_file="Xee_ee_${cat_id}_2023.txt"
+            root_file="Xee_ee_${cat_id}_2023.root"
+
+            if [[ -z "$txt_file" ]]; then
+                echo "  $txt_file not found for category $cat_id ($cat_name)"
+                continue
+            fi
+
+            echo "  Processing category $cat_id ($cat_name): $txt_file"
+            echo "    Running AsymptoticLimits for category $cat_name"
+            text2workspace.py "$txt_file"
+
+            local freeze_params=""
+            local input_root="$root_file"
+            if [ "$FREEZE_JPSI" = true ]; then
+                echo "    Running MultiDimFit (B-only snapshot) for ${cat_name}"
+                combine -M MultiDimFit "$root_file" \
+                        --saveWorkspace \
+                        --setParameters r=0 \
+                        --freezeParameters r \
+                        -n "_${cat_name}_Bonly${FIT_TAG_LABEL}" \
+                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
+
+                freeze_params="scale_jpsi_$(get_category_label "$cat_name")"
+                input_root="higgsCombine_${cat_name}_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
+            fi
+
+            run_combine_limits "$cat_name" "$input_root" "$freeze_params" "$mass"
+        done
+    fi
+
+    popd > /dev/null || exit
 }
 
 export -f process_dir
@@ -296,17 +498,29 @@ export OUTFOLDER BASEDIR PLOT_ONLY INPUT_FOLDER USE_REWEIGHT
 find $INPUT_FOLDER/ee -mindepth 1 -maxdepth 1 -type d | \
     parallel --jobs 8 process_dir {}
 
-# produce summary plots for each category
-for cat_id in $(get_all_category_ids); do
-    cat_name=$(get_category_name "$cat_id")
-    echo "Creating summary plots for category $cat_name"
-    
-    # Build the command with optional tag argument
-    plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/$cat_name\" -i \"$INPUT_FOLDER\" -c $cat_name -r $REGION"
+# produce summary plots 
+if [ "$RUN_COMBINATION" = true ]; then
+    echo "Creating summary plots for ${CATEGORY_TYPE} combination"
+    plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/${CATEGORY_TYPE}Combination\" -i \"$INPUT_FOLDER\" -c ${CATEGORY_TYPE}Combination -r $REGION" 
     if [[ -n "$FIT_TAG" ]]; then
-        plot_cmd="$plot_cmd --tag \"${REGION}_${FIT_TAG}\""
+        plot_cmd="$plot_cmd --tag \"$FIT_TAG\""
     fi
-    
+
     # Execute the command
-    eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
-done
+    eval "$plot_cmd" &> "$OUTFOLDER/${CATEGORY_TYPE}Combination/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
+else
+    for cat_id in $(get_all_category_ids); do
+        cat_name=$(get_category_name "$cat_id")
+        echo "Creating summary plots for category $cat_name (log file: limits_summary_${REGION}${FIT_TAG_LABEL}.log)"
+        
+        # Build the command with optional tag argument
+        plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/$cat_name\" -i \"$INPUT_FOLDER\" -c $cat_name -r $REGION"
+        if [[ -n "$FIT_TAG" ]]; then
+            plot_cmd="$plot_cmd --tag \"$FIT_TAG\""
+        fi
+        
+        # Execute the command
+        eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
+    done
+fi
+

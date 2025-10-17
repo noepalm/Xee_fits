@@ -535,7 +535,7 @@ class ModelPlotter:
         
         # Create canvas and frame
         c = ROOT.TCanvas("c", "c", 1200, 900)
-        mass_var = self.workspace.var("mass_test")
+        mass_var = self.workspace.var("mass")
         frame = mass_var.frame(
             ROOT.RooFit.Title(f"Parametric model for several mass points, cat. {category_label}")
         )

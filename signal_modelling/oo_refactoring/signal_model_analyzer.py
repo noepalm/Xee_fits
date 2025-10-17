@@ -53,7 +53,7 @@ class FitLogger:
         self.logger.info("="*80)
     
     def log_analysis_start(self, samples: Dict[str, Any], categories: Dict[str, Any], 
-                          parametrized_vars: List[str]):
+                          parametrized_vars: List[str], use_reweighting: bool = True):
         """Log analysis configuration"""
         self.logger.info("\nANALYSIS CONFIGURATION:")
         self.logger.info(f"Number of samples: {len(samples)}")
@@ -61,6 +61,7 @@ class FitLogger:
         self.logger.info(f"Number of categories: {len(categories)}")
         self.logger.info(f"Categories: {list(categories.keys())}")
         self.logger.info(f"Parametrized variables: {parametrized_vars}")
+        self.logger.info(f"Use reweighting: {use_reweighting}")
     
     def log_fit_result(self, sample_name: str, category_name: str, 
                       model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet,
@@ -303,8 +304,9 @@ class WorkspaceManager:
 class DatasetLoader:
     """Handles loading and processing of ROOT datasets"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace):
+    def __init__(self, workspace: ROOT.RooWorkspace, use_reweighting: bool = True):
         self.workspace = workspace
+        self.use_reweighting = use_reweighting
     
     def _check_category_conditions(self, category: CategoryConfig, cat_vars: Dict, j: int) -> bool:
         """Check if event passes category selection"""
@@ -347,7 +349,7 @@ class DatasetLoader:
         
         for i in range(t.GetEntries()):
             t.GetEntry(i)
-            weight = getattr(t, 'trigger_PS_weight', 1.0) #was 'weight'
+            weight = getattr(t, 'trigger_PS_weight', 1.0) if self.use_reweighting else 1.0
             
             # Get category variables for this event
             cat_vars = {var: getattr(t, var) for var in category.cuts.keys()}
@@ -399,7 +401,7 @@ class DatasetLoader:
         
         for i in range(t.GetEntries()):
             t.GetEntry(i)
-            weight = getattr(t, 'trigger_PS_weight', 1.0) #was 'weight'
+            weight = getattr(t, 'trigger_PS_weight', 1.0) if self.use_reweighting else 1.0
             
             cat_vars = {var: getattr(t, var) for var in category.cuts.keys()}
             
@@ -523,7 +525,7 @@ class ModelBuilder:
         
         # Build Crystal Ball part
         dcb_vars = [f"{var}_{tag}_{sample.label}{category.label}" for var in self.param_manager.dcb_vars]
-        mass_string = f"mass_{tag}," if use_shared_mass else f"mass_{sample.label},"
+        mass_string = f"mass," if use_shared_mass else f"mass_{sample.label}," #was "mass_{tag}" i.e. "mass_test"
         dcb_var_string = mass_string + ",".join(dcb_vars)
         
         dcb_name = f"crystalBall_{tag}_{sample.label}{category.label}"
@@ -746,18 +748,19 @@ class SignalModelAnalyzer:
     
     def __init__(self, samples: Dict[str, SampleConfig], categories: Dict[str, CategoryConfig], 
                  wsfile: str, parametrized_vars: List[str], log_file: str = "signal_model_analysis.log",
-                 eos_folder: Optional[str] = None):
+                 eos_folder: Optional[str] = None, use_reweighting: bool = True):
         self.samples = samples
         self.categories = categories
         self.parametrized_vars = parametrized_vars
+        self.use_reweighting = use_reweighting
         
         # Initialize logger
         self.logger = FitLogger(log_file, eos_folder)
-        self.logger.log_analysis_start(samples, categories, parametrized_vars)
+        self.logger.log_analysis_start(samples, categories, parametrized_vars, use_reweighting)
         
         # Initialize managers
         self.workspace_manager = WorkspaceManager(wsfile)
-        self.dataset_loader = DatasetLoader(self.workspace_manager.workspace)
+        self.dataset_loader = DatasetLoader(self.workspace_manager.workspace, use_reweighting)
         self.param_manager = ParameterManager(self.workspace_manager.workspace)
         self.model_builder = ModelBuilder(self.workspace_manager.workspace, self.param_manager)
         self.fit_manager = FitManager(self.workspace_manager.workspace, self.logger)
@@ -769,6 +772,11 @@ class SignalModelAnalyzer:
     def get_logger(self) -> FitLogger:
         """Get the logger instance for external use (e.g., plotting)"""
         return self.logger
+    
+    def set_reweighting(self, use_reweighting: bool):
+        """Update the reweighting flag for the analyzer and dataset loader"""
+        self.use_reweighting = use_reweighting
+        self.dataset_loader.use_reweighting = use_reweighting
     
     def delete_workspace(self):
         """Delete existing workspace file"""
@@ -926,7 +934,7 @@ class SignalModelAnalyzer:
         self.logger.log_analysis_step("Testing Model for Various Mass Points")
         
         # Create common mass variable
-        mass_var = ROOT.RooRealVar("mass_test", "mass_test", 0, 11)
+        mass_var = ROOT.RooRealVar("mass", "mass", 0, 11)
         self.workspace_manager.workspace.Import(mass_var)
         
         for mass in mass_points:

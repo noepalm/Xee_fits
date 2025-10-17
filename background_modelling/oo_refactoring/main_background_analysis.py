@@ -4,6 +4,7 @@ Main background analysis - Object-oriented approach
 This module provides the main interface for running background modeling analysis,
 replicating the functionality of both create_dataset.py and bkg_test.py.
 """
+import ROOT
 import argparse
 import os
 import sys
@@ -28,8 +29,96 @@ class BackgroundAnalysis:
         self.background_results: Dict[str, FitResult] = {}
         self.combined_result: Optional[FitResult] = None
         
+        # Centralized workspace management
+        self.output_workspace: Optional["ROOT.RooWorkspace"] = None
+        self.output_workspace_file: Optional[str] = None
+        
+        # Reweighting setting (will be set from command line args)
+        self.use_reweighting: bool = True
+        
         print("Background analysis initialized")
         
+    def create_output_workspace(self, tag: str = "", fit_region_name: str = "") -> bool:
+        """Create a centralized output workspace for all categories"""
+        if not self.config:
+            print("❌ Config not setup")
+            return False
+            
+        # Create workspace file path
+        self.output_workspace_file = str(self.config.get_output_workspace_path())
+        # TODO: tag is redundant here? UNIFORM USAGE ACROSS FOLDER/OUTPUT ROOT. We want a tag feature.
+        # if tag:
+        #     # Insert tag before file extension
+        #     base_path = Path(self.output_workspace_file)
+        #     self.output_workspace_file = str(base_path.with_stem(f"{base_path.stem}_{tag}"))
+        
+        print(f"Creating centralized output workspace: {self.output_workspace_file}")
+        
+        # Create workspace
+        self.output_workspace = ROOT.RooWorkspace("w", "w")
+        
+        # Import mass variable from signal workspace (following create_dataset.py pattern)
+        suffix = "" if not self.config.use_reduced_mass else "_reducedMass"
+        signal_ws_file = f'../../signal_modelling/oo_refactoring/workspaces/signal_model_withReweight_Categories{suffix}.root'
+        
+        if not os.path.exists(signal_ws_file):
+            print(f"❌ Signal workspace not found: {signal_ws_file}")
+            return False
+            
+        signal_file = ROOT.TFile.Open(signal_ws_file)
+        signal_ws = signal_file.Get('w')
+        
+        if not signal_ws:
+            print(f"❌ Workspace 'w' not found in {signal_ws_file}")
+            signal_file.Close()
+            return False
+        
+        # Get mass variable from signal workspace and set up for background analysis
+        m = signal_ws.var('mass')
+        if not m:
+            print("❌ Variable 'mass' not found in signal workspace")
+            signal_file.Close()
+            return False
+            
+        m.SetName("mass")
+        if fit_region_name != "":
+            fit_region = self.config.get_fit_region(fit_region_name)
+            if fit_region:
+                m.setMin(fit_region.range[0])
+                m.setMax(fit_region.range[1])
+                print(f"✅ Mass variable imported from signal workspace: range [{fit_region.range[0]}, {fit_region.range[1]}] GeV")
+            else:
+                print(f"⚠️  Warning: Fit region '{fit_region_name}' not found, using full mass range from signal workspace")
+        else:
+            print(f"⚠️  Warning: No fit region specified, using full mass range from signal workspace")
+        m.setBins(100)
+        self.output_workspace.Import(m, ROOT.RooCmdArg())
+        
+        signal_file.Close()
+        
+        print("✅ Centralized output workspace created")
+        return True
+        
+    def save_output_workspace(self) -> bool:
+        """Save the centralized output workspace to file"""
+        if not self.output_workspace or not self.output_workspace_file:
+            print("❌ No output workspace to save")
+            return False
+
+        print(f"Saving centralized workspace to: {self.output_workspace_file}", flush=True)
+        self.output_workspace.writeToFile(str(self.output_workspace_file), True)
+        print("✅ Centralized output workspace saved", flush=True)
+        return True
+
+    def get_output_workspace(self):
+        """Get the centralized output workspace"""
+        return self.output_workspace
+    
+    def set_reweighting(self, use_reweighting: bool):
+        """Update the reweighting flag"""
+        self.use_reweighting = use_reweighting
+        print(f"Updated background analysis reweighting setting: {use_reweighting}")
+    
     def setup_from_args(self, args):
         """Setup analysis from command line arguments"""
         print("Setting up analysis from command line arguments...")
@@ -57,12 +146,24 @@ class BackgroundAnalysis:
         self.config.fit_jpsi_first = args.fit_jpsi_first
         self.config.fit_jpsi_prompt = args.fit_jpsi_prompt
         self.config.set_background_function(args.bkg_function)
+        self.config.use_reweighting = not args.no_reweighting
+        self.config.chosen_fit_region = self.config.get_fit_region(args.fit_region) if args.fit_region else None
+        # TODO FIXME: currently it's Background Config blabla that returns dataset path -- that makes no sense, it's DatasetCreator's duty
         
-        # Apply tag if provided
-        if args.tag:
-            self.config.apply_tag(args.tag)
+        # Store reweighting setting for dataset creation
+        self.use_reweighting = not args.no_reweighting
+
+        # Store fit region
+        self.fit_region = args.fit_region
+
+        # Weight multiplier for dataset creation
+        self.weight_multiplier = args.weight_multiplier
+
+        # sets output tag and creates output folders accordingly
+        self.config.apply_tag(args.tag)
             
         print(f"Configuration setup complete")
+        print(f"Use reweighting: {self.use_reweighting}")
         self.config.print_summary()
         
     def create_datasets(self) -> bool:
@@ -72,12 +173,21 @@ class BackgroundAnalysis:
         print("="*60)
         
         try:
+            # Get tag from config (now stored directly)
+            tag = self.config.tag
+            
             # Create main dataset (MinBias/data)
             print("\n1. Creating main dataset...")
             main_creator = DatasetCreator(
                 use_jpsi=False,  # Always false for main dataset
                 use_reduced_mass=self.config.use_reduced_mass,
-                categories=self.config.categories
+                categories=self.config.categories,
+                output_workspace=self.output_workspace,
+                use_reweighting=self.use_reweighting,
+                weight_multiplier=self.weight_multiplier,
+                use_binned=self.config.use_binned,
+                fit_region=self.config.chosen_fit_region,
+                tag=tag
             )
             main_dataset_path = main_creator.create_full_dataset()
             
@@ -87,7 +197,12 @@ class BackgroundAnalysis:
                 jpsi_creator = DatasetCreator(
                     use_jpsi=True,
                     use_reduced_mass=self.config.use_reduced_mass,
-                    categories=self.config.categories
+                    categories=self.config.categories,
+                    output_workspace=self.output_workspace,
+                    use_reweighting=self.use_reweighting,
+                    use_binned=self.config.use_binned,
+                    fit_region=self.config.chosen_fit_region,
+                    tag=tag
                 )
                 jpsi_dataset_path = jpsi_creator.create_full_dataset()
                 print(f"J/psi dataset created: {jpsi_dataset_path}")
@@ -111,12 +226,14 @@ class BackgroundAnalysis:
             # Get CategoryConfig object from selected category name
             categories = self.config.get_available_categories()
             category = categories.get(self.config.selected_category)
-            
+        
         print(f"Setting up background fitter...")
         if category:
             print(f"Category: {category.name} (label: '{category.label}')")
         
-        self.fitter = BackgroundFitter(self.config, category=category)
+        # Pass the centralized output workspace to the fitter
+        self.fitter = BackgroundFitter(self.config, category=category, 
+                                     output_workspace=self.output_workspace)
         
         # Load workspace for the specified category
         if not self.fitter.load_workspace():
@@ -163,7 +280,7 @@ class BackgroundAnalysis:
         
         try:
             # Fit background functions to sidebands
-            if fit_region_name != "region1":
+            if fit_region_name != "region1" and False: #FIXME
                 print("DEBUG: fitting sidebands", flush=True)
                 self.background_results = self.fitter.fit_background_to_sidebands(fit_region)
                 
@@ -187,12 +304,13 @@ class BackgroundAnalysis:
             
         try:
             # For main region, fit combined background model
-            if fit_region_name == "region1":
+            if fit_region_name == "region1" or True: #FIXME
                 # First fit non-resonant background to sidebands within this region
                 sideband_results = self.fitter.fit_background_to_sidebands(fit_region)
                 
-                # Freeze background parameters if requested
-                self.fitter.freeze_background_parameters()
+                if self.config.freeze_bkg_sidebands:
+                    # Freeze background parameters if requested
+                    self.fitter.freeze_background_parameters()
                 
                 print("DEBUG: creating combined model", flush=True)
                 # Create combined model
@@ -287,11 +405,14 @@ class BackgroundAnalysis:
             for comp_name, integral_val in result.integrals.items():
                 self.fitter.log_print(f"  {comp_name}: {integral_val:.5f}")
                 
-    def create_plots(self, fit_region_name: str, tag: str = "") -> List[str]:
+    def create_plots(self, fit_region_name: str, tag: str = "", category: "CategoryConfig" = None) -> List[str]:
         """Create plots for the analysis"""
         print(f"\nCreating plots for {fit_region_name}...")
         
         if not self.plotter:
+            # run plotter setup
+            self.setup_plotter(category)
+
             print("Error: Plotter not setup")
             return []
             
@@ -366,7 +487,7 @@ class BackgroundAnalysis:
                 success = False
                 
             # Step 4: Fit combined background model (for main region)
-            if success and fit_region_name == "region1":
+            if success:# and fit_region_name == "region1": #FIXME
                 if not self.fit_combined_background(fit_region_name):
                     print("Failed to fit combined background model")
                     success = False
@@ -396,6 +517,12 @@ class BackgroundAnalysis:
         print("="*60)
         print("RUNNING ANALYSIS FOR ALL CATEGORIES")
         print("="*60)
+        
+        # Create centralized output workspace if not already created
+        if not self.output_workspace:
+            if not self.create_output_workspace(tag, fit_region_name):
+                print("❌ Failed to create output workspace")
+                return {}
         
         categories = self.config.get_available_categories()
         results = {}
@@ -429,6 +556,10 @@ class BackgroundAnalysis:
         print(f"Successful categories ({len(successful)}): {successful}")
         if failed:
             print(f"Failed categories ({len(failed)}): {failed}")
+        
+        # Save the centralized workspace containing all category results
+        if not self.save_output_workspace():
+            print("⚠️  Warning: Failed to save output workspace")
         
         return results
 
@@ -519,6 +650,10 @@ def create_argument_parser():
                        help="Use J/psi sample instead of MinBias sample")
     parser.add_argument("--use_reduced_mass", action="store_true", default=False,
                        help="Use reduced mass instead of fitted mass")
+    parser.add_argument("--no_reweighting", action="store_true", default=False,
+                       help="Disable reweighting (set weights to luminosity rescale only)")
+    parser.add_argument("--weight_multiplier", type=float, default=1.0,
+                       help="Weight multiplier to scale dataset weights (default: 1.0)")
     parser.add_argument('--categories', nargs='+', default=None,
                        help='Custom categories to create (specify as key=value pairs, e.g. central="pt_1>20&&pt_2>20")')
     parser.add_argument('--category', default=None,
@@ -583,6 +718,13 @@ def main():
         success = True
         
         print("DEBUG: SETTING ANALYZER COMPLETED", flush=True)
+        
+        # Create output workspace if we need to do dataset creation or full analysis
+        if args.create_datasets or args.full_analysis:
+            if not analysis.create_output_workspace(args.tag, args.fit_region):
+                print("❌ Failed to create output workspace")
+                return 1
+        
         # Step 1: Create datasets if requested
         if args.create_datasets or args.full_analysis:
             if not analysis.create_datasets():
@@ -591,7 +733,7 @@ def main():
                 
         print("DEBUG: dataset created successfully. Moving onto fit.", flush=True)
         # Step 2: Run fitting analysis
-        if args.fit_only or args.full_analysis or (not args.create_datasets):
+        if args.fit_only or args.full_analysis:# or (not args.create_datasets): # why was create_dataset here in the first place?
             # Determine analysis strategy based on category selection
             if args.all_categories or (not args.category and not args.all_categories):
                 # Multi-category analysis (default if no specific category chosen)
@@ -603,21 +745,49 @@ def main():
                 print(f"Running analysis for category '{args.category}'...")
                 categories = analysis.config.get_available_categories()
                 if args.category in categories:
+                    # Create output workspace for single category if not already created
+                    if not analysis.output_workspace:
+                        if not analysis.create_output_workspace(args.tag):
+                            print("❌ Failed to create output workspace")
+                            return 1
+                    
                     category_config = categories[args.category]
                     success = analysis.run_complete_analysis(args.fit_region, args.tag, category_config)
+                    
+                    # Save workspace
+                    if not analysis.save_output_workspace():
+                        print("⚠️  Warning: Failed to save output workspace")
                 else:
                     print(f"❌ Category '{args.category}' not found. Available: {list(categories.keys())}")
                     return 1
             else:
                 # Fallback to old behavior (no category specified)
+                # Create output workspace for single category if not already created
+                if not analysis.output_workspace:
+                    if not analysis.create_output_workspace(args.tag):
+                        print("❌ Failed to create output workspace")
+                        return 1
+                    print("❌ Failed to create output workspace")
+                    return 1
+                
                 success = analysis.run_complete_analysis(args.fit_region, args.tag)
+                
+                # Save workspace
+                if not analysis.save_output_workspace():
+                    print("⚠️  Warning: Failed to save output workspace")
         
         # Step 3: Optional multi-category plotting
         if args.plot_all_categories:
             print("\nCreating plots for all categories...")
-            plot_results = analysis.create_plots_for_all_categories(args.fit_region, args.tag)
-            total_plots = sum(len(plots) for plots in plot_results.values())
-            print(f"📊 Created {total_plots} plots across all categories")
+            categories = analysis.config.get_available_categories()
+            category_config = categories[args.category]
+
+            plots = analysis.create_plots(args.fit_region, args.tag, category_config)
+
+            # plot_results = analysis.create_plots_for_all_categories(args.fit_region, args.tag)
+            # total_plots = sum(len(plots) for plots in plot_results.values())
+
+            print(f"📊 Created {len(plots)} plots across all categories")
                 
         if success:
             print("\n🎉 Background analysis completed successfully!")

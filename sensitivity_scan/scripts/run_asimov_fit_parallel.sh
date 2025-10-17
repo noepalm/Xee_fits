@@ -10,7 +10,6 @@ TAG_LABEL="" # same but with _ in front
 FIT_TAG=""
 FIT_TAG_LABEL="" # same but with _ in front
 CATEGORY_TYPE="eta"  # Default to eta categories
-REGION="region1"
 INPUT_FOLDER="cards"  # Default input folder
 USE_REWEIGHT=true     # Default to using reweighting
 PLOT_ONLY=false
@@ -38,18 +37,8 @@ while [[ $# -gt 0 ]]; do
             shift # past argument
             shift # past value
             ;;
-        --region)
-            REGION="$2"
-            if [["$REGION" != "region0" && "$REGION" != "region1" && "$REGION" != "region2" ]]; then
-                echo "Error: Region must be region0, 1 or 2"
-                return 1
-            fi
-            INPUT_FOLDER="$INPUT_FOLDER"_"$REGION"
-            shift # past argument
-            shift # past value
-            ;;
         --no_reweight)
-            INPUT_FOLDER="$INPUT_FOLDER"_noReweight
+            INPUT_FOLDER="cards_noReweight"
             USE_REWEIGHT=false
             shift # past argument
             ;;
@@ -73,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set output folder based on reweighting setting
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics"
 if [ "$USE_REWEIGHT" = true ]; then
     OUTFOLDER="${OUTFOLDER}_reweight_categories"
 else
@@ -131,43 +120,11 @@ get_all_category_ids() {
     esac
 }
 
-# Mapping region to min, max in mass range
-# NOTE: region definition
-# region0: 0-2.0
-# region1: 2.0-4.2
-# region2: 4.2-11.0
-# however, min/max mass range is tighter due to boundary fits being unreliable
-case "$REGION" in
-    "region0")
-        MIN_MASS=0
-        MIN_MASS_LIMIT=0
-        MAX_MASS=2.0
-        MAX_MASS_LIMIT=2.2
-        ;;
-    "region1")
-        MIN_MASS=2.0
-        MIN_MASS_LIMIT=2.2
-        MAX_MASS=4.2
-        MAX_MASS_LIMIT=4.0
-        ;;
-    "region2")
-        MIN_MASS=4.2
-        MIN_MASS_LIMIT=4.4
-        MAX_MASS=11
-        MAX_MASS_LIMIT=10.8
-        ;;
-    *)
-        echo "Error: Region must be region0, 1 or 2"
-        return 1
-        ;;
-esac
-
 # Export functions and vars so parallel processes can use them
 export -f get_category_name
 export -f get_category_label
 export -f get_all_category_ids
-export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY
-export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
+export CATEGORY_TYPE TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT
 
 # Print configuration
 echo "Configuration:"
@@ -178,7 +135,6 @@ echo "  Tag: ${TAG:-'(none)'}"
 echo "  Fit tag: ${FIT_TAG:-'(none)'}"
 echo "  Category type: $CATEGORY_TYPE"
 echo "  Categories: $(get_all_category_ids)"
-echo "  Region: $REGION (mass min: $MIN_MASS [limit from $MIN_MASS_LIMIT], max: $MAX_MASS [limit up to $MAX_MASS_LIMIT])"
 echo "  Plot only: $PLOT_ONLY"
 
 # Create output folders for each category
@@ -188,9 +144,6 @@ for cat_id in $(get_all_category_ids); do
     mkdir -p $OUTFOLDER/$cat_name/s
     mkdir -p $OUTFOLDER/$cat_name/b
 done
-
-# Copy common .root file to output folder (for future workspace recreation)
-cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/
 
 process_dir() {
     dir="$1"
@@ -205,8 +158,8 @@ process_dir() {
     fi
 
     mass=$(basename "$dir")
-    if (( $(echo "$mass < $MIN_MASS_LIMIT" | bc -l) )) || (( $(echo "$mass > $MAX_MASS_LIMIT" | bc -l) )); then #NOTE: nominally 2-4.2, but fits at the boundaries are unreliable
-        echo "Skipping $dir, mass $mass is out of range for $REGION ($MIN_MASS_LIMIT to $MAX_MASS_LIMIT)"
+    if (( $(echo "$mass < 2.2" | bc -l) )) || (( $(echo "$mass > 4.0" | bc -l) )); then #NOTE: nominally 2-4.2, but fits at the boundaries are unreliable
+        echo "Skipping $dir, mass $mass is out of range (2 to 4.2)"
         return
     fi
 
@@ -229,7 +182,7 @@ process_dir() {
                 combine -M FitDiagnostics "$root_file" \
                         --saveNormalizations \
                         --saveShapes \
-                        --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
+                        --setParameterRanges mass=2,4.2 \
                         --keepFailures \
                         -n "_${cat_name}${FIT_TAG_LABEL}" \
                         -v 3 &> "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log"
@@ -243,7 +196,7 @@ process_dir() {
                         --saveWorkspace \
                         --setParameters r=0 \
                         --freezeParameters r \
-                        --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
+                        --setParameterRanges mass=2,4.2 \
                         -n "_${cat_name}${FIT_TAG_LABEL}_Bonly" \
                         -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
                 cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_MultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
@@ -254,7 +207,7 @@ process_dir() {
             fi
 
             echo "    Plotting for category $cat_name"
-            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG"
+            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id --tag "$FIT_TAG"
         else
             echo "  $txt_file not found for category $cat_id ($cat_name)"
         fi
@@ -275,10 +228,10 @@ for cat_id in $(get_all_category_ids); do
     # Build the command with optional tag argument
     plot_cmd="python3 $BASEDIR/scripts/plot_diagnostics_result.py -o \"$OUTFOLDER/$cat_name\" -c $cat_name"
     if [[ -n "$TAG" ]]; then
-        plot_cmd="$plot_cmd --tag \"${REGION}_${FIT_TAG}\""
+        plot_cmd="$plot_cmd --tag \"$FIT_TAG\""
     fi
     
     # Execute the command
     echo "Creating summary plots for category $cat_name"
-    eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/diagnostics_summary_${REGION}${FIT_TAG_LABEL}.log"
+    eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/limits_summary${FIT_TAG_LABEL}.log"
 done

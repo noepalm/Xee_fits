@@ -39,10 +39,10 @@ if (args.bkg_x2 and not args.no_reweight):
 
 # add workspace
 binned_suffix = "_binned" if args.binned else ""
-reweight_suffix = "_noReweight" if args.no_reweight else "_reweight"
+reweight_suffix = "_noReweight" if args.no_reweight else ""
 bkg_scale_suffix = "_x2wgt" if args.bkg_x2 else ("_div100wgt" if args.bkg_div100 else "")
 
-dataset_name = f"dataset_minbias_{args.region}{binned_suffix}{reweight_suffix}{bkg_scale_suffix}_full.root"
+dataset_name = f"dataset_minbias_{args.region}{binned_suffix}{bkg_scale_suffix}{reweight_suffix}_full.root"
 print(">> Using dataset:", dataset_name)
 
 # dataset_name = "dataset_minbias_reweight_full.root" if not args.no_reweight else "dataset_minbias_noReweight_full.root"
@@ -118,7 +118,7 @@ elif args.cat == "inclusive":
         ]
     }
 
-masses = [f"{v:.1f}" for v in np.arange(0.5, 10.5, 0.1)]
+masses = [f"{v:.1f}" for v in np.arange(0.1, 11.1, 0.1)]
 # masses = ch.ValsFromRange('3.0:10.0|2.0') # can't specify number of digits after the point
 # masses = [f"M{mass:.1f}".replace(".", "p") for mass in np.arange(0.5, 10.5, 0.2)] # for old model naming convention
 
