@@ -563,82 +563,6 @@ class BackgroundAnalysis:
         
         return results
 
-    def create_plots_for_all_categories(self, fit_region_name: str, tag: str = "") -> Dict[str, List[str]]:
-        """Create plots for all available categories by running individual analysis for each."""
-        print(f"\n{'='*60}")
-        print("CREATING PLOTS FOR ALL CATEGORIES")
-        print(f"{'='*60}")
-        
-        available_categories = self.config.get_available_categories()
-        plot_results = {}
-        
-        for category_config in available_categories:
-            category_name = category_config.display_name
-            print(f"\n{'='*40}")
-            print(f"CREATING PLOTS FOR: {category_name}")
-            print(f"{'='*40}")
-            
-            try:
-                # Run the plotting part of complete analysis for this category
-                # This will load workspace, setup plotter, and create plots
-                plots = self._create_plots_for_category(fit_region_name, tag, category_config)
-                plot_results[category_name] = plots
-                
-                if plots:
-                    print(f"✅ Created {len(plots)} plots for category '{category_name}'")
-                else:
-                    print(f"❌ Failed to create plots for category '{category_name}'")
-                    
-            except Exception as e:
-                print(f"❌ Error creating plots for category '{category_name}': {e}")
-                plot_results[category_name] = []
-        
-        # Summary
-        print(f"\n{'='*60}")
-        print("PLOTTING SUMMARY")
-        print(f"{'='*60}")
-        total_plots = sum(len(plots) for plots in plot_results.values())
-        print(f"Total plots created: {total_plots}")
-        for category_name, plots in plot_results.items():
-            if plots:
-                print(f"  - {category_name}: {len(plots)} plots")
-        
-        return plot_results
-    
-    def _create_plots_for_category(self, fit_region_name: str, tag: str, 
-                                  category_config: "CategoryConfig") -> List[str]:
-        """Create plots for a specific category."""
-        try:
-            # Update config to this category
-            print(f"DEBUG: Setting up config for '{category_config.name}'", flush=True)
-            self.config.select_category(category_config)
-            
-            # Setup fitter for this category
-            success = self.setup_fitter(category_config)
-            if not success:
-                print(f"Failed to setup fitter for category")
-                return []
-            
-            # Load workspace with existing fits
-            if not self.fitter.load_workspace(fit_region_name, tag):
-                print(f"Failed to load workspace for category (fits may not exist)")
-                return []
-            
-            # Setup plotter
-            self.setup_plotter(category_config)
-            if self.plotter is None:
-                print(f"Failed to setup plotter for category")
-                return []
-            
-            # Create plots using the existing create_plots method
-            plots = self.create_plots(fit_region_name, tag)
-            return plots
-            
-        except Exception as e:
-            print(f"Error in _create_plots_for_category: {e}")
-            return []
-
-
 def create_argument_parser():
     """Create command line argument parser"""
     parser = argparse.ArgumentParser(description="Background Model Analysis - Object-oriented version")
@@ -783,9 +707,6 @@ def main():
             category_config = categories[args.category]
 
             plots = analysis.create_plots(args.fit_region, args.tag, category_config)
-
-            # plot_results = analysis.create_plots_for_all_categories(args.fit_region, args.tag)
-            # total_plots = sum(len(plots) for plots in plot_results.values())
 
             print(f"📊 Created {len(plots)} plots across all categories")
                 

@@ -20,7 +20,7 @@ if len(args.input_cards) != len(args.region):
 limit_bounds = {
     "region0" : (0, 2.2),
     "region1" : (2.2, 4.0),
-    "region2" : (4.4, 10.8),
+    "region2" : (4.0, 10.8),
 }
 
 # Create mapping from region to input_cards folder

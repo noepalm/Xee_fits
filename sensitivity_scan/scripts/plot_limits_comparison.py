@@ -14,6 +14,7 @@ parser.add_argument('-i', '--input_folders', type=str, nargs='+', required=True,
 parser.add_argument('-f', '--fit_tags', type=str, nargs='*', default=[], help='Fit tags to identify input files')
 parser.add_argument('-l', '--labels', type=str, nargs='*', default=[], help='Labels for legend (defaults to category, i.e. last subfolder)')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
+parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"], help='Mass region (for labeling purposes)')
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
 args = parser.parse_args()
@@ -56,7 +57,7 @@ fig, ax = plt.subplots(figsize=(10, 10))
 
 for fit_tag, folder, label in zip(fit_tags, input_folders, labels):
     fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
-    with open(os.path.join(base_folder, folder, f'limits_results{fit_tag_label}.pkl'), 'rb') as f:
+    with open(os.path.join(base_folder, folder, f'limits_results_{args.region}{fit_tag_label}.pkl'), 'rb') as f:
         r_values = pickle.load(f)
     
     masses = np.array(sorted([float(mass) for mass in r_values.keys()]))
@@ -72,4 +73,4 @@ hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
 plt.legend()
 
 for ext in ['png', 'pdf']:
-    plt.savefig(os.path.join(outfolder, f'limits_comparison{tag}.{ext}'))
+    plt.savefig(os.path.join(outfolder, f'limits_comparison_{args.region}{tag}.{ext}'))

@@ -120,12 +120,12 @@ class BackgroundModelConfig:
         regions = {
             "region1": FitRegion(
                 name="region1",
-                display_name="Central Region (2.0-4.2 GeV)",
-                range=(2.0, 4.2),
+                display_name="Central Region (2.0-4.6 GeV)", #was 4.2
+                range=(2.0, 4.5), 
                 sidebands=[
                     (2.0, 2.6),    # Left sideband
                     (3.3, 3.5),    # Central sideband  
-                    (3.8, 4.2),    # Right sideband
+                    (3.8, 4.5),    # Right sideband
                 ],
                 backgrounds=["jpsi", "psi2s"],
                 background_fractions=[0.7],
@@ -144,9 +144,9 @@ class BackgroundModelConfig:
             "region2": FitRegion(
                 name="region2", 
                 display_name="Right Background Region (4.2-11.0 GeV)",
-                range=(4.2, 11), #WAS 4.2, 8.0
+                range=(3.8, 11),
                 sidebands=[
-                    (4.2, 8.0),
+                    (3.8, 8.0),
                     (10.0, 11),
                 ], # Entire region is sideband #4.2, 8.0
                 backgrounds=["upsilon1s"],
@@ -160,7 +160,7 @@ class BackgroundModelConfig:
                 range=(0, 11),
                 sidebands=[
                     (0, 2.6),
-                    (4.2, 11.0)
+                    (3.8, 11.0)
                 ],
                 description="Complete mass range"
             )
@@ -193,31 +193,45 @@ class BackgroundModelConfig:
         # Define initial parameters per category
         # Default values are for 'inclusive' category and used for all others unless overridden
         bernstein_inits_by_category = {
-            "inclusive": [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6
+            "inclusive": {
+                "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6
+                # "region2" : [1.9, 0.73, -0.015, 0.11, 0.013],
+                "region2" : [1.7, 0.23, 0.13, -0.003, 0.00012],
+            },
             # Add category-specific overrides here as needed:
             # "etap0p6": [2.33352, 3.59166, -0.06610, 0.52400, 0.19075],  # WORKS FOR dRp0p3
             # "dRm0p3": [0.36903, 0.11880, -0.46547, 0.56438, -0.58503],  # WORKS FOR dRm0p3
-            "etaHigh" : [2.33352, 3.59166, -0.06610, 0.52400, 0.19075],
+            # "etaHigh" : [2.33352, 3.59166, -0.06610, 0.52400, 0.19075], # TEMPORARILY REMOVED. seems worse results?
         }
 
         bernstein_limits_by_category = {
             # Add category-specific overrides here as needed
-            "inclusive": [(-2, 2) for _ in range(5)],  # Default limits for all #FIXME: was (-5, 5) for all
-            "etaHigh" : [(-5, 5) for _ in range(5)],
+            "inclusive": {
+                "region1" : [(-2, 2) for _ in range(5)]
+            },  # Default limits for all #FIXME: was (-5, 5) for all
+            "etaHigh" : {
+                "region1" : [(-5, 5) for _ in range(5)],
+            },
         }
         
         poly_inits_by_category = {
-            "inclusive": [-0.9, 3.2, -1.4, 0.16, 0],
+            "inclusive": {
+                "region1" : [-0.9, 3.2, -1.4, 0.16, 0],
+            },
             # Add category-specific overrides here as needed
         }
         
         exp_inits_by_category = {
-            "inclusive": [1, 4, 0.1, -1] + [1./4 * (-1 * (i % 2)) for i in range(3)],
+            "inclusive": {
+                "region1" : [1, 4, 0.1, -1] + [1./4 * (-1 * (i % 2)) for i in range(3)],
+            },
             # Add category-specific overrides here as needed
         }
         
         simple_exp_inits_by_category = {
-            "inclusive": [-1.5],
+            "inclusive": {
+                "region1" : [-1.5],
+            },
             # Add category-specific overrides here as needed
         }
         
@@ -226,16 +240,33 @@ class BackgroundModelConfig:
         print(f"DEBUG: trying to retrieve selceted cateogyr: {self.selected_category}", flush=True)
         
         print(f"DEBUG: Using category '{current_category}' for background functions", flush=True)
-        bernstein_inits = bernstein_inits_by_category.get(current_category, 
-                                                         bernstein_inits_by_category["inclusive"])
-        bernstein_limits = bernstein_limits_by_category.get(current_category, 
-                                                           bernstein_limits_by_category["inclusive"])
-        poly_inits = poly_inits_by_category.get(current_category,
-                                               poly_inits_by_category["inclusive"])
-        exp_inits = exp_inits_by_category.get(current_category,
-                                             exp_inits_by_category["inclusive"])
-        simple_exp_inits = simple_exp_inits_by_category.get(current_category,
-                                                           simple_exp_inits_by_category["inclusive"])
+
+        # Get fit region name safely (may not be defined yet during initialization)
+        fit_region_name = getattr(self.chosen_fit_region, 'name', None) if hasattr(self, 'chosen_fit_region') else None
+
+        print(f"DEBUG: Using fit region '{fit_region_name}' for background functions", flush=True)
+        
+        inits_dict = bernstein_inits_by_category.get(current_category, 
+                                                     bernstein_inits_by_category["inclusive"])
+        bernstein_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
+
+        limits_dict = bernstein_limits_by_category.get(current_category,
+                                                       bernstein_limits_by_category["inclusive"]) 
+        bernstein_limits = limits_dict.get(fit_region_name, 
+                                          limits_dict["region1"])
+
+        inits_dict = poly_inits_by_category.get(current_category,
+                                                poly_inits_by_category["inclusive"])
+        poly_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
+
+        inits_dict = exp_inits_by_category.get(current_category,
+                                               exp_inits_by_category["inclusive"])
+        exp_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
+
+        inits_dict = simple_exp_inits_by_category.get(current_category,
+                                                      simple_exp_inits_by_category["inclusive"])
+        simple_exp_inits = inits_dict.get(fit_region_name,
+                                          inits_dict["region1"])
 
         # Bernstein polynomial (5th degree)
         functions.append(BackgroundFunction(

@@ -114,22 +114,25 @@ class BackgroundFitter:
                     
         print(f"Loading workspace for category: {self.category.display_name}...")
         
-        dataset_path = self.config.get_dataset_path()
-        if not dataset_path.exists():
-            print(f"Error: Dataset file not found: {dataset_path}")
-            return False
+        # dataset_path = self.config.get_dataset_path()
+        # if not dataset_path.exists():
+        #     print(f"Error: Dataset file not found: {dataset_path}")
+        #     return False
             
-        # Open file and get workspace
-        root_file = ROOT.TFile.Open(str(dataset_path))
-        if not root_file or root_file.IsZombie():
-            print(f"Error: Cannot open file {dataset_path}")
-            return False
+        # # Open file and get workspace
+        # root_file = ROOT.TFile.Open(str(dataset_path))
+        # if not root_file or root_file.IsZombie():
+        #     print(f"Error: Cannot open file {dataset_path}")
+        #     return False
             
-        self.workspace = root_file.Get("w")
-        if not self.workspace:
-            print("Error: Workspace 'w' not found in file")
-            root_file.Close()
-            return False
+        # self.workspace = root_file.Get("w")
+        # if not self.workspace:
+        #     print("Error: Workspace 'w' not found in file")
+        #     root_file.Close()
+        #     return False
+
+        # FIXME: testing if this is enough.
+        self.workspace = self.output_workspace
             
         # Get category-specific data and shared mass variable
         dataset_name = f"data_obs{self.category.label}"

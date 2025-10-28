@@ -2,14 +2,27 @@ import ROOT
 import os
 import argparse
 
-use_jpsi = False
-suffix = "_jpsi" if use_jpsi else "_minbias"
-f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/dataset{suffix}.root")
-w = f.Get("w")
-data = w.obj("data_obs")
-m = w.obj("mass")
+f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
 
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit_tests"
+t = f.Get("Events")
+
+# plot DiElectron_fitted_mass distribution in 0-11 GeV range weighted by weight branch
+m = ROOT.RooRealVar("DiElectron_fitted_mass", "DiElectron_fitted_mass", 0, 11)
+w = ROOT.RooRealVar("weight", "weight", 0, 1e6)
+data = ROOT.RooDataSet("data", "data", ROOT.RooArgSet(m), ROOT.RooFit.WeightVar(w))
+print(f"Filling dataset with {t.GetEntries()} entries from tree...")
+for i in range(t.GetEntries()):
+    t.GetEntry(i)
+
+    for mass_val in t.DiElectron_fitted_mass:
+        if mass_val < 0 or mass_val > 11:
+            continue
+
+        weight = t.weight
+        m.setVal(mass_val)
+        data.add(ROOT.RooArgSet(m), weight * 58.9/7.98)
+
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit"
 
 # set batch mode
 ROOT.gROOT.SetBatch(True)
@@ -33,9 +46,13 @@ data.plotOn(frame,
 )
 
 # set log scale y
+# set minimum to 0.1
+
 canvas.SetLogy()
 
 frame.Draw()
+frame.SetMinimum(1e3)
+frame.SetMaximum(frame.GetMaximum() * 1.6)
 # # draw vertical line at 1.2 GeV
 # lines = []
 # for val in [1.2, 2.6, 4.2, 8]:
@@ -55,5 +72,5 @@ frame.Draw()
 #     line.Draw("SAME")
 #     lines.append(line)  # Keep a reference to the line to prevent it from being garbage collected
 
-canvas.SaveAs(os.path.join(outfolder, f"data_fullRange{suffix}.png"))
-canvas.SaveAs(os.path.join(outfolder, f"data_fullRange{suffix}.pdf"))
+canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.png"))
+canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.pdf"))

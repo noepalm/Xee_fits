@@ -1,2 +1,0 @@
-python3 bkg_test.py --fit_jpsi_prompt --floating_signal --binned --tag="jpsiPromptFreeze" &> logs/prompt_binned_fit.log #floating_signal is for jpsi/psi2s
-python3 bkg_test.py --fit_jpsi_prompt --floating_signal --tag="jpsiPromptFreeze" &> logs/prompt_fit.log #--floating_signal

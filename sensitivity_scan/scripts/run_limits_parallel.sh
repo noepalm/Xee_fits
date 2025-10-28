@@ -166,12 +166,12 @@ case "$REGION" in
     "region1")
         MIN_MASS=2.0
         MIN_MASS_LIMIT=2.2
-        MAX_MASS=4.2
-        MAX_MASS_LIMIT=4.0
+        MAX_MASS=4.2 #was 4.6
+        MAX_MASS_LIMIT=4.0 #was 4.4
         ;;
     "region2")
-        MIN_MASS=4.2
-        MIN_MASS_LIMIT=4.4
+        MIN_MASS=4.2 #was 3.8
+        MIN_MASS_LIMIT=4.4 #was 4.0
         MAX_MASS=11
         MAX_MASS_LIMIT=10.8
         ;;
@@ -206,11 +206,15 @@ get_points_for_mass() {
             # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
             if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
                 echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15"
+                # echo "1 1.5 2 2.5 3.5 4 4.2 4.3 4.6 4.7 5.1 5.4 6 7"
+                # echo "5 5.1 5.2 5.3 5.4 5.5 6 6.5 7 7.5 8 8.5 9 10 15 20"
             elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
                 echo "0.01 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.27 0.3 0.35 0.4 0.5 0.9 1 10"
             else
                 # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
-                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 15 20"
+                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 11 13 15 20"
+                # echo "0.001 0.005 0.0100 0.0113 0.0183 0.0207 0.023 0.0428 0.0483 0.0886 0.1000 0.2 0.6 0.7"
+                # echo "0.0183 0.0207 0.023 0.0428 0.0483 0.0886 0.1000 0.2 0.6 0.7 1 5 10"
             fi
             ;;
         "region2")
@@ -297,16 +301,23 @@ run_combine_limits() {
 
     ### LIMIT FROM GRID
     # Single-point runs with caching
+    local rmax_val=50
+    if (( $(echo "$mass > 9" | bc -l) )); then
+        rmax_val=110
+        echo "Setting rMax to $rmax_val for mass $mass"
+    fi    
     for point in $points; do
         local output_file="higgsCombine_${label}${FIT_TAG_LABEL}_point_${point}.AsymptoticLimits.mH120.root"
-        # if [ -f "$output_file" ]; then
-        #     echo "    Point $point already exists for target $label, skipping..."
-        # else 
-        combine -M AsymptoticLimits "$input_root" --rMin 0 --rMax 110 \
-                --singlePoint "$point" \
-                -n "_${label}${FIT_TAG_LABEL}_point_$point" \
-                -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
-        # fi
+        if [ -f "$output_file" ]; then
+            echo "    Point $point already exists for target $label, skipping..."
+        else 
+        # RMAX WAS 110
+            echo "    Running point $point for target $label..."
+            combine -M AsymptoticLimits "$input_root" --rMin 1 --rMax $rmax_val \
+                    --singlePoint "$point" \
+                    -n "_${label}${FIT_TAG_LABEL}_point_$point" \
+                    -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
+        fi
     done
 
     # Merge grid and compute final limit from grid
@@ -324,7 +335,7 @@ run_combine_limits() {
         echo "Setting rMin to $rmin_val for mass $mass"
     fi
 
-    combine -M AsymptoticLimits "$input_root" --rMin $rmin_val --rMax 110 \
+    combine -M AsymptoticLimits "$input_root" --rMin $rmin_val --rMax $rmax_val \
             --getLimitFromGrid limits_from_grid_${label}.root \
             -n "_${label}${FIT_TAG_LABEL}" \
             -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
@@ -393,7 +404,7 @@ process_dir() {
     fi
 
     # # TEMPORARY: run only on 3.1
-    # if (( $(echo "$mass < 9" | bc -l) )); then
+    # if (( $(echo "$mass != 3.1" | bc -l) )); then
     #     echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
     #     return
     # fi    

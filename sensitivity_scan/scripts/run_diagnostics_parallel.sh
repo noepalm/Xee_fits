@@ -73,7 +73,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set output folder based on reweighting setting
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid_debug"
 if [ "$USE_REWEIGHT" = true ]; then
     OUTFOLDER="${OUTFOLDER}_reweight_categories"
 else
@@ -147,12 +147,12 @@ case "$REGION" in
     "region1")
         MIN_MASS=2.0
         MIN_MASS_LIMIT=2.2
-        MAX_MASS=4.2
-        MAX_MASS_LIMIT=4.0
+        MAX_MASS=4.2 #was 4.6
+        MAX_MASS_LIMIT=4.0 #was 4.4
         ;;
     "region2")
-        MIN_MASS=4.2
-        MIN_MASS_LIMIT=4.4
+        MIN_MASS=4.2 #was 3.8
+        MIN_MASS_LIMIT=4.4 #was 4.0
         MAX_MASS=11
         MAX_MASS_LIMIT=10.8
         ;;
@@ -209,6 +209,12 @@ process_dir() {
         echo "Skipping $dir, mass $mass is out of range for $REGION ($MIN_MASS_LIMIT to $MAX_MASS_LIMIT)"
         return
     fi
+
+    # # TEMPORARY: only process mass = 3.1
+    # if (( $(echo "$mass != 3.1" | bc -l) )); then
+    #     echo "Skipping $dir, temporary restriction to mass = 3.1"
+    #     return
+    # fi
 
     echo "Processing directory: $dir"
     cd "$dir" || return
