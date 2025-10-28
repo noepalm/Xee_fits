@@ -31,7 +31,7 @@ cb = ch.CombineHarvester()
 # increase verbosity for debugging
 cb.SetVerbosity(5)
 
-input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/oo_refactoring/datasets/without_region_overlap/' # datasets/without_region_overlap for old files
+input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/without_region_overlap/' # datasets/without_region_overlap for old files
 # input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/forPresentation_11062025/'
 
 if (args.bkg_x2 and not args.no_reweight):
