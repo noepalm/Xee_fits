@@ -1,2 +1,0 @@
-python3 main.py --full --use_reco_mass --copy_eos --tag="UpdatedSelection_withTriggerReweight" &> logs/log_reco_newSelection_triggerReweight.log
-# python3 main.py --plots --use_reco_mass --copy_eos --tag="UpdatedSelection_withTriggerReweight"
