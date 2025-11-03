@@ -59,7 +59,7 @@ class BackgroundAnalysis:
         
         # Import mass variable from signal workspace (following create_dataset.py pattern)
         suffix = "" if not self.config.use_reduced_mass else "_reducedMass"
-        signal_ws_file = f'../../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
+        signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
         
         if not os.path.exists(signal_ws_file):
             print(f"❌ Signal workspace not found: {signal_ws_file}")

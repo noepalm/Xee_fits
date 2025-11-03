@@ -81,9 +81,9 @@ class DatasetCreator:
         suffix = "" if not use_reduced_mass else "_reducedMass"
         # TODO FIXME: all file names are hardcoded. Write them in common config file.
         if self.use_reweighting:
-            self.signal_ws_file = f'../../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
         else:
-            self.signal_ws_file = f'../../signal_modelling/workspaces/signal_model_no_reweight{suffix}.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_no_reweight{suffix}.root'
         
         # Luminosity and cross-section data
         self.luminosity = 7.98 * 1e3  # pb-1
