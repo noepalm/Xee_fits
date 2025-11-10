@@ -18,9 +18,9 @@ if len(args.input_cards) != len(args.region):
     raise ValueError(f"Number of input_cards ({len(args.input_cards)}) must match number of regions ({len(args.region)})")
 
 limit_bounds = {
-    "region0" : (0, 2.2),
+    "region0" : (0.4, 1.8),
     "region1" : (2.2, 4.0),
-    "region2" : (4.0, 10.8),
+    "region2" : (4.4, 10.8),
 }
 
 # Create mapping from region to input_cards folder
@@ -143,6 +143,19 @@ expected_84 = np.array([float(r_values[mass]["expected_84"]) for mass in sorted(
 expected_2p5 = np.array([float(r_values[mass]["expected_2p5"]) for mass in sorted(r_values.keys(), key=float)])
 expected_97p5 = np.array([float(r_values[mass]["expected_97p5"]) for mass in sorted(r_values.keys(), key=float)])
 
+# TEMPORARY: remove mass points in gap regions
+masses_to_remove = [1.9, 2.0, 2.1, 4.1, 4.2, 4.3]
+for mass in masses_to_remove:
+    if mass in masses:
+        idx = masses.index(mass_to_remove)
+        masses.pop(idx)
+        observed.pop(idx)
+        expected_50 = np.delete(expected_50, idx)
+        expected_16 = np.delete(expected_16, idx)
+        expected_84 = np.delete(expected_84, idx)
+        expected_2p5 = np.delete(expected_2p5, idx)
+        expected_97p5 = np.delete(expected_97p5, idx)
+
 # plt.plot(masses, observed, color="k", marker='o', label="Observed", zorder = 10)
 plt.plot(masses, expected_50, color="k", label="Median expected", zorder = 5, linestyle='--', alpha = 0.3)
 plt.fill_between(masses, expected_16, expected_84, color = '#FFDF7Fff', label="68% expected", zorder = 3)
@@ -166,7 +179,14 @@ if len(args.region) > 1:
     
     # plot gray bands for missing regions
     for lower, upper in missing_regions:
-        plt.axvspan(lower, upper, color='gray', alpha=0.8, zorder=999)
+        plt.axvspan(lower - 0.08, upper + 0.07, color='lightgray', alpha=1, zorder=5)
+
+# Set axes zorder to bring them above the shaded regions
+ax.set_axisbelow(False)
+ax.spines['bottom'].set_zorder(999)
+ax.spines['left'].set_zorder(999)
+ax.spines['top'].set_zorder(999)
+ax.spines['right'].set_zorder(999)
 
 hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
 plt.xlabel("M(Zd) [GeV]")
@@ -281,7 +301,14 @@ if len(args.region) > 1:
     
     # plot gray bands for missing regions
     for lower, upper in missing_regions:
-        plt.axvspan(lower, upper, color='gray', alpha=0.8, zorder=999)
+        plt.axvspan(lower - 0.08, upper + 0.07, color='lightgray', alpha=1, zorder=5)
+
+# Set axes zorder to bring them above the shaded regions
+ax.set_axisbelow(False)
+ax.spines['bottom'].set_zorder(999)
+ax.spines['left'].set_zorder(999)
+ax.spines['top'].set_zorder(999)
+ax.spines['right'].set_zorder(999)
 
 hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
 plt.xlabel("M(X) [GeV]")
@@ -333,7 +360,14 @@ if len(args.region) > 1:
     
     # plot gray bands for missing regions
     for lower, upper in missing_regions:
-        plt.axvspan(lower, upper, color='gray', alpha=0.8, zorder=999)
+        plt.axvspan(lower - 0.08, upper + 0.07, color='lightgray', alpha=1, zorder=5)
+
+# Set axes zorder to bring them above the shaded regions
+ax.set_axisbelow(False)
+ax.spines['bottom'].set_zorder(999)
+ax.spines['left'].set_zorder(999)
+ax.spines['top'].set_zorder(999)
+ax.spines['right'].set_zorder(999)
 
 hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
 plt.xlabel("M(X) [GeV]")

@@ -31,7 +31,7 @@ cb = ch.CombineHarvester()
 # increase verbosity for debugging
 cb.SetVerbosity(5)
 
-input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/without_region_overlap/' # datasets/without_region_overlap for old files
+input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/nanov15/' # datasets/without_region_overlap for old files
 # input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/forPresentation_11062025/'
 
 if (args.bkg_x2 and not args.no_reweight):
@@ -94,6 +94,10 @@ elif args.region == "region2":
     bkg_procs = {
         'ee': ['dy', 'upsilon1s']
     }
+elif args.region == "region0":
+    bkg_procs = {
+        'ee': ['dy', 'phi', 'omega', 'eta']
+    }
 
 sig_procs = ['Zd']
 
@@ -118,8 +122,8 @@ elif args.cat == "inclusive":
         ]
     }
 
-# masses = [f"{v:.1f}" for v in np.arange(0.1, 11.1, 0.1)]
-masses = [f"{v:.1f}" for v in np.arange(0.5, 10.5, 0.1)]
+masses = [f"{v:.1f}" for v in np.arange(0.1, 11.1, 0.1)]
+# masses = [f"{v:.1f}" for v in np.arange(0.5, 10.5, 0.1)]
 # masses = ch.ValsFromRange('3.0:10.0|2.0') # can't specify number of digits after the point
 # masses = [f"M{mass:.1f}".replace(".", "p") for mass in np.arange(0.5, 10.5, 0.2)] # for old model naming convention
 

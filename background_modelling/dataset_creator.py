@@ -64,10 +64,13 @@ class DatasetCreator:
         if use_jpsi:
             self.filepath = fit_region.background_resonant_data
         else:
-            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/'
+            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/'
 
         if use_reweighting:
-            self.filepath += 'base_8_TriggerPSReweight/'
+            if fit_region.name == "region0" and use_jpsi:
+                self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
+            else:
+                self.filepath += 'base_8_TriggerPSReweight/'
         else:
             self.filepath += 'base_7_ID/'
 
@@ -191,7 +194,7 @@ class DatasetCreator:
         category_events = {cat: 0 for cat in self.category_names}
         
         for filename in os.listdir(self.filepath):
-            if not filename.endswith('.root') or "DoubleElectronNANO" in filename:
+            if not filename.endswith('.root') or "DoubleElectronNANO" in filename: #skip data files
                 continue
                 
             print(f"  Processing: {filename}")

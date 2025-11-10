@@ -739,7 +739,17 @@ class BackgroundFitter:
         
         for model_name, model in self.resonant_backgrounds.items():
             print(f"DEBUG: resonant background model {model_name}: {model}", flush=True)
-            self.output_workspace.Import(model, ROOT.RooFit.RenameVariable(model.GetName(), f"{model_name}{category_label}"))
+
+            # NEW APPROACH
+            # Clone the model with a new name before importing
+            new_name = f"{model_name}{category_label}"
+            model_clone = model.Clone(new_name)
+            self.output_workspace.Import(model_clone, ROOT.RooFit.RecycleConflictNodes())            
+
+            # # OLD APPROACH
+            # # Rename pdf inline while importing -- stopped working at some point
+            # self.output_workspace.Import(model, ROOT.RooFit.RenameVariable(model.GetName(), f"{model_name}{category_label}"))
+
             print(f"  ✅ Added {model_name} model: {model_name}{category_label}")
 
         # # Import resonant background models

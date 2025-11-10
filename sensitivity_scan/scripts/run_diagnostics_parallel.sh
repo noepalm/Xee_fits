@@ -73,7 +73,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set output folder based on reweighting setting
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid_debug"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
 if [ "$USE_REWEIGHT" = true ]; then
     OUTFOLDER="${OUTFOLDER}_reweight_categories"
 else
@@ -139,10 +139,10 @@ get_all_category_ids() {
 # however, min/max mass range is tighter due to boundary fits being unreliable
 case "$REGION" in
     "region0")
-        MIN_MASS=0
-        MIN_MASS_LIMIT=0
+        MIN_MASS=0.3            # was 0.2
+        MIN_MASS_LIMIT=0.4      # was 0.4
         MAX_MASS=2.0
-        MAX_MASS_LIMIT=2.2
+        MAX_MASS_LIMIT=1.8
         ;;
     "region1")
         MIN_MASS=2.0

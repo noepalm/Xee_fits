@@ -26,6 +26,7 @@ f1 = ROOT.TFile.Open(args.input, "READ")
 m = f1.Get("w").var("mass")
 m_min = m.getMin()
 m_max = m.getMax()
+print(f"Mass range: {m_min} - {m_max}")
 dataset = f1.Get("w").data("data_obs")
 
 # finally, retrieve total S+B fit distribution from last file
@@ -39,16 +40,29 @@ f2 = ROOT.TFile.Open(args.fit_file, "READ")
 # jpsi_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/jpsi").first().getValV()
 # total_n = f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/total_background").first().getValV()
 
-if args.region == "region1":
-    resonant_bkgs = ["jpsi", "psi2s"]
-elif args.region == "region2":
-    resonant_bkgs = ["upsilon1s"]
-else:
-    resonant_bkgs = []
+# Define region-specific configurations
+region_config = {
+    "region0": {
+        "resonant_bkgs": ["phi", "omega", "eta"],
+        "bkg_labels": ["DY", "phi", "omega", "eta"],
+        "all_labels": ["phi", "omega", "eta", "DY", "Signal", "Total S+B"]
+    },
+    "region1": {
+        "resonant_bkgs": ["jpsi", "psi2s"],
+        "bkg_labels": ["DY", "J/#psi", "#psi(2S)"],
+        "all_labels": ["J/#psi", "#psi(2S)", "DY", "Signal", "Total S+B"]
+    },
+    "region2": {
+        "resonant_bkgs": ["upsilon1s"],
+        "bkg_labels": ["DY", "#Upsilon(1S)"],
+        "all_labels": ["#Upsilon(1S)", "DY", "Signal", "Total S+B"]
+    }
+}
 
+resonant_bkgs = region_config[args.region]["resonant_bkgs"]
 all_bkgs = ["dy"] + resonant_bkgs + ["total_background"]
 bkg_components = ["dy"] + resonant_bkgs
-bkg_component_labels = ["DY", "J/psi", "psi(2S)"] if args.region == "region1" else ["DY", "Upsilon(1S)"]
+bkg_component_labels = region_config[args.region]["bkg_labels"]
 
 bkgs = {bkg_name : f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/{bkg_name}") for bkg_name in all_bkgs}
 bkg_norms = {bkg_name : f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/{bkg_name}").first().getValV() for bkg_name in all_bkgs}
@@ -121,6 +135,7 @@ data_h.Sumw2()
 chi2 = bkgs["total_background"].Chi2Test(data_h, "UU CHI2")
 n_free_params = f1.Get("w").pdf("model_b").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
 reduced_chi2 = chi2 / (bkgs["total_background"].GetNbinsX() - 1 - n_free_params)
+print("DEBUG: chi2 =", chi2, "nbins =", bkgs ["total_background"].GetNbinsX(), "n_free_params =", n_free_params, "reduced_chi2 =", reduced_chi2)
 
 # Make legend
 legend = ROOT.TLegend(0.2, 0.15, 0.5, 0.5)
@@ -140,6 +155,8 @@ if args.region == "region1":
     frame.SetMinimum(0.1)
 elif args.region == "region2":
     frame.SetMinimum(10)
+elif args.region == "region0":
+    frame.SetMinimum(1)
 
 frame.SetMaximum(data_h.GetMaximum() * 5)
 
@@ -195,7 +212,7 @@ for ext in ['png', 'pdf']:
 all_funcs = resonant_bkgs + ["dy", "Zd", "total"]
 all_distros = {name: f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/{name}") for name in all_funcs}
 all_norms = {name: f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/{name}").first().getValV() for name in all_funcs}
-all_distro_labels = ["J/psi", "psi(2S)", "DY", "Signal", "Total S+B"] if args.region == "region1" else ["Upsilon(1S)", "DY","Signal", "Total S+B"]
+all_distro_labels = region_config[args.region]["all_labels"]
 
 # total_distro = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/total")
 # dy_bkg = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/dy")
@@ -274,6 +291,8 @@ if args.region == "region1":
     frame.SetMinimum(0.1)
 elif args.region == "region2":
     frame.SetMinimum(10)
+elif args.region == "region0":
+    frame.SetMinimum(1)
 
 frame.SetMaximum(data_h.GetMaximum() * 5)
 
@@ -303,7 +322,7 @@ for i in range(all_distros["total"].GetNbinsX()):
     data_y = data_h.GetBinContent(i + 1)
     data_y_err = data_h.GetBinError(i + 1)
 
-    print(f"DEBUG: Bin {i+1}: x = {x}, y = {y}, data_y = {data_y}, data_y_err = {data_y_err}", flush = True)
+    # print(f"DEBUG: Bin {i+1}: x = {x}, y = {y}, data_y = {data_y}, data_y_err = {data_y_err}", flush = True)
 
     pull_value = 0
     if data_y_err > 0:

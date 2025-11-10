@@ -95,7 +95,7 @@ class BackgroundPlotter:
         # Draw everything
         frame.Draw()
         # change minimum to 1
-        frame.SetMinimum(1)
+        frame.SetMinimum(20)
         frame.GetXaxis().SetTitle("m(ee) [GeV]")
         legend.Draw()
         
@@ -359,28 +359,28 @@ class BackgroundPlotter:
         print("DEBUG: resonant combined model = ", self.fitter.resonant_combined_model, flush=True)
         self.fitter.resonant_combined_model.plotOn(frame_resonant,
                     ROOT.RooFit.LineColor(ROOT.kBlack), 
-                    ROOT.RooFit.Name("resonant_combined_model"),
-                    ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
+                    ROOT.RooFit.Name("resonant_combined_model"))
+                    # ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
         
         # Plot components
-        print("DEBUG: plotting J/psi and psi2S models", flush=True)
+        # print("DEBUG: plotting J/psi and psi2S models", flush=True)
         print("DEBUG: self.fitter.resonant_backgrounds = ", self.fitter.resonant_backgrounds, flush=True)
-        jpsi_model = self.fitter.resonant_backgrounds.get("jpsi")
-        psi2s_model = self.fitter.resonant_backgrounds.get("psi2s")
+        # jpsi_model = self.fitter.resonant_backgrounds.get("jpsi")
+        # psi2s_model = self.fitter.resonant_backgrounds.get("psi2s")
 
-        if jpsi_model:
-            self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                        ROOT.RooFit.Components(jpsi_model.GetName()),
-                        ROOT.RooFit.LineColor(ROOT.kRed),
-                        ROOT.RooFit.Name("jpsi_model"),
-                        ROOT.RooFit.NormRange("unblinded"))
+        # if jpsi_model:
+        #     self.fitter.resonant_combined_model.plotOn(frame_resonant,
+        #                 ROOT.RooFit.Components(jpsi_model.GetName()),
+        #                 ROOT.RooFit.LineColor(ROOT.kRed),
+        #                 ROOT.RooFit.Name("jpsi_model"),
+        #                 ROOT.RooFit.NormRange("unblinded"))
         
-        if psi2s_model:
-            self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                        ROOT.RooFit.Components(psi2s_model.GetName()),
-                        ROOT.RooFit.LineColor(ROOT.kBlue),
-                        ROOT.RooFit.Name("psi2s_model"),
-                        ROOT.RooFit.NormRange("unblinded"))
+        # if psi2s_model:
+        #     self.fitter.resonant_combined_model.plotOn(frame_resonant,
+        #                 ROOT.RooFit.Components(psi2s_model.GetName()),
+        #                 ROOT.RooFit.LineColor(ROOT.kBlue),
+        #                 ROOT.RooFit.Name("psi2s_model"),
+        #                 ROOT.RooFit.NormRange("unblinded"))
 
         print(f"DEBUG: plotting components: {self.config.chosen_fit_region.backgrounds}", flush=True)
         
@@ -389,10 +389,10 @@ class BackgroundPlotter:
         for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
             print(f"DEBUG: resonant model = {model.GetName()}", flush=True)
             self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                        ROOT.RooFit.Components(model.GetName()),
+                        ROOT.RooFit.Components(model.GetName().split("_cat_")[0]),
                         ROOT.RooFit.LineColor(colors[idx]),
-                        ROOT.RooFit.Name(model_name),
-                        ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
+                        ROOT.RooFit.Name(model_name))
+                        # ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
         
         # Draw frame
         frame_resonant.Draw()

@@ -33,3 +33,7 @@ python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_
                                                   "fitDiagnostics_grid_reweight_categories/mu0/etaCombination/" \
                                   --region "region2"
 
+# region 0 (excluding dR categories bc of low stats in low dR region)
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_categories/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories/mu0/etaCombination/" \
+                                  --region "region0"

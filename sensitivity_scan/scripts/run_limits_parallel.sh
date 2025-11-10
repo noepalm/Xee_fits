@@ -158,8 +158,8 @@ get_all_category_ids() {
 # however, min/max mass range is tighter due to boundary fits being unreliable
 case "$REGION" in
     "region0")
-        MIN_MASS=0
-        MIN_MASS_LIMIT=0
+        MIN_MASS=0.3            # was 0.2
+        MIN_MASS_LIMIT=0.5      # was 0.4
         MAX_MASS=2.0
         MAX_MASS_LIMIT=1.8
         ;;
@@ -189,23 +189,34 @@ get_points_for_mass() {
     
     case "$region" in
         "region0")
-            # Region 0: 0-2.0 GeV
-            # TODO: edit
-            # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
-            if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
-                echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15"
-            elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
-                echo "0.01 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.27 0.3 0.35 0.4 0.5 0.9 1 10"
+            # # Region 0: 0-2.0 GeV
+            # if (( $(echo "$mass >= 0.7 && $mass < 0.9" | bc -l) )); then
+            #     echo "0.05 0.1 0.2 0.3 0.5 0.8 0.9 0.92 0.9 0.95 0.97 1 1.1 1.3 1.5 1.7 1.9 2 2.1 2.2 2.5 3 4 4.1 4.2 4.5 4.7 4.9 5 7 10 15 20"
+            # elif (( $(echo "$mass >= 0.9 && $mass < 1.1" | bc -l) )); then
+            #     echo "0.3 0.5 0.8 0.9 0.92 0.9 0.95 0.97 1 2 3 4 4.1 4.2 4.4 4.5 4.55 4.6 4.65 4.7 4.9 5 5.05 5.1 5.15 5.25 5.5 5.75 6 6.25 6.5 6.75 7 10 15 20"
+            # elif (( $(echo "$mass >= 1.1 && $mass < 1.5" | bc -l) )); then
+            #     echo "1 1.2 1.5 2 3 4 5 5.005 5.01 5.02 5.03 5.05 5.15 5.25 5.5 5.75 5.9 6 9 10"
+            # elif (( $(echo "$mass < 0.7" | bc -l) )); then
+            #     echo "0.9 0.925 0.93 0.94 0.95 0.965 0.975 0.98 0.99 1 1.05 1.1 1.2 1.25 1.27 1.28 1.29 1.3 1.31 1.325 1.35 1.375 1.4 1.45 1.5 2 3 4 4.5 5 5.5 6 9 10"
+            # else
+            #     echo "0.8 0.85 0.87 0.89 0.9 0.925 0.93 0.94 0.95 0.965 0.975 0.98 0.99 1 1.05 1.1 1.2 1.25 1.27 1.28 1.29 1.3 1.31 1.325 1.35 1.375 1.4 1.45 1.5 2 3 4 5 6 9 10"
+            # fi
+
+            # # THIS WORKS but gives weird results:
+            # echo "0.001 0.005 0.007 0.01 0.02 0.05 0.07 0.1 0.2 0.5 0.8 0.85 0.9 0.925 0.95 0.975 0.98 0.99 1 1.1 1.25 1.3 1.5 1.75 2 3 4 5 6 9 10"
+
+            # NEW ONE AFTER rMin = 0!
+            if (( $(echo "$mass < 0.6" | bc -l) )); then
+                echo "0.0005 0.001 0.002 0.0025 0.00275 0.003 0.0035 0.004 0.005 0.007 0.008 0.009 0.01 0.0125 0.015 0.0175 0.018 0.02 0.021 0.023 0.025 0.027 0.028 0.03 0.05 "
             else
-                # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
-                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 15 20"
+                echo "0.007 0.01 0.015 0.017 0.02 0.0225 0.025 0.03 0.035 0.04 0.045 0.05 0.55 0.06 0.065 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.15 0.16 0.17 0.19 0.2 0.21 0.23 0.25 0.27 0.29 0.3 0.32 0.33 0.34 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.45 0.5 0.55 0.57 0.6 0.62 0.65 0.7 0.8 0.1 2 5 10"
             fi
             ;;
         "region1")
             # Region 1: 2.0-4.2 GeV
             # For mass close to 3.1 (between 3.05 and 3.15), scan higher values
             if (( $(echo "$mass >= 3.05 && $mass <= 3.15" | bc -l) )); then
-                echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 6 10 15"
+                echo "1 1.5 1.7 1.9 2.1 2.3 2.5 2.7 3 3.1 3.3 3.5 3.7 3.9 4 4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.8 4.9 5.0 5.1 5.15 5.17 5.18 5.19 5.2 5.3 5.4 5.5 5.7 5.75 5.8 5.85 5.9 5.95 6 6.1 6.25 6.3 6.5 6.75 10 15"
                 # echo "1 1.5 2 2.5 3.5 4 4.2 4.3 4.6 4.7 5.1 5.4 6 7"
                 # echo "5 5.1 5.2 5.3 5.4 5.5 6 6.5 7 7.5 8 8.5 9 10 15 20"
             elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
@@ -224,7 +235,7 @@ get_points_for_mass() {
             elif (( $(echo "$mass >= 8 && $mass < 9" | bc -l) )); then
                 echo "0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
             elif (( $(echo "$mass >= 9 && $mass < 12" | bc -l) )); then
-                echo "1 2 3 4 5 6 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 110"
+                echo "1 2 3 4 5 6 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 105 110 115 120"
             else
                 echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3"
             fi
@@ -269,11 +280,11 @@ run_combine_limits() {
     points=$(get_points_for_mass "$mass" "$REGION")
 
     # =============================================================
-    # ALTERNATIVE: SIMPLE AsymptoticLimits (no grid)
-    #
-    # Uncomment one of the blocks below and comment out the grid block
-    # further down if you want to run the classic single AsymptoticLimits
-    # instead of the grid + getLimitFromGrid workflow.
+    # # ALTERNATIVE: SIMPLE AsymptoticLimits (no grid)
+    # #
+    # # Uncomment one of the blocks below and comment out the grid block
+    # # further down if you want to run the classic single AsymptoticLimits
+    # # instead of the grid + getLimitFromGrid workflow.
     #
     # if [[ -n "$freeze_params" ]]; then
     #     combine -M AsymptoticLimits "$input_root" --rMin 0 --rMax 20 \
@@ -281,7 +292,6 @@ run_combine_limits() {
     #             --freezeParameters "$freeze_params" \
     #             -n "_${label}${FIT_TAG_LABEL}" \
     #             -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
-    # fi
     # else
     #     # OLD IMPLEMENTATION: uses original workspace
     #     combine -M AsymptoticLimits "$input_root" \
@@ -301,19 +311,32 @@ run_combine_limits() {
 
     ### LIMIT FROM GRID
     # Single-point runs with caching
+
+    # Adjust rMin/rMax for high mass points
+    local rmin_val=0
+    if (( $(echo "$mass > 9" | bc -l) )); then
+        rmin_val=1
+        echo "Setting rMin to $rmin_val for mass $mass"
+    fi
+    # if (( $(echo "$mass == 5.0" | bc -l) )); then
+    #     rmin_val=1
+    #     echo "Setting rMin to $rmin_val for mass $mass"
+    # fi
+
     local rmax_val=50
     if (( $(echo "$mass > 9" | bc -l) )); then
-        rmax_val=110
+        rmax_val=120
         echo "Setting rMax to $rmax_val for mass $mass"
-    fi    
+    fi
+
     for point in $points; do
         local output_file="higgsCombine_${label}${FIT_TAG_LABEL}_point_${point}.AsymptoticLimits.mH120.root"
         if [ -f "$output_file" ]; then
             echo "    Point $point already exists for target $label, skipping..."
         else 
-        # RMAX WAS 110
             echo "    Running point $point for target $label..."
-            combine -M AsymptoticLimits "$input_root" --rMin 1 --rMax $rmax_val \
+            # NB!! WAS USING --rMin 1 BEFORE
+            combine -M AsymptoticLimits "$input_root" --rMin $rmin_val --rMax $rmax_val \
                     --singlePoint "$point" \
                     -n "_${label}${FIT_TAG_LABEL}_point_$point" \
                     -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
@@ -328,17 +351,12 @@ run_combine_limits() {
         
     hadd -f limits_from_grid_${label}.root "${grid_files[@]}"
 
-    # Adjust rMin for high mass points
-    local rmin_val=0
-    if (( $(echo "$mass > 9" | bc -l) )); then
-        rmin_val=1
-        echo "Setting rMin to $rmin_val for mass $mass"
-    fi
-
     combine -M AsymptoticLimits "$input_root" --rMin $rmin_val --rMax $rmax_val \
             --getLimitFromGrid limits_from_grid_${label}.root \
             -n "_${label}${FIT_TAG_LABEL}" \
             -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
+
+    # =============================================================
 
     tail -n 10 "fitAsymptotic_${label}${FIT_TAG_LABEL}.log"
 
@@ -386,7 +404,7 @@ else
 fi
 
 # copy input .root file
-cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/
+cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/Xee_ee.input.${REGION}.root
 
 process_dir() {
     dir="$1"
@@ -403,11 +421,34 @@ process_dir() {
         return
     fi
 
-    # # TEMPORARY: run only on 3.1
+    # TEMPORARY: run only on 3.1
     # if (( $(echo "$mass != 3.1" | bc -l) )); then
     #     echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
     #     return
     # fi    
+
+    # # TEMPORARY: run only on 2.7 (region2 failing point)
+    # if (( $(echo "$mass != 2.7" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
+    #     return
+    # fi    
+
+    # # TEMPORARY: run only on 5.0 (region2 failing point)
+    # if (( $(echo "$mass != 5.0" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not 3.1 (TEMPORARY)"
+    #     return
+    # fi    
+
+    # if (( $(echo "$mass < 0.7 || $mass > 1.1" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not within 0.7 -- 1.1 (TEMPORARY)"
+    #     return
+    # fi
+
+    # if (( $(echo "$mass <= 9" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not within 0.7 -- 1.1 (TEMPORARY)"
+    #     return
+    # fi
+
 
     echo "Processing directory: $dir"
 

@@ -2,7 +2,8 @@ import ROOT
 import os
 import argparse
 
-f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
+# f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
+f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
 
 t = f.Get("Events")
 
@@ -74,3 +75,35 @@ frame.SetMaximum(frame.GetMaximum() * 1.6)
 
 canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.png"))
 canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.pdf"))
+
+# make zoom in region 0-2 GeV (i.e. region 0)
+canvas_zoom = ROOT.TCanvas("canvas_zoom", "canvas_zoom", 1000, 600)
+canvas_zoom.SetGrid()
+
+xmin = 0
+xmax = 2
+
+frame_zoom = m.frame(
+    ROOT.RooFit.Bins(100),
+    ROOT.RooFit.Range(xmin, xmax),
+)
+frame_zoom.SetTitle("")
+frame_zoom.GetXaxis().SetTitle("m(ee) [GeV]")
+
+data.plotOn(frame_zoom,
+    ROOT.RooFit.Name("data"),
+    ROOT.RooFit.MarkerColor(ROOT.kBlack),
+    ROOT.RooFit.MarkerStyle(20),
+    ROOT.RooFit.MarkerSize(0.6),
+    # ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2),
+)
+
+# set log scale y
+canvas_zoom.SetLogy()
+
+frame_zoom.Draw()
+frame_zoom.SetMinimum(1e1)
+frame_zoom.SetMaximum(frame_zoom.GetMaximum() * 1.6)
+
+canvas_zoom.SaveAs(os.path.join(outfolder, f"data_region0.png"))
+canvas_zoom.SaveAs(os.path.join(outfolder, f"data_region0.pdf"))

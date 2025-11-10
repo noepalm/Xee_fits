@@ -121,6 +121,11 @@ effs_dict = {
 # effs_err = np.array([0.055, 0.155, 0.179, 0.181, 0.2, 0.143])
 xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07]) # pb
 xsecs_err = xsecs * 0.0015 # oom for available points
+
+# TODO: update with new mass points
+# xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07]) # pb
+# xsecs_err = xsecs * 0.0015 # oom for available points
+
 xsecs_old = np.array([3.396, 2.679, 1.952, 1.910, 1.865, 1.834]) # pb
 xsecs_err_old = np.array([0.01646, 0.0095, 0.003978, 0.003451, 0.001997, 0.001002])
 
@@ -225,16 +230,18 @@ def plot_xsecs(fit_func, fit_params, outname = "xsec_vs_mass", use_old = False):
 
     ax.errorbar(
         masses, xsecs_to_use, yerr=xsecs_err_to_use, fmt='o',
-        markersize=8, capsize=7, elinewidth=2
+        markersize=8, capsize=7, elinewidth=2, label=r"$\sigma$(pp → $Z_D$) · BR($Z_D$ → ee)"
     )
 
     y = fit_func(x, *fit_params)
-    ax.plot(x, y, label='Fit', linewidth=3)
+    ax.plot(x, y, label='Exponential fit', linewidth=2, linestyle="--")
 
     ax.set_xlabel("M($Z_D$) [GeV]")
     ax.set_ylabel("$\sigma$ [pb]")
     ax.set_ylim(0, 5 if use_old else 45)
     ax.grid()
+
+    ax.legend()
 
     for ext in [".png", ".pdf"]:
         plt.savefig(os.path.join(outfolder, outname + ext))

@@ -1,5 +1,9 @@
 python main_background_analysis.py --full_analysis --bkg_function 0 \
                                    --fit_jpsi_prompt --floating_resonant \
+                                   --fit_region="region0" &> logs/reweight_cats_region0_log
+
+python main_background_analysis.py --full_analysis --bkg_function 0 \
+                                   --fit_jpsi_prompt --floating_resonant \
                                    --fit_region="region1" &> logs/reweight_cats_region1_log
 
 python main_background_analysis.py --full_analysis --bkg_function 0 \
@@ -24,3 +28,26 @@ python main_background_analysis.py --full_analysis --bkg_function 0 \
                                    --fit_jpsi_prompt --floating_resonant \
                                    --create_dataset \
                                    --fit_region="region1" --tag="debug_test" &> logs/reweight_cats_region1_debug_test_log
+
+python main_background_analysis.py --full_analysis --bkg_function 0 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --tag="debug_test" \
+                                   --fit_region="region0" &> logs/reweight_cats_region0_debug_log
+
+# ---------------------------------
+# FULL STATS TEST
+
+python main_background_analysis.py --full_analysis --bkg_function 0 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --tag="nanov15" \
+                                   --fit_region="region0" &> logs/reweight_cats_region0_nanov15_log
+
+python main_background_analysis.py --full_analysis --bkg_function 0 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --tag="nanov15" \
+                                   --fit_region="region1" &> logs/reweight_cats_region1_nanov15_log
+
+python main_background_analysis.py --full_analysis --bkg_function 0 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --tag="nanov15" \
+                                   --fit_region="region2" &> logs/reweight_cats_region2_nanov15_log

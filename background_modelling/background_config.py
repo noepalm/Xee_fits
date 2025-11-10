@@ -118,37 +118,40 @@ class BackgroundModelConfig:
     def _define_fit_regions(self) -> Dict[str, FitRegion]:
         """Define the available fit regions"""
         regions = {
+            "region0": FitRegion(
+                name="region0",
+                display_name="Left Background Region (0.2-2.0 GeV)",
+                range=(0.3, 2.0),
+                sidebands=[
+                    (0.3, 0.9),
+                    (1.2, 2)],  # Entire region is sideband
+                backgrounds=["phi", "omega", "eta"],
+                background_fractions=[0.65, 0.25], # non-recursive fractions
+                background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_minBias_resonant_nanov15/zsnap/era2023/",
+                description="Low mass background region",
+            ),
             "region1": FitRegion(
                 name="region1",
-                display_name="Central Region (2.0-4.6 GeV)", #was 4.2
-                range=(2.0, 4.5), 
+                display_name="Central Region (2.0-4.2 GeV)",
+                range=(2.0, 4.2), #4.6 for overlap, 4.2 for strict
                 sidebands=[
                     (2.0, 2.6),    # Left sideband
                     (3.3, 3.5),    # Central sideband  
-                    (3.8, 4.5),    # Right sideband
+                    (3.8, 4.2),    # Right sideband
                 ],
                 backgrounds=["jpsi", "psi2s"],
                 background_fractions=[0.7],
                 background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Jpsi_reweight/zsnap/era2023/',
-                description="Main analysis region containing J/psi and psi(2S)"
-            ),
-            "region0": FitRegion(
-                name="region0",
-                display_name="Left Background Region (1.2-2.6 GeV)",
-                range=(0, 2.0),
-                sidebands=[
-                    (0, 0.9),
-                    (1.2, 2)],  # Entire region is sideband
-                description="Low mass background region"
+                description="Main analysis region containing J/psi and psi(2S)",
             ),
             "region2": FitRegion(
                 name="region2", 
                 display_name="Right Background Region (4.2-11.0 GeV)",
-                range=(3.8, 11),
+                range=(4.2, 11), #3.8 for overlap, 4.2 for strict
                 sidebands=[
-                    (3.8, 8.0),
+                    (4.2, 8.0),
                     (10.0, 11),
-                ], # Entire region is sideband #4.2, 8.0
+                ],
                 backgrounds=["upsilon1s"],
                 background_fractions=[],
                 background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Upsilon_reweight/zsnap/era2023/',
@@ -194,9 +197,14 @@ class BackgroundModelConfig:
         # Default values are for 'inclusive' category and used for all others unless overridden
         bernstein_inits_by_category = {
             "inclusive": {
-                "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6
+                # "region0" : [-0.03, 0.2, -0.2, 1.6, 2],
+                # "region0" : [0, 0.055, -0.25, 1.5, 1.5], #MANUALLY TUNED
+                "region0" : [0, 0.01, -0.07, 1.1, 1.45], #MANUALLY TUNED #2
+                # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6
+                "region1" : [2, 2.6, 1.14, 0.3, 0.2],  # the one above stopped working for region [2, 4.2]; this now does
                 # "region2" : [1.9, 0.73, -0.015, 0.11, 0.013],
                 "region2" : [1.7, 0.23, 0.13, -0.003, 0.00012],
+                # "region2" : [4.4, 0.78, 0.74, 0.44, 0.0045], #FOR NANOV15
             },
             # Add category-specific overrides here as needed:
             # "etap0p6": [2.33352, 3.59166, -0.06610, 0.52400, 0.19075],  # WORKS FOR dRp0p3
@@ -325,6 +333,47 @@ class BackgroundModelConfig:
     def _define_resonant_models(self) -> Dict[str, Dict[str, Any]]:
         """Define resonant background models (J/psi, psi2s)"""
         models = {
+            "eta" : {
+                "resonant_bkg_template_name": "Zd_M0.4",
+                "mass_range": (0.2, 0.6),
+                "initial_params" : {
+                    "mean" : 0.36,
+                    "sigma" : 0.05,
+                    "alphaL" : 1,
+                    "nL" : 20,
+                    "alphaR" : 2,
+                    "nR" : 20,
+                },
+                "param_limits_override": {"mean": (0.3, 0.5)},
+                "title": "#eta"
+            },
+            "omega" : {
+                "resonant_bkg_template_name": "Zd_M0.8",
+                "mass_range": (0.5, 1),
+                "initial_params" : {
+                    "mean" : 0.78,
+                    "sigma" : 0.02,
+                    "alphaL" : 1,
+                    "nL" : 8,
+                    "alphaR" : 1,
+                    "nR" : 4,
+                },
+                "title": "#omega"
+            },
+            "phi" : {
+                "resonant_bkg_template_name": "Zd_M1.1",
+                "mass_range": (0.8, 1.3),
+                "initial_params" : {
+                    "mean" : 1,
+                    "sigma" : 0.025,
+                    "alphaL" : 1.5,
+                    "nL" : 1.5,
+                    "alphaR" : 3,
+                    "nR" : 4,
+                },
+                # Optional: "param_limits_override": {},
+                "title": "#phi"
+            },
             "jpsi": {
                 "resonant_bkg_template_name": "Zd_M3.1",
                 "mass_range": (3.05, 3.12),
@@ -336,6 +385,7 @@ class BackgroundModelConfig:
                     "alphaR": 1.5,
                     "nR": 2.9,
                 },
+                # Optional: "param_limits_override": {},
                 "title": "J/#psi"
             },
             "psi2s": {
@@ -349,6 +399,7 @@ class BackgroundModelConfig:
                     "alphaR": 1,
                     "nR": 6,
                 },
+                # Optional: "param_limits_override": {},
                 "title": "#psi(2S)"
             },
             "upsilon1s": {
@@ -362,6 +413,7 @@ class BackgroundModelConfig:
                     "alphaR": 1,
                     "nR": 6,
                 },
+                # Optional: "param_limits_override": {},
                 "title": "Y(1S)"
             }
         }
@@ -377,9 +429,13 @@ class BackgroundModelConfig:
             # },
             "background_components": {
                 # with _param, everything is expressed as dataset max * <value>
-                "njpsi": {"init_param": 1, "min_param": 1e-4, "max_param": 1e2},    # J/psi background
+                "nphi" : {"init_param" : 0.02, "min_param" : 1e-6, "max_param" : 1}, # phi background
+                "nomega" : {"init_param" : 0.007, "min_param" : 1e-6, "max_param" : 1}, # omega background
+                "neta" : {"init_param" : 0.001, "min_param" : 1e-6, "max_param" : 1}, # eta background
+                "njpsi": {"init_param": 0.9, "min_param": 1e-4, "max_param": 1e2},    # J/psi background
                 "npsi2s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4},   # psi(2S) background
-                "nupsilon1s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
+                # "nupsilon1s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
+                "nupsilon1s": {"init_param": 0.1, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15
                 "ndy": {"init_param": 0.3, "min_param": 1e-4, "max_param": 1e4},     # Non-resonant background
             },
             "fractions": {

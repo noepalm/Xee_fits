@@ -39,10 +39,20 @@ for folder in os.listdir(outfolder):
                 for line in lines:
                     if "Best fit r" in line:
                         # format is: Best fit r: 0.00867265  -0.00176151/+0.00176533  (68% CL)
+                        # or:        Best fit r: 0.00867265  +-0.00176151  (68% CL)
                         parts = line.split("Best fit r: ")[1].split()
                         r_value = float(parts[0].strip())
-                        r_min = float(parts[1].split("/")[0].strip().strip("-"))
-                        r_plus = float(parts[1].split("/")[1].split()[0].strip())
+                        
+                        # Check if symmetric error (+-) or asymmetric (-/+)
+                        if "+-" in parts[1]:
+                            # Symmetric error: extract value after +-
+                            error_val = float(parts[1].split("+-")[1].strip())
+                            r_min = error_val
+                            r_plus = error_val
+                        else:
+                            # Asymmetric error: split by /
+                            r_min = float(parts[1].split("/")[0].strip().strip("-"))
+                            r_plus = float(parts[1].split("/")[1].split()[0].strip().strip("+"))
 
                         r = {
                             "r_value": r_value,
