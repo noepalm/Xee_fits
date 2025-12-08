@@ -5,7 +5,7 @@ from pathlib import Path
 
 # infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/combine/CMSSW_14_1_0_pre4/src/my_analysis/cards/ee/3.1")
 # infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_x100sgn/ee/2.5")
-infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_x2wgt/ee/3.5")
+infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards/cards_noReweight_x2wgt/ee/3.5")
 # infolder = Path("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards_noReweight_div100wgt/ee/2.4")
 
 

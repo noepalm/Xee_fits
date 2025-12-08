@@ -37,3 +37,92 @@ python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_
 python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_categories/mu0/inclusive/" \
                                                   "fitDiagnostics_grid_reweight_categories/mu0/etaCombination/" \
                                   --region "region0"
+
+
+# ====================================================================
+
+# Comparing limits with Bernstein vs. Chebyshev background functions
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_chebyshev/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_poly/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_overlap/mu0/inclusive/" \
+                                  --region "region0" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" \
+                                  --tag "altbkg"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_chebyshev/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_poly/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_overlap/mu0/inclusive/" \
+                                  --region "region1" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" \
+                                  --tag "altbkg"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_chebyshev/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_altbkg_poly/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_reweight_categories_nanov15_overlap/mu0/inclusive/" \
+                                  --region "region2" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" \
+                                  --tag "altbkg"
+
+# ====================================================================
+
+# Comparing binned vs unbinned
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_condor/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                  --region "region0" \
+                                  --labels "Unbinned" "Binned" \
+                                  --mu \
+                                  --tag "data_binned_vs_unbinned"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_condor/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                  --region "region1" \
+                                  --mu \
+                                  --labels "Unbinned" "Binned" \
+                                  --tag "data_binned_vs_unbinned"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_condor/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                  --region "region2" \
+                                  --mu \
+                                  --labels "Unbinned" "Binned" \
+                                  --tag "data_binned_vs_unbinned"
+
+# ====================================================================
+
+# Comparing envelope limits w/ individual bkgs
+
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_altbkg_chebyshev_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_altbkg_poly_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_envelope_binned/mu0/inclusive/" \
+                                  --region "region0" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" "Envelope" \
+                                  --tag "data_envelope"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_altbkg_chebyshev_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_altbkg_poly_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_envelope_binned/mu0/inclusive/" \
+                                  --region "region1" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" "Envelope" \
+                                  --tag "data_envelope"
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_altbkg_chebyshev_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_altbkg_poly_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_envelope_binned/mu0/inclusive/" \
+                                  --region "region1" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" "Envelope" \
+                                  --tag "data_envelope_97p5"
+
+
+python3 plot_limits_comparison.py --input_folders "fitDiagnostics_grid_data_altbkg_chebyshev_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_altbkg_poly_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_binned/mu0/inclusive/" \
+                                                  "fitDiagnostics_grid_data_envelope_binned/mu0/inclusive/" \
+                                  --region "region2" \
+                                  --labels "Chebyshev" "Polynomial" "Bernstein" "Envelope" \
+                                  --tag "data_envelope"

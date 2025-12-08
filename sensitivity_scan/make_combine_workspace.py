@@ -7,14 +7,21 @@ import ROOT as R
 import os
 import numpy as np
 import argparse
+from multiprocessing import Pool, cpu_count
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--data', action='store_true',
+                    help='Run on data instead of MinBias MC')
 parser.add_argument('--cat', type=str, default='inclusive', choices=["inclusive", "eta", "dR"],
                     help='Which category to process')
 parser.add_argument('--region', '-r', type=str, default='region1', choices=["region0", "region1", "region2"],
                     help='Which mass region to process (possibilities: region0: (0, 2), region1: (2, 4.6), region2: (4.6, 11))')
 parser.add_argument('--no_reweight', action='store_true',
                     help='Use non-reweighted datasets (refers to trigger reweighting only -- applies to both signal and background modelling)')
+parser.add_argument('--input_tag', type=str, default="",
+                    help='Tag used for dataset creation')
+parser.add_argument('--envelope', action='store_true',
+                    help='Use dataset with envelope of background functions.')
 parser.add_argument('--tag', type=str, default="",
                     help='Tag to append to output folder name')
 parser.add_argument('--signal_multiplier', '-s', type=float, default=1.0,
@@ -31,19 +38,26 @@ cb = ch.CombineHarvester()
 # increase verbosity for debugging
 cb.SetVerbosity(5)
 
-input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/nanov15/' # datasets/without_region_overlap for old files
-# input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/forPresentation_11062025/'
+if args.data:
+    input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/' # datasets/without_region_overlap for old files
+else:
+    input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/nanov15_overlap/' # datasets/without_region_overlap for old files
+    # input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/forPresentation_11062025/'
 
 if (args.bkg_x2 and not args.no_reweight):
     raise RuntimeError("Error: --bkg_x2 can currently only be used with --no_reweight")
 
 # add workspace
+sample_suffix = "_data" if args.data else "_minbias"
 binned_suffix = "_binned" if args.binned else ""
 reweight_suffix = "_noReweight" if args.no_reweight else ""
 bkg_scale_suffix = "_x2wgt" if args.bkg_x2 else ("_div100wgt" if args.bkg_div100 else "")
+input_tag_suffix = f"_{args.input_tag}" if args.input_tag != "" else ""
+data_suffix = "_data" if args.data else ""
+envelope_suffix = "_envelope" if args.envelope else ""
 
-dataset_name = f"dataset_minbias_{args.region}{binned_suffix}{bkg_scale_suffix}{reweight_suffix}_full.root"
-print(">> Using dataset:", dataset_name)
+dataset_name = f"dataset{sample_suffix}_{args.region}{binned_suffix}{bkg_scale_suffix}{reweight_suffix}{data_suffix}{input_tag_suffix}{envelope_suffix}_full.root"
+print(">> Using dataset:", dataset_name, flush = True)
 
 # dataset_name = "dataset_minbias_reweight_full.root" if not args.no_reweight else "dataset_minbias_noReweight_full.root"
 # if args.no_reweight and args.bkg_x2:
@@ -73,7 +87,8 @@ data = w.data("data_obs")
 # w.Import(data)
 
 # save luminosity of projection for later use
-lumi = R.RooRealVar("luminosity", "luminosity", 58.9)
+luminosity = 8.1842 if args.data else 58.9
+lumi = R.RooRealVar("luminosity", "luminosity", luminosity)
 lumi.setConstant(True)
 w.Import(lumi)
 
@@ -137,6 +152,9 @@ for era in eras:
 
 print('>> Adding systematics...')
 
+# # Discrete nuisance parameter for discrete profiling ("pdf_index")
+# cb.cp().backgrounds().AddSyst(cb, 'bkg_func_choice', 'discrete', ch.SystMap()(1))
+
 # # Luminosity uncertainty (flat 1%)
 # cb.cp().AddSyst(cb, 'lumi_2023', 'lnN', ch.SystMap()(1.01))
 
@@ -175,10 +193,10 @@ cb.ForEachProc(lambda p: p.set_rate(-1))
 #     w.var(f'Zd_M{p.mass()}_cat_{p.bin()}_expected').getValV() * lumi.getValV()/7.98
 # ))
 
-
+signal_yield_scaling = 1 if args.data else lumi.getValV()/7.98 * args.signal_multiplier 
 cb.cp().signals().ForEachProc(lambda p: p.set_rate(
-    w.var(f'Zd_cat_{p.bin()}_M{p.mass()}_expected').getValV() * lumi.getValV()/7.98 * args.signal_multiplier if args.cat != "inclusive" else
-    w.var(f'Zd_M{p.mass()}_expected').getValV() * lumi.getValV()/7.98 * args.signal_multiplier
+    w.var(f'Zd_cat_{p.bin()}_M{p.mass()}_expected').getValV() * signal_yield_scaling if args.cat != "inclusive" else
+    w.var(f'Zd_M{p.mass()}_expected').getValV() * signal_yield_scaling 
 ))
 
 # get background process rates from the workspace (saved as jpsi_expected, psi2s_expected, etc.)
@@ -223,7 +241,9 @@ writer = ch.CardWriter('$TAG/$MASS/$ANALYSIS_$CHANNEL_$BINID_$ERA.txt',
 # # write single datacard for all channels
 # cb.mass(["*"]).WriteDatacard('cards/cmb.txt', 'cards/cmb.input.root')
 
-outfolder = f"cards_{args.region}"
+sample_cards_suffix = "_data" if args.data else ""
+
+outfolder = f"cards/cards_{args.region}{sample_cards_suffix}"
 
 if args.no_reweight:
     outfolder += "_noReweight"
@@ -233,10 +253,39 @@ if args.tag != "":
 
 outfolder += binned_suffix
 
+print(f'>> Writing datacards to folder: {outfolder}', flush = True)
+
 writer.WriteCards(f'{outfolder}/cmb', cb)
 for chn in cb.channel_set():
     for bin in cb.cp().channel([chn]).bin_set():
         # Write cards for each channel and bin
         writer.WriteCards(f'{outfolder}/{chn}', cb.cp().channel([chn]).bin([bin]))
 
+# Also run text2workspace on the written datacards
+print('>> Converting datacards to workspaces...')
+
+def convert_datacard(args_tuple):
+    """Helper function to convert a single datacard to workspace."""
+    datacard_path, = args_tuple
+    cmd = f'text2workspace.py {datacard_path} -o {datacard_path.replace(".txt", ".root")}'
+    print(f'  >> Converting datacard to workspace: {datacard_path}', flush=True)
+    return os.system(cmd)
+
+# Collect all datacard paths
+datacard_paths = []
+for mass in masses:
+    for era in eras:
+        for chn in chns:
+            cat_ids = [cat[0] for cat in cats[chn+"_"+era]]
+            for cat_id in cat_ids:
+                datacard_path = f'{outfolder}/{chn}/{mass}/Xee_{chn}_{cat_id}_{era}.txt'
+                datacard_paths.append((datacard_path,))
+
+# Parallelize the conversion
+n_workers = min(cpu_count(), len(datacard_paths))
+print(f'  >> Using {n_workers} parallel workers for {len(datacard_paths)} datacards')
+with Pool(n_workers) as pool:
+    pool.map(convert_datacard, datacard_paths)
+
 print('>> Done!')
+

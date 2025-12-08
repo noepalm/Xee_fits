@@ -15,6 +15,7 @@ parser.add_argument('-f', '--fit_tags', type=str, nargs='*', default=[], help='F
 parser.add_argument('-l', '--labels', type=str, nargs='*', default=[], help='Labels for legend (defaults to category, i.e. last subfolder)')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
 parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"], help='Mass region (for labeling purposes)')
+parser.add_argument('-m', '--mu', action="store_true", help="Plot limits on mu rather than model-independent ones")
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
 args = parser.parse_args()
@@ -61,13 +62,14 @@ for fit_tag, folder, label in zip(fit_tags, input_folders, labels):
         r_values = pickle.load(f)
     
     masses = np.array(sorted([float(mass) for mass in r_values.keys()]))
-    expected_50 = np.array([float(r_values[mass]["expected_50_indep_accept"]) for mass in sorted(r_values.keys(), key=float)])
+    branch = "expected_50_indep_accept" if not args.mu else "expected_50"
+    expected_50 = np.array([float(r_values[mass][branch]) for mass in sorted(r_values.keys(), key=float)])
 
     plt.plot(masses, expected_50, label=label, marker='o')
 
 plt.yscale('log')
 plt.xlabel('M(X) [GeV]')
-plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]")
+plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]" if not args.mu else "$\mu$")
 hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
 
 plt.legend()

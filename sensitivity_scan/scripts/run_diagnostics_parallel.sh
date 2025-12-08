@@ -11,9 +11,11 @@ FIT_TAG=""
 FIT_TAG_LABEL="" # same but with _ in front
 CATEGORY_TYPE="eta"  # Default to eta categories
 REGION="region1"
-INPUT_FOLDER="cards"  # Default input folder
+INPUT_FOLDER="cards/cards"  # Default input folder
 USE_REWEIGHT=true     # Default to using reweighting
 PLOT_ONLY=false
+USE_DATA=false
+USE_BINNED=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --tag)
@@ -58,6 +60,16 @@ while [[ $# -gt 0 ]]; do
             echo "Only generating plots, skipping AsymptoticLimits runs."
             shift # past argument
             ;;
+        --data)
+            USE_DATA=true
+            echo "Running on data instead of MC."
+            shift # past argument
+            ;;
+        --binned)
+            USE_BINNED=true
+            echo "Using binned datasets."
+            shift # past argument
+            ;;
         *)
             # Check if there are actually arguments to process
             if [[ -n "$1" ]]; then
@@ -74,10 +86,16 @@ done
 
 # Set output folder based on reweighting setting
 OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
-if [ "$USE_REWEIGHT" = true ]; then
+if [ "$USE_DATA" = true ]; then
+    OUTFOLDER="${OUTFOLDER}_data"
+elif [ "$USE_REWEIGHT" = true ]; then
     OUTFOLDER="${OUTFOLDER}_reweight_categories"
 else
     OUTFOLDER="${OUTFOLDER}_noReweight"
+fi
+
+if [ "$USE_DATA" = true ]; then
+    INPUT_FOLDER="${INPUT_FOLDER}_data"
 fi
 
 # If tag is set and different from "", append it to input folder
@@ -140,19 +158,19 @@ get_all_category_ids() {
 case "$REGION" in
     "region0")
         MIN_MASS=0.3            # was 0.2
-        MIN_MASS_LIMIT=0.4      # was 0.4
-        MAX_MASS=2.0
-        MAX_MASS_LIMIT=1.8
+        MIN_MASS_LIMIT=0.5      # was 0.4
+        MAX_MASS=2.4            # was 2.0
+        MAX_MASS_LIMIT=2.2      # was 1.8
         ;;
     "region1")
-        MIN_MASS=2.0
-        MIN_MASS_LIMIT=2.2
-        MAX_MASS=4.2 #was 4.6
-        MAX_MASS_LIMIT=4.0 #was 4.4
+        MIN_MASS=1.6            # was 2.0
+        MIN_MASS_LIMIT=1.8      # was 2.2
+        MAX_MASS=4.6            # was 4.2
+        MAX_MASS_LIMIT=4.4      # was 4.0
         ;;
     "region2")
-        MIN_MASS=4.2 #was 3.8
-        MIN_MASS_LIMIT=4.4 #was 4.0
+        MIN_MASS=3.8            # was 4.2
+        MIN_MASS_LIMIT=4.0      # was 4.4
         MAX_MASS=11
         MAX_MASS_LIMIT=10.8
         ;;
@@ -166,11 +184,13 @@ esac
 export -f get_category_name
 export -f get_category_label
 export -f get_all_category_ids
-export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY
+export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY USE_DATA USE_BINNED
 export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
 
 # Print configuration
 echo "Configuration:"
+echo "  Running on data: $USE_DATA"
+echo "  Using binned datasets: $USE_BINNED"
 echo "  Use reweighting: $USE_REWEIGHT"
 echo "  Input folder: $INPUT_FOLDER"
 echo "  Output folder: $OUTFOLDER"
@@ -227,8 +247,7 @@ process_dir() {
         
         if [ -f "$txt_file" ]; then
             echo "  Processing category $cat_id ($cat_name): $txt_file"
-            echo $PLOT_ONLY
-
+            
             if [ "$PLOT_ONLY" == false ]; then
                 echo "    Running combine for category $cat_name"
                 text2workspace.py "$txt_file"
@@ -254,13 +273,24 @@ process_dir() {
                         -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
                 cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_MultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
 
+                # # [FIXME] Temporary double, can be optimized
+                # # Also run a MultiDimFit to save a post-fit snapshot of S+B fit (serves as input for limits later)
+                # combine -M MultiDimFit "$root_file" \
+                #         --saveWorkspace \
+                #         --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
+                #         -n "_${cat_name}${FIT_TAG_LABEL}_SB" \
+                #         -v 3 &> "fitMultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.log"
+                # cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_MultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
+
+
                 # Create category-specific output folder
                 mkdir -p "$OUTFOLDER/$cat_name/M$mass"
                 cp "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log" "$txt_file" "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root" higgsCombine_${cat_name}${FIT_TAG_LABEL}.FitDiagnostics.mH120.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_Bonly.MultiDimFit.mH120.root fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log  "$OUTFOLDER/$cat_name/M$mass/"
+                # cp higgsCombine_${cat_name}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root fitMultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/$cat_name/M$mass/"
             fi
 
             echo "    Plotting for category $cat_name"
-            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG"
+            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG" --binned $USE_BINNED
         else
             echo "  $txt_file not found for category $cat_id ($cat_name)"
         fi
@@ -283,6 +313,7 @@ for cat_id in $(get_all_category_ids); do
     if [[ -n "$TAG" ]]; then
         plot_cmd="$plot_cmd --tag \"${REGION}_${FIT_TAG}\""
     fi
+    echo $plot_cmd
     
     # Execute the command
     echo "Creating summary plots for category $cat_name"

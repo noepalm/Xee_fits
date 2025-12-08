@@ -1,15 +1,17 @@
 import ROOT
 import argparse
 import os
+from math import sqrt
 
 # argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('-i', '--input', type=str, default='Xee_ee_0_2023.root', help='File containing input dataset and models; output of text2workspace')
+parser.add_argument('-i', '--input', type=str, default='Xee_ee_4_2023.root', help='File containing input dataset and models; output of text2workspace')
 parser.add_argument('-f', '--fit_file', type=str, default='fitDiagnosticsTest.root', help='File containing fit results')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
 parser.add_argument('-m', '--mass', type=float, default=3.0, help='Mass value to plot')
-parser.add_argument('-c', '--cat_id', type=int, default=0, help='Category ID to plot')
+parser.add_argument('-c', '--cat_id', type=int, default=4, help='Category ID to plot')
 parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"],)
+parser.add_argument('--binned', type=bool, default=False, help='Use binned dataset for plotting')
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
 args = parser.parse_args()
@@ -27,7 +29,22 @@ m = f1.Get("w").var("mass")
 m_min = m.getMin()
 m_max = m.getMax()
 print(f"Mass range: {m_min} - {m_max}")
-dataset = f1.Get("w").data("data_obs")
+
+# if running binned, need to retrieve INPUT dataset to get correct uncertainties
+if args.binned:
+    f2 = ROOT.TFile.Open("../common/Xee_ee.input.root", "READ")
+    dataset = f2.Get("w").data("data_obs")
+else:
+    dataset = f1.Get("w").data("data_obs")
+
+# # DEBUG: iterate over dataset entries and print weight + weightError
+# for i in range(dataset.numEntries()):
+#     entry = dataset.get(i)
+#     weight = dataset.weight()
+#     weight_error = dataset.weightError(ROOT.RooAbsData.SumW2)
+#     print(f"DEBUG: Entry {i}: weight = {weight}, weight_error = {weight_error}")
+
+error_type = ROOT.RooAbsData.Poisson if args.binned and "data" not in args.tag else ROOT.RooAbsData.SumW2
 
 # finally, retrieve total S+B fit distribution from last file
 f2 = ROOT.TFile.Open(args.fit_file, "READ")
@@ -89,7 +106,7 @@ frame = m.frame(m_min, m_max)
 frame.SetTitle("")
 frame.GetXaxis().SetTitle("m(ee) [GeV]")
 
-dataset.plotOn(frame, ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2), ROOT.RooFit.MarkerSize(0.5))
+dataset.plotOn(frame, ROOT.RooFit.DataError(error_type), ROOT.RooFit.MarkerSize(0.5))
 
 frame.Draw()
 ROOT.gPad.SetLogy()
@@ -131,7 +148,6 @@ for idx, bkg_name in enumerate(all_bkgs):
 
 # compute chi2 of data wrt total model
 data_h = dataset.createHistogram("data_hist", m, ROOT.RooFit.Binning(bkgs["total_background"].GetNbinsX()))
-data_h.Sumw2()
 chi2 = bkgs["total_background"].Chi2Test(data_h, "UU CHI2")
 n_free_params = f1.Get("w").pdf("model_b").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
 reduced_chi2 = chi2 / (bkgs["total_background"].GetNbinsX() - 1 - n_free_params)
@@ -143,7 +159,7 @@ legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
 legend.AddEntry(dataset, "Data", "p")
-legend.AddEntry(bkgs["total_background"], f"#splitline{{Total B Fit = {bkg_norms['total_background']:.0f}}}{{chi2/ndof = {reduced_chi2:.2f}}}", "l")
+legend.AddEntry(bkgs["total_background"], f"#splitline{{Total B Fit = {bkg_norms['total_background']:.0f}}}{{chi2/ndof = {chi2:.2f} / {(bkgs['total_background'].GetNbinsX() - 1 - n_free_params):.0f} = {reduced_chi2:.2f}}}", "l")
 for bkg_label, (bkg_name, bkg_norm) in zip(bkg_component_labels, bkg_norms.items()):
     legend.AddEntry(bkgs[bkg_name], f"{bkg_label} bkg = {bkg_norm:.0f}", "l")
 # legend.AddEntry(dy_bkg, f"DY bkg = {dy_n:.0f}", "l")
@@ -170,7 +186,7 @@ for i in range(bkgs["total_background"].GetNbinsX()):
     data_y = data_h.GetBinContent(i + 1)
     data_y_err = data_h.GetBinError(i + 1)
 
-    # print(f"DEBUG: Bin {i+1}: x = {x}, y = {y}, data_y = {data_y}, data_y_err = {data_y_err}", flush = True)
+    # print(f"DEBUG: Bin {i+1}: x = {x}, y = {y}, data_y = {data_y}, data_y_err = {data_y_err} => pull = {(data_y - y)/data_y_err}", flush = True)
 
     # print(f"DEBUG: x = {x}, y = {y}, data_y = {data_y}, data_y_err = {data_y_err}", flush = True)
     # print(f"       total bkg = {bkg_norms['total_background']}, dy = {bkg_norms['dy']}, jpsi = {bkg_norms.get('jpsi', 'N/A')}, psi2s = {bkg_norms.get('psi2s', 'N/A')}", flush = True)
@@ -195,6 +211,9 @@ pulls.GetYaxis().SetTitle("Pulls")
 pulls.GetYaxis().SetLabelSize(0.07)
 pulls.GetYaxis().SetTitleSize(0.1)
 pulls.GetYaxis().SetTitleOffset(0.3)
+
+# # change y-axis limits to +/- 5
+# pulls.GetYaxis().SetRangeUser(-5, 5)
 
 # change bottom padding
 ROOT.gPad.SetBottomMargin(0.25)
@@ -245,7 +264,7 @@ frame = m.frame(m_min, m_max)
 frame.SetTitle("")
 frame.GetXaxis().SetTitle("m(ee) [GeV]")
 
-dataset.plotOn(frame, ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2), ROOT.RooFit.MarkerSize(0.5))
+dataset.plotOn(frame, ROOT.RooFit.DataError(error_type), ROOT.RooFit.MarkerSize(0.5))
 
 frame.Draw()
 ROOT.gPad.SetLogy()
@@ -302,7 +321,7 @@ legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
 legend.AddEntry(dataset, "Data", "p")
-legend.AddEntry(all_distros["total"], f"#splitline{{Total S+B Fit = {all_norms['total']:.0f}}}{{chi2/ndof = {reduced_chi2:.2f}}}", "l")
+legend.AddEntry(all_distros["total"], f"#splitline{{Total S+B Fit = {all_norms['total']:.0f}}}{{chi2/ndof = {chi2:.2f} / {(all_distros['total'].GetNbinsX() - 1 - n_free_params):.0f} = {reduced_chi2:.2f}}}", "l")
 for distro_label, (distro_name, norm) in zip(all_distro_labels, all_norms.items()):
     if distro_name != "total":
         legend.AddEntry(all_distros[distro_name], f"{distro_label} = {norm:.0f}", "l")
@@ -357,3 +376,8 @@ line.Draw("same")
 
 for ext in ['png', 'pdf']:
     c2.SaveAs(os.path.join(args.output_folder, "s", f"mu0_fit_s_M{args.mass:.1f}{tag_label}.{ext}"))
+
+# CLOSE ALL FILES
+f1.Close()
+if args.binned:
+    f2.Close()
