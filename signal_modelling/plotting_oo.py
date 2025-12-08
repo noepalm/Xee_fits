@@ -89,7 +89,7 @@ class ParametrizationPlotter:
         
         # Filter out JPsi samples for parameter fit visualization
         plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
-                       if "JPsiToEE" not in name}
+                       if "JPsiToEE" not in name and "Upsilon" not in name}
         
         for category_label, category in self.analyzer.categories.items():
             self._plot_parametrization_for_category(plot_samples, category, category_label, 
@@ -107,6 +107,7 @@ class ParametrizationPlotter:
         # Collect data points
         data_points = self._collect_parametrization_data(samples, category, vars_to_plot, gen)
         jpsi_points = self._collect_jpsi_data(category, vars_to_plot, gen)
+        upsilon_points = self._collect_upsilon_data(category, vars_to_plot, gen)
         
         # Create figure
         ncols = 2
@@ -120,7 +121,7 @@ class ParametrizationPlotter:
         # Plot each variable
         for i, var in enumerate(vars_to_plot):
             ax = axs.flatten()[i] if len(vars_to_plot) > 1 else axs[0]
-            self._plot_single_parameter(ax, var, data_points[var], jpsi_points[var], 
+            self._plot_single_parameter(ax, var, data_points[var], jpsi_points[var], upsilon_points[var],
                                       category, category_label, gen)
         
         # Remove unused subplots
@@ -219,9 +220,28 @@ class ParametrizationPlotter:
                 jpsi_points[var]['y_err'].append(0)
         
         return jpsi_points
+
+    def _collect_upsilon_data(self, category: CategoryConfig, vars_to_plot: List[str], 
+                          gen: bool) -> Dict[str, Dict]:
+        """Collect Upsilon data points"""
+        
+        upsilon_points = {var: {'x': [9.460], 'y': [], 'y_err': []} for var in vars_to_plot}
+        
+        varnames = [f"{var}_GEN_fit" if gen else f"response_{var}" for var in vars_to_plot]
+        
+        for var, varname in zip(vars_to_plot, varnames):
+            workspace_var = self.workspace.var(f"{varname}_UpsilonToEE{category.label}")
+            if workspace_var:
+                upsilon_points[var]['y'].append(workspace_var.getVal())
+                upsilon_points[var]['y_err'].append(workspace_var.getError())
+            else:
+                upsilon_points[var]['y'].append(0)
+                upsilon_points[var]['y_err'].append(0)
+        
+        return upsilon_points
     
     def _plot_single_parameter(self, ax, var: str, data_points: Dict, jpsi_points: Dict,
-                             category: CategoryConfig, category_label: str, gen: bool):
+                               upsilon_points: Dict, category: CategoryConfig, category_label: str, gen: bool):
         """Plot a single parameter vs mass with data points and fits"""
         # Styling for data points
         plot_args = {
@@ -250,7 +270,12 @@ class ParametrizationPlotter:
         if jpsi_points['y'][0] != 0:
             ax.errorbar(jpsi_points['x'], jpsi_points['y'], jpsi_points['y_err'], 
                        **plot_args, label=r"$J/\psi \to ee$", color="C1")
-        
+
+        # Plot Upsilon point
+        if upsilon_points['y'][0] != 0:
+            ax.errorbar(upsilon_points['x'], upsilon_points['y'], upsilon_points['y_err'], 
+                       **plot_args, label=r"$\Upsilon (1S) \to ee$", color="C2")
+
         ax.legend()
     
     def _setup_parameter_plot_style(self, ax, var: str, gen: bool, comparison_mode: bool = False):
@@ -633,7 +658,7 @@ class SignalModelPlotter:
         
         # Filter out JPsi samples for parameter fit visualization
         plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
-                       if "JPsiToEE" not in name}
+                       if "JPsiToEE" not in name and "Upsilon" not in name}
         
         self.param_plotter._plot_parametrization_comparison(plot_samples, self.analyzer.categories, 
                                                            vars_to_plot, gen)

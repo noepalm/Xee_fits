@@ -664,9 +664,12 @@ class FitManager:
             min_entries: Minimum number of entries required to include a point
             entry_counts: Dictionary with keys like 'sample_name_category_label' containing entry counts
         """
-        # Filter out JPsi samples for parameter fitting
+        # # Filter out JPsi samples for parameter fitting
+        # fit_samples = {name: sample for name, sample in samples.items() 
+        #               if "JPsi" not in name}
+        # Filter out JPsi and Upsilon samples for parameter fitting
         fit_samples = {name: sample for name, sample in samples.items() 
-                      if "JPsi" not in name}
+                      if "JPsi" not in name and "Upsilon" not in name}
                 
         # Create graphs for each variable
         graphs = {var: ROOT.TGraphErrors() for var in vars_to_fit}

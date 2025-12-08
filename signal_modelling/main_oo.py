@@ -22,7 +22,7 @@ class AnalysisConfig:
     def __init__(self):
         # I/O settings
         self.wsfile = "signal_model.root"
-        self.base_path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/signal_model_reweighted/zsnap/era2023/"
+        self.base_path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/nanov15/signal_model_reweighted/zsnap/era2023/"
         self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
         
         # Analysis parameters
@@ -88,6 +88,22 @@ class AnalysisConfig:
                 "mass_range": [6.5, 5, 7.5],
                 "mass_GEN_range": [6.5, 6.25, 6.75],
                 "mean_BW_range": [6.5, 5.5, 7.5],
+            },
+            "Zd_M8": {
+                "filename": "HAHM_13p6TeV_M8.root",
+                "nominal_mass": 8,
+                "nominal_width": 0.02,
+                "mass_range": [8, 7, 9],
+                "mass_GEN_range": [8, 7.75, 8.25],
+                "mean_BW_range": [8, 7, 9],
+            },
+            "Zd_M10": {
+                "filename": "HAHM_13p6TeV_M10.root",
+                "nominal_mass": 10,
+                "nominal_width": 0.02,
+                "mass_range": [10, 9, 11],
+                "mass_GEN_range": [10, 8, 12],
+                "mean_BW_range": [10, 9, 11],
             },
             "UpsilonToEE": {
                 "filename": "UpsilonToEE.root",
