@@ -16,6 +16,9 @@ from background_config import BackgroundModelConfig
 from background_fitter import BackgroundFitter, FitResult
 from background_plotter import BackgroundPlotter
 
+# Suppress RooFit INFO messages (only show WARNING and ERROR)
+ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
+
 
 class BackgroundAnalysis:
     """Main class for running complete background analysis"""
@@ -98,7 +101,59 @@ class BackgroundAnalysis:
         
         print("✅ Centralized output workspace created")
         return True
-        
+    
+    def create_envelope_workspace(self, input_workspaces: List[str]) -> bool:
+        """Create a centralized output workspace for envelope from input workspaces"""
+        if not self.config:
+            print("❌ Config not setup")
+            return False
+            
+        if not input_workspaces:
+            print("❌ No input workspaces provided for envelope creation")
+            return False
+            
+        print(f"Creating workspace with envelope of background functions")
+
+        bkg_funcs = []
+
+        # retrieve workspace from first input file
+        with ROOT.TFile.Open(input_workspaces[0]) as f:
+            base_ws = f.Get("w")
+            if not base_ws:
+                print(f"❌ Workspace 'w' not found in {input_workspaces[0]}")
+                return False
+            self.output_workspace = base_ws
+
+        # retrieve background functions from other input files
+        for idx, file in enumerate(input_workspaces):
+            with ROOT.TFile.Open(file) as f:
+                ws = f.Get("w")
+                if not ws:
+                    print(f"❌ Workspace 'w' not found in {file}")
+                    return False
+                dy = ws.pdf("dy")
+                if not dy:
+                    print(f"❌ Non-resonant background function 'dy' not found in {file}")
+                    return False
+                else:
+                    # rename function to avoid name clashes
+                    dy.SetName(f"dy_component_{idx}")
+                    bkg_funcs.append(dy)
+
+        # Create envelope function
+        pdf_index = ROOT.RooCategory("pdf_index", "pdf_index")
+        envelope_f = ROOT.RooMultiPdf("dy", "dy", pdf_index, ROOT.RooArgList(*bkg_funcs))
+
+        # Remove all dy functions from base workspace
+        self.output_workspace.RecursiveRemove(self.output_workspace.pdf("dy"))
+        # Import envelope function
+        self.output_workspace.Import(envelope_f, ROOT.RooCmdArg())
+
+        # Set output workspace file path
+        self.output_workspace_file = str(self.config.get_output_workspace_path())
+
+        return True        
+
     def save_output_workspace(self) -> bool:
         """Save the centralized output workspace to file"""
         if not self.output_workspace or not self.output_workspace_file:
@@ -138,6 +193,7 @@ class BackgroundAnalysis:
             self.config.set_category(args.category)
         
         # Apply command line settings
+        self.config.use_data = args.data
         self.config.use_jpsi = args.use_jpsi
         self.config.use_reduced_mass = args.use_reduced_mass
         self.config.use_binned = args.binned
@@ -165,9 +221,89 @@ class BackgroundAnalysis:
         print(f"Configuration setup complete")
         print(f"Use reweighting: {self.use_reweighting}")
         self.config.print_summary()
+    
+    def load_cached_datasets(self) -> Dict[str, Any]:
+        """Load ONLY datasets from existing file and return them as a dictionary.
+        Everything else (templates, normalizations, etc.) will be recreated."""
+        print("="*60)
+        print("LOADING CACHED DATASETS")
+        print("="*60)
         
-    def create_datasets(self) -> bool:
-        """Create datasets for analysis"""
+        try:
+            # Use the existing method to get the dataset file path
+            dataset_file = self.config.get_dataset_path()
+            
+            if not dataset_file.exists():
+                print(f"❌ Cached dataset file not found: {dataset_file}")
+                return None
+            
+            print(f"📂 Loading datasets from: {dataset_file}")
+            
+            # Open the cached file
+            cached_file = ROOT.TFile.Open(str(dataset_file))
+            if not cached_file or cached_file.IsZombie():
+                print(f"❌ Cannot open cached dataset file: {dataset_file}")
+                return None
+            
+            cached_workspace = cached_file.Get("w")
+            if not cached_workspace:
+                print(f"❌ Workspace 'w' not found in cached file")
+                cached_file.Close()
+                return None
+            
+            # Extract ONLY the datasets and store them
+            categories = self.config.get_available_categories()
+            cached_datasets = {}
+            
+            for category_name, category_config in categories.items():
+                # Load main dataset
+                dataset_name = f'data_obs{category_config.label}'
+                cached_dataset = cached_workspace.data(dataset_name)
+                
+                if cached_dataset:
+                    # Clone the dataset so we can close the file
+                    cached_datasets[dataset_name] = cached_dataset.Clone()
+                    print(f"  ✅ Cached {dataset_name}: {cached_datasets[dataset_name].numEntries()} entries")
+                else:
+                    print(f"  ⚠️  Warning: Dataset {dataset_name} not found in cached file")
+                
+                # Load resonant dataset if it exists
+                if self.config.fit_jpsi_prompt:
+                    resonant_dataset_name = f'data_obs{category_config.label}_resonant'
+                    cached_resonant_dataset = cached_workspace.data(resonant_dataset_name)
+                    
+                    if cached_resonant_dataset:
+                        cached_datasets[resonant_dataset_name] = cached_resonant_dataset.Clone()
+                        print(f"  ✅ Cached {resonant_dataset_name}: {cached_datasets[resonant_dataset_name].numEntries()} entries")
+                    else:
+                        print(f"  ⚠️  Warning: Resonant dataset {resonant_dataset_name} not found in cached file")
+            
+            # Close the file now that we have cloned the datasets
+            cached_file.Close()
+            
+            print(f"\n✅ Successfully loaded {len(cached_datasets)} datasets from cache")
+            return cached_datasets
+            
+        except Exception as e:
+            print(f"❌ Error loading cached datasets: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _save_dataset_file(self):
+        """Save the dataset workspace to file using the existing method"""
+        dataset_file = self.config.get_dataset_path()
+        
+        print(f"💾 Saving dataset workspace to: {dataset_file}")
+        self.output_workspace.writeToFile(str(dataset_file), True)  # True = recreate file
+        print(f"✅ Dataset file saved successfully")
+        
+    def create_datasets(self, cached_datasets: Dict[str, Any] = None) -> bool:
+        """Create datasets for analysis
+        
+        Args:
+            cached_datasets: Optional pre-loaded datasets to use instead of creating from files
+        """
         print("="*60)
         print("CREATING DATASETS")
         print("="*60)
@@ -177,8 +313,13 @@ class BackgroundAnalysis:
             tag = self.config.tag
             
             # Create main dataset (MinBias/data)
-            print("\n1. Creating main dataset...")
+            if cached_datasets is not None:
+                print("\n1. Using cached main datasets...")
+            else:
+                print("\n1. Creating main dataset...")
+                
             main_creator = DatasetCreator(
+                use_data=self.config.use_data,
                 use_jpsi=False,  # Always false for main dataset
                 use_reduced_mass=self.config.use_reduced_mass,
                 categories=self.config.categories,
@@ -187,14 +328,20 @@ class BackgroundAnalysis:
                 weight_multiplier=self.weight_multiplier,
                 use_binned=self.config.use_binned,
                 fit_region=self.config.chosen_fit_region,
-                tag=tag
+                tag=tag,
+                cached_datasets=cached_datasets  # Pass cached datasets if provided
             )
             main_dataset_path = main_creator.create_full_dataset()
             
             # Create J/psi dataset if needed
             if self.config.fit_jpsi_prompt:
-                print("\n2. Creating J/psi dataset...")
+                if cached_datasets is not None:
+                    print("\n2. Using cached J/psi datasets...")
+                else:
+                    print("\n2. Creating J/psi dataset...")
+                    
                 jpsi_creator = DatasetCreator(
+                    use_data=False,
                     use_jpsi=True,
                     use_reduced_mass=self.config.use_reduced_mass,
                     categories=self.config.categories,
@@ -202,7 +349,8 @@ class BackgroundAnalysis:
                     use_reweighting=self.use_reweighting,
                     use_binned=self.config.use_binned,
                     fit_region=self.config.chosen_fit_region,
-                    tag=tag
+                    tag=tag,
+                    cached_datasets=cached_datasets  # Pass cached datasets (includes resonant)
                 )
                 jpsi_dataset_path = jpsi_creator.create_full_dataset()
                 print(f"J/psi dataset created: {jpsi_dataset_path}")
@@ -570,6 +718,8 @@ def create_argument_parser():
     # Dataset creation options
     parser.add_argument("--create_datasets", action="store_true", default=False,
                        help="Create datasets from root files")
+    parser.add_argument("--cached", action="store_true", default=False,
+                       help="Use cached datasets from existing output file if available (still recreates the file with all objects)")
     parser.add_argument("--use_jpsi", action="store_true", default=False,
                        help="Use J/psi sample instead of MinBias sample")
     parser.add_argument("--use_reduced_mass", action="store_true", default=False,
@@ -584,13 +734,17 @@ def create_argument_parser():
                        help='Specific category to fit (if not specified, uses all categories)')
     parser.add_argument('--all_categories', action='store_true', default=False,
                        help='Run analysis for all available categories')
+    parser.add_argument('--data', action='store_true', default=False,
+                       help='Use real data instead of MC for dataset creation')
     
     # Fitting options
     parser.add_argument("--fit_region", default="region1", 
                        choices=["region1", "region0", "region2", "full"],
                        help="Pick fit region")
-    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3],
-                       help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; -1 for all)")
+    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6],
+                       help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; 4: Chebyshev, 5: Bernstein + exp, 6: modified BW. -1 for all)")
+    parser.add_argument("--input_workspaces", nargs='+', default=[],
+                       help="Input workspace files for envelope (only works with bkg_function=-1)")
     parser.add_argument("--freeze_bkg_sidebands", action="store_true", default=False,
                        help="Freeze background parameters from sideband fit")
     parser.add_argument("--floating_resonant", action="store_true", default=False,
@@ -642,19 +796,61 @@ def main():
         success = True
         
         print("DEBUG: SETTING ANALYZER COMPLETED", flush=True)
+
+        if args.bkg_function < 0:
+            # TEMPORARY: only works for inclusive category for now
+            if args.category != "inclusive":
+                print("❌ Background function envelope (-1) currently only supported for 'inclusive' category")
+                return 1
+
+            # check that input workspaces are provided
+            if not args.input_workspaces:
+                print("❌ When using bkg_function=-1 (all), you must provide input workspaces for the envelope using --input_workspaces")
+                return 1
+            else:
+                print(f"✅ Using {len(args.input_workspaces)} input workspaces for background function envelope")
+
+                if not analysis.create_envelope_workspace(args.input_workspaces):
+                    print("❌ Failed to create envelope workspace")
+                    return 1
+
+                if not analysis.save_output_workspace():
+                    print("⚠️  Warning: Failed to save output workspace")
+                    return
+                
+                print(f"✅ SUCCESS: created and saved envelope workspace.")
+                return True
         
         # Create output workspace if we need to do dataset creation or full analysis
-        if args.create_datasets or args.full_analysis:
+        if args.create_datasets or args.full_analysis or args.cached:
             if not analysis.create_output_workspace(args.tag, args.fit_region):
                 print("❌ Failed to create output workspace")
                 return 1
         
-        # Step 1: Create datasets if requested
+        # Step 1: Create or load cached datasets
         if args.create_datasets or args.full_analysis:
-            if not analysis.create_datasets():
-                print("Dataset creation failed!")
-                return 1
+            if args.cached:
+                # Try to load cached datasets first
+                print("🔄 Attempting to use cached datasets...")
+                cached_datasets = analysis.load_cached_datasets()
                 
+                if cached_datasets is None:
+                    print("⚠️  Cached datasets not available, creating from scratch...")
+                    if not analysis.create_datasets():
+                        print("Dataset creation failed!")
+                        return 1
+                else:
+                    print("✅ Using cached datasets")
+                    # Pass cached datasets to create_datasets - it will handle everything
+                    if not analysis.create_datasets(cached_datasets=cached_datasets):
+                        print("Dataset recreation with cached data failed!")
+                        return 1
+            else:
+                # Create datasets from scratch
+                if not analysis.create_datasets():
+                    print("Dataset creation failed!")
+                    return 1
+        
         print("DEBUG: dataset created successfully. Moving onto fit.", flush=True)
         # Step 2: Run fitting analysis
         if args.fit_only or args.full_analysis:# or (not args.create_datasets): # why was create_dataset here in the first place?

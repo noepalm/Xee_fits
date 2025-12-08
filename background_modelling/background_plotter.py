@@ -37,9 +37,23 @@ class BackgroundPlotter:
         
         created_plots = []
         
-        # Create canvas
-        canvas = ROOT.TCanvas("canvas", "canvas", 800, 600)
-        canvas.SetGrid()
+        # Create canvas with split pads
+        canvas = ROOT.TCanvas("canvas", "canvas", 800, 800)
+        
+        # Upper pad for main plot
+        pad1 = ROOT.TPad("pad1", "pad1", 0, 0.3, 1, 1.0)
+        pad1.SetBottomMargin(0.02)
+        pad1.SetGrid()
+        pad1.Draw()
+        
+        # Lower pad for pull plot
+        pad2 = ROOT.TPad("pad2", "pad2", 0, 0.0, 1, 0.3)
+        pad2.SetTopMargin(0.02)
+        pad2.SetBottomMargin(0.3)
+        pad2.SetGrid()
+        pad2.Draw()
+        
+        pad1.cd()
         
         # Create frame
         xmin, xmax = fit_region.range
@@ -92,21 +106,33 @@ class BackgroundPlotter:
             legend.AddEntry(frame.findObject(func), label, "l")
         legend.Draw()
 
-        # Draw everything
+        # Draw everything on upper pad
         frame.Draw()
         # change minimum to 1
-        frame.SetMinimum(20)
-        frame.GetXaxis().SetTitle("m(ee) [GeV]")
+        frame.SetMinimum(2e3) #was 20
+        frame.GetXaxis().SetTitle("")
+        frame.GetXaxis().SetLabelSize(0)
+        frame.GetYaxis().SetTitle("Events")
+        frame.GetYaxis().SetTitleSize(0.05)
+        frame.GetYaxis().SetLabelSize(0.045)
         legend.Draw()
+        
+        # Create and draw pull plot on lower pad
+        pad2.cd()
+        pull_frame = self._create_pull_plot(frame, fit_region)
+        pull_frame.Draw()
+        
+        pad1.cd()
         
         # Add special markers if needed
         if self.config.fit_jpsi_first and fit_region.name == "region1":
             self._add_jpsi_region_markers(frame)
             
-        # Save plots
-        plot_files = self._save_plots(canvas, fit_region, tag)
+        # Save plots (must be done before closing canvas and deleting pads)
+        plot_files = self._save_plots(canvas, [pad1, pad2], fit_region, tag)
         created_plots.extend(plot_files)
         
+        # Clean up (after saving is complete)
         canvas.Close()
         
         print(f"  Created {len(created_plots)} plots")
@@ -119,14 +145,24 @@ class BackgroundPlotter:
             
         # Plot total model
         self.fitter.combined_model.plotOn(frame, 
-                                        ROOT.RooFit.LineColor(ROOT.kBlack), 
-                                        ROOT.RooFit.Name("full_bkg_model"), 
+                                        ROOT.RooFit.LineColor(ROOT.kP8Gray),
+                                        ROOT.RooFit.LineWidth(2),
+                                        ROOT.RooFit.Name("full_bkg_model"),
                                         ROOT.RooFit.NormRange(fit_region.name))
         
         # Plot components with category-specific names
         category_label = self.category.label if self.category else ""
         
-        colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        # Define custom colors from hex
+        colors = [
+            ROOT.TColor.GetColor("#5790fc"),  # Blue
+            ROOT.TColor.GetColor("#f89c20"),  # Orange
+            ROOT.TColor.GetColor("#e42536"),  # Red
+            ROOT.TColor.GetColor("#964a8b"),  # Purple
+            ROOT.TColor.GetColor("#9c9ca1"),  # Gray
+            ROOT.TColor.GetColor("#7a21dd")   # Violet
+        ]
+
         for idx, res_bkg in enumerate(self.fitter.resonant_backgrounds.keys()):
             component_name = f"{res_bkg}_resonant_bkg{category_label}"
             self.fitter.combined_model.plotOn(frame, 
@@ -159,7 +195,7 @@ class BackgroundPlotter:
             print(f"DEBUG: chosen bkg = {self.fitter.get_chosen_background_function()}", flush=True)
             self.fitter.combined_model.plotOn(frame, 
                                             ROOT.RooFit.Components(nonres_bkg_name),
-                                            ROOT.RooFit.LineColor(ROOT.kGreen), 
+                                            ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e76300")), 
                                             ROOT.RooFit.Name("nonresonant_bkg"), 
                                             ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
                                             ROOT.RooFit.NormRange(fit_region.name))
@@ -173,10 +209,85 @@ class BackgroundPlotter:
 
         # plot_name_list = ["full_bkg_model", "jpsi_bkg", "psi2s_bkg", "nonresonant_bkg"]
         return plot_name_list
+    
+    def _create_pull_plot(self, frame: ROOT.RooPlot, fit_region: FitRegion) -> ROOT.RooPlot:
+        """Create pull distribution plot"""
+        xmin, xmax = fit_region.range
+        pull_frame = self.fitter.mass_var.frame(xmin, xmax)
+        pull_frame.SetTitle("")
+        
+        # Get pull histogram from frame
+        pull_hist = frame.pullHist("data_obs", "full_bkg_model")
+        pull_frame.addPlotable(pull_hist, "P")
+        
+        # DEBUG: create resid hist just to print values
+        resid_hist = frame.residHist("data_obs", "full_bkg_model", False, True)  # normalized residuals
+        print("DEBUG: Residual values:", flush=True)
+        for i in range(resid_hist.GetN()):
+            x, y = ROOT.Long(0), ROOT.Long(0)
+            resid_hist.GetPoint(i, x, y)
+            print(f"  bin {i}: x={float(x):.3f}, residual={float(y):.3f}", flush=True)
+
+        # Styling
+        pull_frame.GetYaxis().SetTitle("Pull")
+        pull_frame.GetYaxis().SetTitleSize(0.12)
+        pull_frame.GetYaxis().SetTitleOffset(0.35)
+        pull_frame.GetYaxis().SetLabelSize(0.1)
+        pull_frame.GetYaxis().SetNdivisions(505)
+        # pull_frame.GetYaxis().SetRangeUser(-5, 5)
+        
+        pull_frame.GetXaxis().SetTitle("m(ee) [GeV]")
+        pull_frame.GetXaxis().SetTitleSize(0.12)
+        pull_frame.GetXaxis().SetTitleOffset(1.0)
+        pull_frame.GetXaxis().SetLabelSize(0.1)
+        
+        # Add horizontal lines at ±2 and ±3 sigma
+        # pull_frame.SetMinimum(-5)
+        # pull_frame.SetMaximum(5)
+        # pull_frame.SetMinimum(-8)
+        # pull_frame.SetMaximum(8)
+        
+        # Draw reference lines
+        line_zero = ROOT.TLine(xmin, 0, xmax, 0)
+        line_zero.SetLineColor(ROOT.kBlack)
+        line_zero.SetLineStyle(2)
+        
+        line_2sigma_up = ROOT.TLine(xmin, 2, xmax, 2)
+        line_2sigma_up.SetLineColor(ROOT.kRed)
+        line_2sigma_up.SetLineStyle(2)
+        
+        line_2sigma_down = ROOT.TLine(xmin, -2, xmax, -2)
+        line_2sigma_down.SetLineColor(ROOT.kRed)
+        line_2sigma_down.SetLineStyle(2)
+        
+        line_3sigma_up = ROOT.TLine(xmin, 3, xmax, 3)
+        line_3sigma_up.SetLineColor(ROOT.kRed)
+        line_3sigma_up.SetLineStyle(3)
+        
+        line_3sigma_down = ROOT.TLine(xmin, -3, xmax, -3)
+        line_3sigma_down.SetLineColor(ROOT.kRed)
+        line_3sigma_down.SetLineStyle(3)
+        
+        # Store lines so they persist
+        pull_frame.addObject(line_zero)
+        pull_frame.addObject(line_2sigma_up)
+        pull_frame.addObject(line_2sigma_down)
+        pull_frame.addObject(line_3sigma_up)
+        pull_frame.addObject(line_3sigma_down)
+        
+        return pull_frame
         
     def _plot_background_models(self, frame: ROOT.RooPlot, fit_region: FitRegion):
         """Plot background-only models"""
-        colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        # colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        colors = [
+            ROOT.TColor.GetColor("#5790fc"),
+            ROOT.TColor.GetColor("#f89c20"),
+            ROOT.TColor.GetColor("#e42536"),
+            ROOT.TColor.GetColor("#964a8b"),
+            ROOT.TColor.GetColor("#9c9ca1"),
+            ROOT.TColor.GetColor("#7a21dd"),
+        ]
         
         for i, func_config in enumerate(self.config.background_functions):
             func_name = func_config.name
@@ -202,19 +313,19 @@ class BackgroundPlotter:
                 chi2_values[name] = chi2_val
                 print(f"  Chi2 for {name}: {chi2_val} (n. free params = {result.n_free_params})", flush=True)
 
-                # DEBUG: compute using createChi2 
-                # first: create binned clone of data
-                binned_data = self.fitter.data.binnedClone()
-                model_to_compute = self.fitter.combined_model if name == "full_bkg_model" else self.fitter.background_functions.get(name)
-                chi2_obj = model_to_compute.createChi2(binned_data,
-                                           ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
-                # chi2_obj = ROOT.RooChi2Var(f"chi2_{name}", f"chi2_{name}", 
-                #                            model_to_compute,
-                #                            binned_data,
-                #                            ROOT.RooFit.Range(self.config.chosen_fit_region.name),
+                # # DEBUG: compute using createChi2 
+                # # first: create binned clone of data
+                # binned_data = self.fitter.data.binnedClone()
+                # model_to_compute = self.fitter.combined_model if name == "full_bkg_model" else self.fitter.background_functions.get(name)
+                # chi2_obj = model_to_compute.createChi2(binned_data,
                 #                            ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
-                chi2_over_ndf = chi2_obj.getVal() / result.n_free_params
-                print(f"  (DEBUG) Chi2 for {name} using RooChi2Var: {chi2_obj.getVal()} (chi2/ndf = {chi2_over_ndf})", flush=True)
+                # # chi2_obj = ROOT.RooChi2Var(f"chi2_{name}", f"chi2_{name}", 
+                # #                            model_to_compute,
+                # #                            binned_data,
+                # #                            ROOT.RooFit.Range(self.config.chosen_fit_region.name),
+                # #                            ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
+                # chi2_over_ndf = chi2_obj.getVal() / result.n_free_params
+                # print(f"  (DEBUG) Chi2 for {name} using RooChi2Var: {chi2_obj.getVal()} (chi2/ndf = {chi2_over_ndf})", flush=True)
                 
                 # Update result object
                 result.calculate_chi2_ndf(chi2_val * result.n_free_params, result.n_free_params)
@@ -287,7 +398,7 @@ class BackgroundPlotter:
         line1.SetLineStyle(2)
         line1.Draw("same")
         
-    def _save_plots(self, canvas: ROOT.TCanvas, fit_region: FitRegion, 
+    def _save_plots(self, canvas: ROOT.TCanvas, pads: List[ROOT.TPad], fit_region: FitRegion, 
                    tag: str = "") -> List[str]:
         """Save plots in different formats"""
         created_files = []
@@ -303,12 +414,16 @@ class BackgroundPlotter:
             canvas.SaveAs(str(plot_path))
             created_files.append(str(plot_path))
             
-        # Log scale
-        canvas.SetLogy()
+        # Log scale (only for upper pad)
+        upper_pad = pads[0]
+        upper_pad.cd()
+        upper_pad.SetLogy()
+        canvas.Modified()
+        canvas.Update()
         for fmt in ["png", "pdf"]:
             plot_path = self.config.get_plot_file_path(fit_region.name, tag, 
-                                                     log_scale=True, file_format=fmt,
-                                                     category=category_name)
+                                                        log_scale=True, file_format=fmt,
+                                                        category=category_name)
             canvas.SaveAs(str(plot_path))
             created_files.append(str(plot_path))
             
@@ -346,10 +461,10 @@ class BackgroundPlotter:
         frame_resonant.SetTitle("")
         
         # Plot prompt data
-        print("DEBUG: resonant data = ", self.fitter.resonant_data, "; entries = ", self.fitter.resonant_data.sumEntries(), flush=True)
-        for i in range(100):
-            self.fitter.resonant_data.get(i)
-            print(f"  bin {i}: {self.fitter.resonant_data.weight()}", flush=True)
+        # print("DEBUG: resonant data = ", self.fitter.resonant_data, "; entries = ", self.fitter.resonant_data.sumEntries(), flush=True)
+        # for i in range(100):
+        #     self.fitter.resonant_data.get(i)
+        #     print(f"  bin {i}: {self.fitter.resonant_data.weight()}", flush=True)
         self.fitter.resonant_data.plotOn(frame_resonant,
                     ROOT.RooFit.Name("resonant_data"),
                     ROOT.RooFit.Binning(100),
@@ -384,7 +499,15 @@ class BackgroundPlotter:
 
         print(f"DEBUG: plotting components: {self.config.chosen_fit_region.backgrounds}", flush=True)
         
-        colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        # colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        colors = [
+            ROOT.TColor.GetColor("#5790fc"),
+            ROOT.TColor.GetColor("#f89c20"),
+            ROOT.TColor.GetColor("#e42536"),
+            ROOT.TColor.GetColor("#964a8b"),
+            ROOT.TColor.GetColor("#9c9ca1"),
+            ROOT.TColor.GetColor("#7a21dd")
+        ]
 
         for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
             print(f"DEBUG: resonant model = {model.GetName()}", flush=True)

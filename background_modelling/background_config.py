@@ -121,10 +121,10 @@ class BackgroundModelConfig:
             "region0": FitRegion(
                 name="region0",
                 display_name="Left Background Region (0.2-2.0 GeV)",
-                range=(0.3, 2.0),
+                range=(0.3, 2.4), #was 0.3, 2.0
                 sidebands=[
                     (0.3, 0.9),
-                    (1.2, 2)],  # Entire region is sideband
+                    (1.2, 2.4)],  # Entire region is sideband
                 backgrounds=["phi", "omega", "eta"],
                 background_fractions=[0.65, 0.25], # non-recursive fractions
                 background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_minBias_resonant_nanov15/zsnap/era2023/",
@@ -133,11 +133,11 @@ class BackgroundModelConfig:
             "region1": FitRegion(
                 name="region1",
                 display_name="Central Region (2.0-4.2 GeV)",
-                range=(2.0, 4.2), #4.6 for overlap, 4.2 for strict
+                range=(1.6, 4.6), #4.6 for overlap, 4.2 for strict
                 sidebands=[
-                    (2.0, 2.6),    # Left sideband
+                    (1.6, 2.6),    # Left sideband
                     (3.3, 3.5),    # Central sideband  
-                    (3.8, 4.2),    # Right sideband
+                    (3.8, 4.6),    # Right sideband
                 ],
                 backgrounds=["jpsi", "psi2s"],
                 background_fractions=[0.7],
@@ -147,9 +147,9 @@ class BackgroundModelConfig:
             "region2": FitRegion(
                 name="region2", 
                 display_name="Right Background Region (4.2-11.0 GeV)",
-                range=(4.2, 11), #3.8 for overlap, 4.2 for strict
+                range=(3.8, 11), #3.8 for overlap, 4.2 for strict
                 sidebands=[
-                    (4.2, 8.0),
+                    (3.8, 8.0),
                     (10.0, 11),
                 ],
                 backgrounds=["upsilon1s"],
@@ -199,12 +199,17 @@ class BackgroundModelConfig:
             "inclusive": {
                 # "region0" : [-0.03, 0.2, -0.2, 1.6, 2],
                 # "region0" : [0, 0.055, -0.25, 1.5, 1.5], #MANUALLY TUNED
-                "region0" : [0, 0.01, -0.07, 1.1, 1.45], #MANUALLY TUNED #2
-                # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6
-                "region1" : [2, 2.6, 1.14, 0.3, 0.2],  # the one above stopped working for region [2, 4.2]; this now does
+                # "region0" : [0, 0.01, -0.07, 1.1, 1.45], #MANUALLY TUNED #2, works for nanov15 W/OVERLAP AND DATA
+                "region0" : [0, 0.01, -0.07, 1.1, 1.45, -0.1, -0.1], #DATA, 7th order test
+                # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075],  # WORKS FOR EVERYTHING BUT etap0p6, MINBIAS
+                # "region1" : [2, 2.6, 1.14, 0.3, 0.2],  # the one above stopped working for region [2, 4.2] w/ nanov15; this now does, MINBIAS
+                # "region1" : [0.55, 1.96, -0.31, 0.16, 0.08], # works for nanov15 W/ OVERLAP (1.6-4.6), MINBIAS
+                # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075], # works for DATA
+                "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075, -0.1, +0.1], # DATA, 7th order test
                 # "region2" : [1.9, 0.73, -0.015, 0.11, 0.013],
-                "region2" : [1.7, 0.23, 0.13, -0.003, 0.00012],
-                # "region2" : [4.4, 0.78, 0.74, 0.44, 0.0045], #FOR NANOV15
+                # "region2" : [1.7, 0.23, 0.13, -0.003, 0.00012],
+                # "region2" : [4.4, 0.78, 0.74, 0.44, 0.0045], #FOR NANOV15 AND DATA, ALSO works w/ overlap
+                "region2" : [4.4, 0.78, 0.74, 0.44, 0.0045, -0.1, 0.1], #DATA, 7th order test
             },
             # Add category-specific overrides here as needed:
             # "etap0p6": [2.33352, 3.59166, -0.06610, 0.52400, 0.19075],  # WORKS FOR dRp0p3
@@ -215,7 +220,7 @@ class BackgroundModelConfig:
         bernstein_limits_by_category = {
             # Add category-specific overrides here as needed
             "inclusive": {
-                "region1" : [(-2, 2) for _ in range(5)]
+                "region1" : [(-2.5, 2.5) for _ in range(7)]
             },  # Default limits for all #FIXME: was (-5, 5) for all
             "etaHigh" : {
                 "region1" : [(-5, 5) for _ in range(5)],
@@ -224,9 +229,29 @@ class BackgroundModelConfig:
         
         poly_inits_by_category = {
             "inclusive": {
-                "region1" : [-0.9, 3.2, -1.4, 0.16, 0],
+                # ### POLYNOMIAL X EXPONENTIAL
+                # # "region1" : [-0.9, 3.2, -1.4, 0.16, 0], #THIS WORKS ON DATA. 
+                # # "region1" : [-4.3, 4.2, -1.3, 0.13, 0.1, -0.79], # testing: does this make fit any quicker?
+                # "region1" : [-0.9, 3.2, -1.4, 0.16, 0.1, 0], # worked on data, trying init for 5th param
+                # "region0" : [-2.7, 4.2, 5, -2, 0.1, -0.07],
+                # "region2" : [9.8, -5.0, 0.66, 0.001, 0.1, -1.5],
+                # # "region2" : [-2.9, 5, 5, -2, -0.04], # DON'T WORK
+                ### POLY ONLY
+                "region0" : [-2.7, 4.2, 5, -2, 0.1, 0],
+                "region1" : [-3, 3, -1.3, 0.25, -0.01, 0],
+                "region2" : [9.8, -5.0, 0.66, 0.001, 0.1, -1.5],
             },
+
             # Add category-specific overrides here as needed
+        }
+
+        poly_limits_by_category = {
+            "inclusive" : {
+                "region0" : [*[(-10, 10) for _ in range(5)], (0, 0)],
+                # "region1" : [*[(-5, 5) for _ in range(5)], (-10, 10)], # poly x exp
+                "region1" : [*[(-5, 5) for _ in range(5)], (-5, 0.1)], # poly only
+                "region2" : [(-20, 20) for _ in range(6)],
+            }
         }
         
         exp_inits_by_category = {
@@ -242,7 +267,36 @@ class BackgroundModelConfig:
             },
             # Add category-specific overrides here as needed
         }
-        
+
+        chebyshev_inits_by_category = {
+            "inclusive": {
+                # "region0" : [1.06946, 0.00463, -0.14197, -0.00807, 0.02420, -0.01174],
+                # "region1" : [-0.8, -0.115, 0.25, 0.02, -0.076, 0.1],
+                # "region2" : [-1.3, 0.5, -0.1, -0.01, -0.01, 0.05],
+                "region0" : [1.06946, 0.00463, -0.14197, -0.00807,],
+                "region1" : [-0.8, -0.115, 0.25, 0.02,],
+                "region2" : [-1.3, 0.5, -0.1, -0.01,],
+            },
+            # Add category-specific overrides here as needed
+        }
+
+        bernsteinexp_inits_by_category = {
+            "inclusive" : {
+                # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075, -1, 0.9], # first 5 params => bernstein, [-2] => exponential, [-1] => fraction of bernstein wrt exponential
+                "region1" : [-0.05, 2, 2, 0.5, -0.5, 0, 0.25,
+                             -0.6, 
+                             0.5], # first 5 params => bernstein, [-2] => exponential, [-1] => fraction of bernstein wrt exponential
+            }
+        }
+
+        modifiedbw_inits_by_category = {
+            "inclusive" : {
+                # "region1" : [1, -0.1, 1, 1, 1], #a1, a2, a3, mu, sigma
+                # "region1" : [1, -0.2, 3.2, 3.1, 1.2], #a1, a2, a3, mu, sigma
+                "region1" : [2.4, -0.3, -30], #a1, a2, mu
+            }
+        }
+
         # Get initial parameters for the current category (fall back to inclusive if not specified)
         current_category = getattr(self, 'selected_category', 'inclusive')
         print(f"DEBUG: trying to retrieve selceted cateogyr: {self.selected_category}", flush=True)
@@ -254,6 +308,7 @@ class BackgroundModelConfig:
 
         print(f"DEBUG: Using fit region '{fit_region_name}' for background functions", flush=True)
         
+
         inits_dict = bernstein_inits_by_category.get(current_category, 
                                                      bernstein_inits_by_category["inclusive"])
         bernstein_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
@@ -267,6 +322,11 @@ class BackgroundModelConfig:
                                                 poly_inits_by_category["inclusive"])
         poly_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
 
+        limits_dict = poly_limits_by_category.get(current_category, 
+                                                  poly_limits_by_category["inclusive"])
+        poly_limits = limits_dict.get(fit_region_name,
+                                        limits_dict["region1"])
+
         inits_dict = exp_inits_by_category.get(current_category,
                                                exp_inits_by_category["inclusive"])
         exp_inits = inits_dict.get(fit_region_name, inits_dict["region1"])
@@ -276,13 +336,28 @@ class BackgroundModelConfig:
         simple_exp_inits = inits_dict.get(fit_region_name,
                                           inits_dict["region1"])
 
+        inits_dict = chebyshev_inits_by_category.get(current_category,
+                                                      chebyshev_inits_by_category["inclusive"])
+        chebyshev_inits = inits_dict.get(fit_region_name,
+                                          inits_dict["region1"])    
+
+        inits_dict = bernsteinexp_inits_by_category.get(current_category,
+                                                        bernsteinexp_inits_by_category["inclusive"])
+        bernsteinexp_inits = inits_dict.get(fit_region_name,  
+                                          inits_dict["region1"])
+
+        inits_dict = modifiedbw_inits_by_category.get(current_category,
+                                                        modifiedbw_inits_by_category["inclusive"])
+        modifiedbw_inits = inits_dict.get(fit_region_name,  
+                                          inits_dict["region1"])
+
         # Bernstein polynomial (5th degree)
         functions.append(BackgroundFunction(
             name="bkg_f0",
             display_name="Bernstein Polynomial",
             formula="Bernstein polynomial of degree 5",
-            n_params=5,
-            param_names=[f"a{i}" for i in range(5)],
+            n_params=7,
+            param_names=[f"a{i}" for i in range(7)],
             param_inits=bernstein_inits,
             param_limits=bernstein_limits,
             description="5th degree Bernstein polynomial"
@@ -292,12 +367,15 @@ class BackgroundModelConfig:
         functions.append(BackgroundFunction(
             name="bkg_f1", 
             display_name="Polynomial × Exponential",
-            formula="(1 + a0*x + a1*x^2 + a2*x^3 + a3*x^4) * exp(b0*x)",
-            n_params=5,  # 4 polynomial + 1 exponential
-            param_names=[f"b{i}" for i in range(4)] + ["bb0"],
+            formula="(1 + a0*x + a1*x^2 + a2*x^3 + a3*x^4 + a4*x^5) * exp(b0*x)",
+            n_params=6,  # 5 polynomial + 1 exponential
+            param_names=[f"b{i}" for i in range(5)] + ["bb0"],
+            # n_params=5,  # 5 polynomial + 1 exponential
+            # param_names=[f"b{i}" for i in range(5)],
             param_inits=poly_inits,
-            param_limits=[(-5, 5) for _ in range(4)] + [(-10, 10)],
-            description="4th degree polynomial times exponential"
+            param_limits=poly_limits,
+            # param_limits=[(-5, 5) for _ in range(4)] + [(-10, 10)],
+            description="5th degree polynomial times exponential"
         ))
         
         # Sum of exponentials
@@ -323,7 +401,45 @@ class BackgroundModelConfig:
             param_limits=[(-10, 10)],
             description="Single exponential function"
         ))
+
+        # 6th degree Chebyshev polynomial
+        functions.append(BackgroundFunction(
+            name="bkg_f4",
+            display_name="Chebyshev Polynomial",
+            formula="Chebyshev polynomial of degree 6",
+            n_params=4,
+            param_names=[f"t{i}" for i in range(4)],
+            param_inits=chebyshev_inits,
+            param_limits=[(-5, 5) for _ in range(4)],
+            description="6th degree Chebyshev polynomial"
+        ))
         
+        # 5th deg Bernstein + exponential
+        functions.append(BackgroundFunction(
+            name="bkg_f5",
+            display_name="Bernstein + exponential",
+            formula="5th deg Bernstein polynomial + exponential",
+            n_params=9, # 5 bernstein + 1 exponential + 1 fraction in addition
+            param_names=[f"be{i}" for i in range(9)],
+            param_inits=bernsteinexp_inits,
+            param_limits=[*[(-5, 5) for _ in range(8)], (0, 1)],
+            description="6th degree Chebyshev polynomial"
+        ))
+
+        # Modified BW
+        functions.append(BackgroundFunction(
+            name="bkg_f6",
+            display_name="Modified BW",
+            formula="Modified BW",
+            n_params=3,
+            param_names=[f"mbw{i}" for i in range(3)],
+            param_inits=modifiedbw_inits,
+            # param_limits=[(-5, 5) for _ in range(5)],
+            # param_limits=[(-2, 2), (-2, 0), (-5, 5), (-10, 10), (0, 10)],
+            param_limits=[(0, 3), (-1, 0), (-80, 80)],
+            description="Modified BW"
+        ))
+
         # Validate all functions
         for func in functions:
             func.validate()
@@ -435,7 +551,7 @@ class BackgroundModelConfig:
                 "njpsi": {"init_param": 0.9, "min_param": 1e-4, "max_param": 1e2},    # J/psi background
                 "npsi2s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4},   # psi(2S) background
                 # "nupsilon1s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
-                "nupsilon1s": {"init_param": 0.1, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15
+                "nupsilon1s": {"init_param": 0.05, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15
                 "ndy": {"init_param": 0.3, "min_param": 1e-4, "max_param": 1e4},     # Non-resonant background
             },
             "fractions": {
@@ -462,7 +578,11 @@ class BackgroundModelConfig:
         
     def set_background_function(self, index: int):
         """Set the background function to use"""
-        if 0 <= index < len(self.background_functions):
+        if index == -1:
+            print("Using all background functions for fitting", flush=True)
+            self.chosen_bkg_function = -1
+            return
+        elif 0 <= index < len(self.background_functions):
             self.chosen_bkg_function = index
         else:
             raise ValueError(f"Invalid background function index: {index}")
@@ -470,26 +590,28 @@ class BackgroundModelConfig:
     # TODO FIXME: merge the two functions below, basically same return value
     def get_dataset_path(self) -> Path:
         """Get the path to the input dataset (single workspace with all categories)"""
-        sample_suffix = "_jpsi" if self.use_jpsi else "_minbias"
+        sample_suffix = "_data" if self.use_data else "_jpsi" if self.use_jpsi else "_minbias"
         mass_suffix = "_reducedMass" if self.use_reduced_mass else ""
         binning_suffix = "_binned" if self.use_binned else ""
         reweight_suffix = "" if self.use_reweighting else "_noReweight" 
         tag_suffix = f"_{self.tag}" if self.tag else ""
+        envelope_suffix = "_envelope" if self.chosen_bkg_function == -1 else ""        
 
         # Single workspace file contains all categories
         # TODO FIXME: is the non _full one even used? REVERT BACK IF NEEDED
-        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}_full.root")
+        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
         
     def get_output_workspace_path(self) -> Path:
         """Get the path for the output workspace (single workspace with all categories)"""
-        sample_suffix = "_jpsi" if self.use_jpsi else "_minbias"
+        sample_suffix = "_data" if self.use_data else "_jpsi" if self.use_jpsi else "_minbias"
         mass_suffix = "_reducedMass" if self.use_reduced_mass else ""
         binning_suffix = "_binned" if self.use_binned else ""
         reweight_suffix = "" if self.use_reweighting else "_noReweight" 
         tag_suffix = f"_{self.tag}" if self.tag else ""
+        envelope_suffix = "_envelope" if self.chosen_bkg_function == -1 else ""
         
         # Single workspace file contains all categories
-        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}_full.root")
+        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
         
     def get_log_file_path(self, fit_region: str, tag: str = "", category: str = None) -> Path:
         """Get the log file path for a specific category"""
@@ -569,6 +691,7 @@ class BackgroundModelConfig:
            - poly_inits_by_category for bkg_f1 (Polynomial × Exponential)  
            - exp_inits_by_category for bkg_f2 (Sum of exponentials)
            - simple_exp_inits_by_category for bkg_f3 (Simple exponential)
+           - chebyshev_inits_by_category for bkg_f4 (Chebyshev polynomial)
         3. Add an entry: "category_name": [param1, param2, ...]
         
         Example:
@@ -595,7 +718,7 @@ class BackgroundModelConfig:
         print(f"  Dataset path: {self.get_dataset_path()}")
         print()
         print(f"Fit settings:")
-        print(f"  Chosen background function: {self.chosen_bkg_function} ({self.get_chosen_background_function().display_name})")
+        print(f"  Chosen background function: {self.chosen_bkg_function} ({self.get_chosen_background_function().display_name if self.chosen_bkg_function != -1 else 'All -- envelope'})")
         print(f"  Freeze background in sidebands: {self.freeze_bkg_sidebands}")
         print(f"  Floating resonant backgrounds: {self.floating_resonant}")
         print(f"  Fit J/psi first: {self.fit_jpsi_first}")

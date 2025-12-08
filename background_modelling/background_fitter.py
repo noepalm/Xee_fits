@@ -215,6 +215,15 @@ class BackgroundFitter:
             elif func_config.name == "bkg_f3":
                 # Simple exponential
                 self._create_simple_exp_function(func_config)
+            elif func_config.name == "bkg_f4":
+                # Chebyshev polynomial
+                self._create_chebyshev_function(func_config)
+            elif func_config.name == "bkg_f5":
+                # Bernstein + exponential
+                self._create_bernstein_exp_function(func_config)
+            elif func_config.name == "bkg_f6":
+                # modified BW
+                self._create_modified_bw(func_config)
                 
     def _create_bernstein_function(self, func_config: BackgroundFunction):
         """Create Bernstein polynomial function"""
@@ -233,13 +242,19 @@ class BackgroundFitter:
             
         # Create polynomial part
         poly_params = [self.workspace.obj(f"{name}{self.category.label}") for name in func_config.param_names[:-1]]
-        # poly_params = params[:-1] # (POTENTIALLY) FIXME: doesn't like accessing RooArgList directly
+        # poly_params = [self.workspace.obj(f"{name}{self.category.label}") for name in func_config.param_names]
 
-        # poly_params = [self.workspace.obj(name) for name in func_config.param_names[:-1]]
-        poly_formula = "(1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 ) > 0 ? (1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 ) : 1e-6"
-        poly_args = ROOT.RooArgList([self.mass_var] + poly_params)
-        poly_func = ROOT.RooGenericPdf(f"{func_config.name}_poly{self.category.label}", poly_formula, poly_args)
-        
+        ## POLYNOMIAL X EXPONENTIAL ###
+
+        # # APPROACH 1 FOR POLYNOMIAL: regularize it (positive definite)
+        # # poly_params = [self.workspace.obj(name) for name in func_config.param_names[:-1]]
+        # poly_formula = "(1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 + @0**5 * @5) > 0 ? (1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 + @0**5 * @5) : 1e-6"
+        # poly_args = ROOT.RooArgList([self.mass_var] + poly_params)
+        # poly_func = ROOT.RooGenericPdf(f"{func_config.name}_poly{self.category.label}", poly_formula, poly_args)
+
+        # APPROACH 2: Use built-in RooPolynomial
+        poly_func = ROOT.RooPolynomial(f"{func_config.name}_poly{self.category.label}", f"{func_config.name}_poly{self.category.label}", self.mass_var, poly_params)
+
         # Create exponential part
         exp_param = self.workspace.obj(f"{func_config.param_names[-1]}{self.category.label}")
         print(f"DEBUG: exp_param = {exp_param}", flush=True)
@@ -248,9 +263,18 @@ class BackgroundFitter:
         # exp_param = self.workspace.obj(func_config.param_names[-1])
         exp_func = ROOT.RooExponential(f"{func_config.name}_exp{self.category.label}", f"{func_config.name}_exp{self.category.label}", self.mass_var, exp_param)
         
+        # store exp and poly funcs inside background_functions for ownership
+        self.background_functions[f"{func_config.name}_poly"] = poly_func
+        self.background_functions[f"{func_config.name}_exp"] = exp_func
+        
         # Combine
         func = ROOT.RooProdPdf(f"{func_config.name}{self.category.label}",
                                f"{func_config.name}{self.category.label}", poly_func, exp_func)
+
+        # ### JUST POLYNOMIAL ###
+        # func = ROOT.RooPolynomial(f"{func_config.name}{self.category.label}", f"{func_config.name}{self.category.label}", 
+        #                               self.mass_var, poly_params)
+
         self.background_functions[func_config.name] = func
         
     def _create_sum_exp_function(self, func_config: BackgroundFunction):
@@ -267,7 +291,9 @@ class BackgroundFitter:
                                            f"{func_config.name}_exp{i}{self.category.label}", 
                                            self.mass_var, param)
             exp_funcs.append(exp_func)
-            
+            # store exp funcs inside background_functions for ownership
+            self.background_functions[f"{func_config.name}_exp{i}"] = exp_func
+
         # Create sum with coefficients
         coeff_list = ROOT.RooArgList([params.find(f"cc{i}{self.category.label}") for i in range(3)])  # n-1 coefficients
         func = ROOT.RooAddPdf(f"{func_config.name}{self.category.label}", 
@@ -284,6 +310,66 @@ class BackgroundFitter:
         # Create function
         func = ROOT.RooExponential(f"{func_config.name}{self.category.label}", 
                                    f"{func_config.name}{self.category.label}", self.mass_var, param)
+        self.background_functions[func_config.name] = func
+
+    def _create_chebyshev_function(self, func_config: BackgroundFunction):
+        """Create Chebyshev polynomial function"""
+        # Create parameters
+        param_list = self._create_vars(func_config)
+        # Create function
+        func = ROOT.RooChebychev(f"{func_config.name}{self.category.label}",
+                                 f"{func_config.name}{self.category.label}", self.mass_var, param_list)
+        
+        self.background_functions[func_config.name] = func
+        
+    def _create_bernstein_exp_function(self, func_config: BackgroundFunction):
+        """Create Bernstein polynomial function"""
+        # Create parameters
+        params = self._create_vars(func_config)
+
+        # retrieve Bernstein params
+        bernstein_params = [self.workspace.obj(f"{name}{self.category.label}") for name in func_config.param_names[:-2]]
+        # retrieve Exponential param
+        exp_param = self.workspace.obj(f"{func_config.param_names[-2]}{self.category.label}")
+
+        # create additive fraction
+        bernstein_frac = self.workspace.obj(f"{func_config.param_names[-1]}{self.category.label}")
+
+        # Create bernstein func
+        bernstein_func = ROOT.RooBernstein(f"{func_config.name}_bernstein{self.category.label}",
+                                          f"{func_config.name}_bernstein{self.category.label}", self.mass_var, bernstein_params)
+        # Create exponential func
+        exp_func = ROOT.RooExponential(f"{func_config.name}_exp{self.category.label}",
+                                       f"{func_config.name}_exp{self.category.label}", self.mass_var, exp_param)
+
+        # store intermediate funcs for ownership
+        self.background_functions[f"{func_config.name}_bernstein"] = bernstein_func
+        self.background_functions[f"{func_config.name}_exp"] = exp_func
+
+        # Final function is sum of the two
+        func = ROOT.RooAddPdf(f"{func_config.name}{self.category.label}",
+                              f"{func_config.name}{self.category.label}",
+                              ROOT.RooArgList(bernstein_func, exp_func),
+                              ROOT.RooArgList(bernstein_frac))
+        
+        self.background_functions[func_config.name] = func
+
+    def _create_modified_bw(self, func_config: BackgroundFunction):
+        """Create polynomial × exponential function"""
+        # Create parameters
+        params = self._create_vars(func_config)
+
+        modifiedbw_params = [self.workspace.obj(f"{name}{self.category.label}") for name in func_config.param_names]
+        args = ROOT.RooArgList([self.mass_var] + modifiedbw_params)
+
+        # # formula = e^(a_1 x + a_2 x^2) / ((x - mu)^a_3 + (sigma)^a_3)
+        # formula = "exp(@0 * @1 + @2 * @0**2) / (TMath::Power((@0 - @4), @3) + TMath::Power(@5, @3))"
+
+        # formula = e^(a_1 x + a_2 x^2) / ((x - mu))
+        formula = "exp(@0 * @1 + @2 * @0**2) / (@0 - @3)"
+
+        func = ROOT.RooGenericPdf(f"{func_config.name}{self.category.label}", formula, args)
+
         self.background_functions[func_config.name] = func
         
     def _create_vars(self, func_config: BackgroundFunction) -> ROOT.RooArgList:
@@ -420,6 +506,8 @@ class BackgroundFitter:
         results = {}
         
         background_funcs = self.config.background_functions if self.config.chosen_bkg_function < 0 else [self.config.get_chosen_background_function()]
+        print("DEBUG: chosen background function index", self.config.chosen_bkg_function, flush = True)
+        print("DEBUG: chosen_background_function?", self.config.get_chosen_background_function(), flush = True)
         print("DEBUG: background_funcs", background_funcs, flush = True)
         for func_config in background_funcs:
             print("DEBUG: func_config", func_config, flush = True)
@@ -429,7 +517,8 @@ class BackgroundFitter:
             if func_name not in self.background_functions:
                 print(f"    Warning: Function {func_name} not created")
                 continue
-                
+            
+            print("DEBUG: retrieving function", flush = True)
             func = self.background_functions[func_name]
             print(func)
             
@@ -513,6 +602,12 @@ class BackgroundFitter:
         params = self.combined_model.getParameters(self.data)
         for param in params:
             prefit_values[param.GetName()] = param.getValV()
+
+        # # DEBUG: set resonant bkg params to +-inf
+        # for resonant_bkg in self.resonant_backgrounds.values():
+        #     res_params = resonant_bkg.getParameters(self.data)
+        #     for param in res_params:
+        #         param.setRange(0, 1000)
             
         print("DEBUG: fitting combined model", flush = True)
         print(f"DEBUG: data entries = {self.data.sumEntries()}", flush = True)
@@ -525,7 +620,7 @@ class BackgroundFitter:
                                                  ROOT.RooFit.Range(fit_region.name),
                                                  ROOT.RooFit.Save(),
                                                  ROOT.RooFit.NumCPU(8),
-                                                 ROOT.RooFit.SumW2Error(True)) #FIXME: True
+                                                 ROOT.RooFit.SumW2Error(True))
         
         # Store results
         result = FitResult("full_bkg_model", fit_region.name)
@@ -540,6 +635,13 @@ class BackgroundFitter:
             param_name = param.GetName()
             prefit_val = prefit_values.get(param_name)
             result.add_parameter(param_name, param, prefit_val)
+
+        # Freeze resonant background parameters
+        for resonant_bkg in self.resonant_backgrounds.values():
+            res_params = resonant_bkg.getParameters(self.data)
+            for param in res_params:
+                param.setConstant(True)
+                print(f"  Frozen: {param.GetName()} (on MinBias sample)")
         
         print(f"  DEBUG: post-total fit parameters:", flush = True)
         for pname, pval in result.parameters.items():
@@ -680,12 +782,26 @@ class BackgroundFitter:
         for param in params:
             self.log_print(f"param: {param.GetName()}, value: {param.getValV():.5f}, error: {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])")
             
+        # # Freeze resonant background parameters after fitting to prompt data
+        # print(f"DEBUG: freezing resonant background parameters", flush=True)
+        # for model in models:
+        #     for param in model.getParameters(resonant_data):
+        #         param.setConstant(True)
+
         # Freeze resonant background parameters after fitting to prompt data
-        print(f"DEBUG: freezing resonant background parameters", flush=True)
+        print(f"DEBUG: constraining resonant background parameters", flush=True)
         for model in models:
             for param in model.getParameters(resonant_data):
-                param.setConstant(True)
-
+                if not param.isConstant():
+                    central_val = param.getValV()
+                    error = param.getError()
+                    # Set limits to ±10% fitted value
+                    tol = 0.2
+                    new_min = max(param.getMin(), central_val*(1 - tol))
+                    new_max = min(param.getMax(), central_val*(1 + tol))
+                    param.setRange(new_min, new_max)
+                    print(f"  Constrained: {param.GetName()} = {central_val:.5f} ± {error:.5f} to [{new_min:.5f}, {new_max:.5f}]")
+            
         # for param in jpsi_model.getParameters(resonant_data):
         #     param.setConstant(True)
         # for param in psi2s_model.getParameters(resonant_data):
@@ -786,13 +902,25 @@ class BackgroundFitter:
             self.output_workspace.Import(self.data)
             print(f"  ✅ Added dataset: {self.data.GetName()}")
 
-        # print parameter values for each model:
+        # print parameter values for each model EXCLUDING SIGNAL:
         for model in self.output_workspace.allPdfs():
-            print(f"  Model: {model.GetName()}")
-            params = model.getParameters(self.data)
-            print(f"DEBUG: Parameters for model {model.GetName()}, category {category_label}:")
-            for param in params:
-                print(f"    {param.GetName()}: {param.getValV():.5f} ± {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])", flush = True)
+            if not model.GetName().startswith("Zd"):
+                print(f"  Model: {model.GetName()}")
+                params = model.getParameters(self.data)
+                print(f"DEBUG: Parameters for model {model.GetName()}, category {category_label}:")
+                for param in params:
+                    # Check if parameter is close to boundary
+                    val = param.getValV()
+                    min_val = param.getMin()
+                    max_val = param.getMax()
+                    range_size = max_val - min_val
+                    
+                    # Check if within 1% of boundary
+                    boundary_warning = ""
+                    if abs(val - min_val) < 0.01 * range_size or abs(val - max_val) < 0.01 * range_size:
+                        boundary_warning = " ⚠️  BOUNDARY WARNING (within 1%)"
+                    
+                    print(f"    {param.GetName()}: {val:.5f} ± {param.getError():.5f} (limits: [{min_val:.5g}, {max_val:.5g}]){boundary_warning}", flush = True)
         
         print(f"✅ Category {self.category.name} models added to centralized workspace")
         

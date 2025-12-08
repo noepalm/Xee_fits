@@ -10,7 +10,7 @@ import argparse
 import sys
 sys.path.append('utilities')
 # from utilities.get_signal_effs_xsecs import effs, effs_err, xsecs, xsecs_err
-from utilities.get_signal_effs_xsecs import fit_effs, fit_xsecs
+from utilities.get_signal_effs_xsecs import get_efficiency_function, get_xsec_function
 
 # Import shared configuration
 from shared_config import CategoryConfig, get_default_categories
@@ -21,20 +21,21 @@ class DatasetCreator:
     """This module handles the creation of RooDatasets from root files,
     importing resonant background templates, and interpolating cross-sections and efficiencies."""
 
-    def __init__(self, use_jpsi: bool = False, use_reduced_mass: bool = False,
+    def __init__(self, use_data: bool = False, use_jpsi: bool = False, use_reduced_mass: bool = False,
                  categories: Dict[str, CategoryConfig] = None,
                  fit_region: FitRegion = None,
                  output_workspace: "ROOT.RooWorkspace" = None, use_reweighting: bool = True,
                  use_binned: bool = False, weight_multiplier: float = 1.0,
-                 tag: str = ""):
+                 tag: str = "", cached_datasets: Dict[str, Any] = None):
 
+        self.use_data = use_data
         self.use_jpsi = use_jpsi
         self.use_reduced_mass = use_reduced_mass
         self.use_reweighting = use_reweighting
         self.use_binned = use_binned
         self.fit_region = fit_region
-        print(f"DEBUG REMOVEME: fit_region = {fit_region}")
         self.tag = tag
+        self.cached_datasets = cached_datasets  # Pre-loaded datasets to use instead of creating from files
         
         # Category definitions (use shared configuration)
         if categories is None:
@@ -177,7 +178,7 @@ class DatasetCreator:
             dataset_args = [ROOT.RooArgSet(mass_var)]
             
             # Add weight variable if dataset not binned
-            if not self.use_binned:
+            if (not self.use_binned and self.use_reweighting) and (not self.use_data):
                 weight_var_name = f"weight{category_config.label}"
                 weight_var = ROOT.RooRealVar(weight_var_name, weight_var_name, 1)
                 self.workspace.Import(weight_var, ROOT.RooCmdArg())
@@ -194,7 +195,10 @@ class DatasetCreator:
         category_events = {cat: 0 for cat in self.category_names}
         
         for filename in os.listdir(self.filepath):
-            if not filename.endswith('.root') or "DoubleElectronNANO" in filename: #skip data files
+            if not filename.endswith('.root'):
+                continue
+
+            if (self.use_data and "DoubleElectronNANO" not in filename) or (not self.use_data and "DoubleElectronNANO" in filename):
                 continue
                 
             print(f"  Processing: {filename}")
@@ -246,7 +250,9 @@ class DatasetCreator:
                             if self.fit_region:
                                 if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
                                     continue
-                            datasets[category_name].add(ROOT.RooArgSet(mass_var), weight)
+                            # args = [weight] if (self.use_reweighting and not self.use_binned) and (not self.use_data) else []
+                            args = [weight] if (self.use_reweighting) and (not self.use_data) else []
+                            datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
                             file_events[category_name] += 1
                         
                 for cat in self.category_names:
@@ -254,7 +260,10 @@ class DatasetCreator:
                     
                 n_files += 1
                 print(f"    Added events: {', '.join([f'{cat}={file_events[cat]}' for cat in self.category_names])}")
-                
+                print(f"    Total dataset entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
+                print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
+
+
                 root_file.Close()
                 
             except Exception as e:
@@ -311,9 +320,14 @@ class DatasetCreator:
 
         print(f"DEBUG: interpolating xsec, effs for fit region {self.fit_region} (name: {self.fit_region.name if self.fit_region else 'none'})")
         
-        eff_fit_func, eff_fit_params = fit_effs(use_old=False, 
-                                                use_crystalball = (self.fit_region.name == "region2")).values()
-        xsec_fit_func, xsec_fit_params = fit_xsecs(use_old=False).values()
+        # Get the default linear interpolation functions for efficiency and cross-section
+        eff_result = get_efficiency_function(use_old=False)
+        xsec_result = get_xsec_function(use_old=False)
+        
+        eff_func = eff_result["fit_function"]
+        eff_params = eff_result["fit_parameters"]
+        xsec_func = xsec_result["fit_function"]
+        xsec_params = xsec_result["fit_parameters"]
 
         # # Mass points for interpolation
         # mass_points = np.array([1, 3.1, 5, 5.5, 6, 6.5])
@@ -350,6 +364,9 @@ class DatasetCreator:
             
         # Calculate category fractions from inclusive dataset
         inclusive_events = datasets["inclusive"].sumEntries() if "inclusive" in datasets else 1.0
+        print("      DEBUG: inclusive dataset =", datasets["inclusive"], flush=True)
+        print("      DEBUG: inclusive events =", inclusive_events, flush=True)
+        print("      DEBUG: sum of entries, num of entries in inclusive dataset =", datasets["inclusive"].sumEntries(), datasets["inclusive"].numEntries(), flush=True)
         category_fractions = {}
         for category_name in self.category_names:
             if category_name == "inclusive":
@@ -369,9 +386,13 @@ class DatasetCreator:
             for mass_str in masses:
                 mass_val = float(mass_str)
                 
-                # Calculate expected signal events
-                efficiency = eff_fit_func(mass_val, *eff_fit_params)
-                cross_section = xsec_fit_func(mass_val, *xsec_fit_params)
+                # Calculate expected signal events using linear interpolation
+                if len(eff_params) > 0:  # parametric fit with parameters
+                    efficiency = eff_func(mass_val, *eff_params)
+                    cross_section = xsec_func(mass_val, *xsec_params)
+                else:  # interpolation function with no parameters
+                    efficiency = eff_func(mass_val)
+                    cross_section = xsec_func(mass_val)
 
                 print(f"DEBUG: efficiency for M={mass_val} GeV: {efficiency}, cross-section: {cross_section} pb", flush=True)
 
@@ -453,26 +474,41 @@ class DatasetCreator:
         # Setup mass variable (single shared variable)
         mass_var = self.setup_mass_variable()
         
-        # Create datasets from files
-        datasets = self.create_dataset_from_files(mass_var)
-        
-        print("DEBUG: datasets created. Applying cuts to mass", flush=True)
-        
-        # Apply mass cuts and import datasets to single workspace
-        for category_name, category_config in self.categories.items():
-            # Apply mass cuts
-            if self.fit_region:
-                print(f"  Applying mass cut for {category_name}: {self.fit_region.range[0]} < mass < {self.fit_region.range[1]}", flush=True)
-                datasets[category_name] = datasets[category_name].reduce(ROOT.RooFit.Cut(f"mass > {self.fit_region.range[0]} && mass < {self.fit_region.range[1]}"))
+        # Create or use cached datasets
+        if self.cached_datasets is not None:
+            print("Using cached datasets...")
+            datasets = {}
+            # Import cached datasets to workspace
+            for category_name, category_config in self.categories.items():
+                dataset_name = f'data_obs{category_config.label}{"_resonant" if self.use_jpsi else ""}'
+                if dataset_name in self.cached_datasets:
+                    datasets[category_name] = self.cached_datasets[dataset_name]
+                    self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
+                    print(f"  Using cached {dataset_name}: {datasets[category_name].numEntries()} entries")
+                else:
+                    print(f"  Warning: Cached dataset {dataset_name} not found")
+        else:
+            # Create datasets from files
+            datasets = self.create_dataset_from_files(mass_var)
             
-            # Import dataset to single workspace (datasets already have correct names with category labels)
-            self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
+            print("DEBUG: datasets created. Applying cuts to mass", flush=True)
+            
+            # Apply mass cuts and import datasets to single workspace
+            for category_name, category_config in self.categories.items():
+                # Apply mass cuts
+                if self.fit_region:
+                    datasets[category_name] = datasets[category_name].reduce(ROOT.RooFit.Cut(f"mass > {self.fit_region.range[0]} && mass < {self.fit_region.range[1]}"))
+                
+                # Import dataset to single workspace (datasets already have correct names with category labels)
+                self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
         
         # Import resonant background templates
         imported_models = self.import_resonant_background_templates()
 
         # Interpolate efficiencies and cross-sections
-        if any(imported_models.values()):
+        if any(imported_models.values()) and not self.use_jpsi:
+            print(f"DEBUG: datasets = {datasets}", flush=True)
+            print(f"DEBUG: inclusive dataset = {datasets.get('inclusive', None)}", flush=True)
             self.interpolate_efficiencies_xsecs(imported_models, datasets)
             
         # Add resonant background normalizations
@@ -484,7 +520,7 @@ class DatasetCreator:
         # Save workspace
         output_file = None
         if not hasattr(self, '_using_shared_workspace') or not self._using_shared_workspace or self.use_jpsi:
-            sample_suffix = "_jpsi" if self.use_jpsi else "_minbias"
+            sample_suffix = "_data" if self.use_data else "_jpsi" if self.use_jpsi else "_minbias"
             mass_suffix = "_reducedMass" if self.use_reduced_mass else ""
             binning_suffix = "_binned" if self.use_binned else ""            
             reweight_suffix = "_reweight" if self.use_reweighting else "_noReweight"
@@ -515,6 +551,8 @@ class DatasetCreator:
 def main():
     """Main function for command line usage"""
     parser = argparse.ArgumentParser(description='Create dataset for background modeling')
+    parser.add_argument('--use_data', action='store_true', default=False,
+                       help='Use real data sample instead of MinBias sample')
     parser.add_argument('--use_jpsi', action='store_true', default=False,
                        help='Use J/psi sample instead of MinBias sample')
     parser.add_argument('--use_reduced_mass', action='store_true', default=False,
@@ -540,6 +578,7 @@ def main():
         # Create dataset creator
         use_reweighting = not args.no_reweighting
         creator = DatasetCreator(
+            use_data=args.use_data,
             use_jpsi=args.use_jpsi,
             use_reduced_mass=args.use_reduced_mass,
             categories=categories,
