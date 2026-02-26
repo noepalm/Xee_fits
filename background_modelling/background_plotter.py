@@ -71,6 +71,12 @@ class BackgroundPlotter:
         
         if not self.config.use_binned:
             draw_args.append(ROOT.RooFit.Binning(100))
+
+        if self.config.no_res:
+            sideband_range_names = [f"sideband_{i}" for i in range(len(fit_region.sidebands))]
+            draw_range = ",".join(sideband_range_names)
+            draw_args.append(ROOT.RooFit.CutRange(draw_range))
+            print("DEBUG: only plotting in range ", draw_range, flush=True)
             
         # Plot data
         self.fitter.data.plotOn(frame, *draw_args)
@@ -81,9 +87,9 @@ class BackgroundPlotter:
         #     print(f"  bin {i}: {self.fitter.data.weight()}", flush=True)
         print(f"DEBUG: mass var range = ({xmin}, {xmax})", flush=True)
         
-        # Plot combined background model
+        # Plot combined model (handles both regular and no_res cases)
         plotted_functions = self._plot_combined_model(frame, fit_region)
-        
+                
         # if fit_region.name == "region1" or True:  # Main region with combined background #FIXME
         #     plotted_functions = self._plot_combined_model(frame, fit_region)
         #     # pass
@@ -91,8 +97,12 @@ class BackgroundPlotter:
         #     plotted_functions = self._plot_background_models(frame, fit_region)
             
         # Calculate chi2 values
+        print("DEBUG: computing chi2 values", flush = True)
+        print("DEBUG: input results:", results, flush=True)
         chi2_values = self._calculate_chi2_values(frame, results)
        
+        print("DEBUG: chi2 values for plotted functions:", flush=True)
+
         # Add legend
         # legend = self._create_legend(fit_region, results, chi2_values)
         legend = ROOT.TLegend(0.2, 0.15, 0.9, 0.45)
@@ -108,8 +118,33 @@ class BackgroundPlotter:
 
         # Draw everything on upper pad
         frame.Draw()
-        # change minimum to 1
-        frame.SetMinimum(2e3) #was 20
+        
+        # Set minimum based on mode
+        if self.config.no_res and fit_region.sidebands:
+            # For no_res mode, calculate minimum from sideband data to avoid bins at 0
+            hist = frame.getHist("data_obs")
+            if hist:
+                min_val = float('inf')
+                # Check first few and last few points (sideband regions)
+                n_points = hist.GetN()
+                for i in list(range(5)) + list(range(n_points-5, n_points)):
+                    if i >= 0 and i < n_points:
+                        y = hist.GetPointY(i)
+                        if y > 0:  # Only consider non-zero bins
+                            min_val = min(min_val, y)
+                
+                if min_val != float('inf'):
+                    frame.SetMinimum(max(1, min_val * 0.5))
+                else:
+                    frame.SetMinimum(1)
+            else:
+                frame.SetMinimum(1)
+        else:
+            # Normal mode
+            frame.SetMinimum(20)
+
+        frame.SetMaximum(frame.GetMaximum() * 2)      
+        
         frame.GetXaxis().SetTitle("")
         frame.GetXaxis().SetLabelSize(0)
         frame.GetYaxis().SetTitle("Events")
@@ -124,10 +159,14 @@ class BackgroundPlotter:
         
         pad1.cd()
         
+        print("DEBUG: drawn everything:", flush=True)
+
         # Add special markers if needed
         if self.config.fit_jpsi_first and fit_region.name == "region1":
             self._add_jpsi_region_markers(frame)
-            
+        
+        print("DEBUG: added special markers if needed:", flush=True)
+
         # Save plots (must be done before closing canvas and deleting pads)
         plot_files = self._save_plots(canvas, [pad1, pad2], fit_region, tag)
         created_plots.extend(plot_files)
@@ -141,15 +180,25 @@ class BackgroundPlotter:
     def _plot_combined_model(self, frame: ROOT.RooPlot, fit_region: FitRegion):
         """Plot combined background model and components"""
         if not self.fitter.combined_model:
-            return
+            return []
+        
+        # Determine normalization range
+        if self.config.no_res and fit_region.sidebands:
+            # Use sideband ranges for normalization
+            sideband_range_names = [f"sideband_{i}" for i in range(len(fit_region.sidebands))]
+            norm_range = ",".join(sideband_range_names)
+            print(f"DEBUG: Using sideband normalization range: {norm_range}", flush=True)
+        else:
+            norm_range = fit_region.name
             
-        # Plot total model
+        # Plot total model (always named "full_bkg_model" + category label)
+        plot_name = "full_bkg_model"
         self.fitter.combined_model.plotOn(frame, 
                                         ROOT.RooFit.LineColor(ROOT.kP8Gray),
                                         ROOT.RooFit.LineWidth(2),
-                                        ROOT.RooFit.Name("full_bkg_model"),
-                                        ROOT.RooFit.NormRange(fit_region.name))
-        
+                                        ROOT.RooFit.Name(plot_name),
+                                        ROOT.RooFit.NormRange(norm_range))
+
         # Plot components with category-specific names
         category_label = self.category.label if self.category else ""
         
@@ -163,14 +212,15 @@ class BackgroundPlotter:
             ROOT.TColor.GetColor("#7a21dd")   # Violet
         ]
 
-        for idx, res_bkg in enumerate(self.fitter.resonant_backgrounds.keys()):
-            component_name = f"{res_bkg}_resonant_bkg{category_label}"
-            self.fitter.combined_model.plotOn(frame, 
-                                            ROOT.RooFit.Components(component_name),
-                                            ROOT.RooFit.LineColor(colors[idx % len(colors)]), 
-                                            ROOT.RooFit.Name(f"{res_bkg}_bkg"),
-                                            ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
-                                            ROOT.RooFit.NormRange(fit_region.name))
+        if not self.config.no_res:
+            for idx, res_bkg in enumerate(self.fitter.resonant_backgrounds.keys()):
+                component_name = f"{res_bkg}_resonant_bkg{category_label}"
+                self.fitter.combined_model.plotOn(frame, 
+                                                ROOT.RooFit.Components(component_name),
+                                                ROOT.RooFit.LineColor(colors[idx % len(colors)]), 
+                                                ROOT.RooFit.Name(f"{res_bkg}_bkg"),
+                                                ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
+                                                ROOT.RooFit.NormRange(fit_region.name))
 
         # if "jpsi" in self.fitter.resonant_backgrounds:
         #     jpsi_component_name = f"jpsi_resonant_bkg{category_label}"
@@ -178,18 +228,10 @@ class BackgroundPlotter:
         #                                     ROOT.RooFit.Components(jpsi_component_name),
         #                                     ROOT.RooFit.LineColor(ROOT.kRed), 
         #                                     ROOT.RooFit.Name("jpsi_bkg"), 
-        #                                     ROOT.RooFit.NormRange(fit_region.name))
-                                            
-        # if "psi2s" in self.fitter.resonant_backgrounds:
-        #     psi2s_component_name = f"psi2s_resonant_bkg{category_label}"
-        #     self.fitter.combined_model.plotOn(frame, 
-        #                                     ROOT.RooFit.Components(psi2s_component_name),
-        #                                     ROOT.RooFit.LineColor(ROOT.kBlue), 
-        #                                     ROOT.RooFit.Name("psi2s_bkg"), 
-        #                                     ROOT.RooFit.NormRange(fit_region.name))
-
+        
+        # Plot nonresonant background component (only in normal mode)
         chosen_bkg = self.fitter.get_chosen_background_function()
-        if chosen_bkg:
+        if chosen_bkg and not self.config.no_res:
             nonres_bkg_name = self.fitter.get_chosen_background_function().GetTitle()
             print(f"DEBUG: nonres_bkg_name = {nonres_bkg_name}", flush=True)
             print(f"DEBUG: chosen bkg = {self.fitter.get_chosen_background_function()}", flush=True)
@@ -198,20 +240,31 @@ class BackgroundPlotter:
                                             ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e76300")), 
                                             ROOT.RooFit.Name("nonresonant_bkg"), 
                                             ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
-                                            ROOT.RooFit.NormRange(fit_region.name))
+                                            ROOT.RooFit.NormRange(norm_range))
         
         # Replot data on top
-        frame.drawAfter("nonresonant_bkg", "data_obs")
+        if not self.config.no_res and chosen_bkg:
+            frame.drawAfter("nonresonant_bkg", "data_obs")
 
-        plot_name_list = ["full_bkg_model", "nonresonant_bkg"]
-        for res_bkg in self.fitter.resonant_backgrounds.keys():
-            plot_name_list.append(f"{res_bkg}_bkg")
+        # Build list of plotted names
+        plot_name_list = [plot_name]  # Always include the main model
+        
+        # Add component names only if not in no_res mode
+        if not self.config.no_res:
+            if chosen_bkg:
+                plot_name_list.append("nonresonant_bkg")
+            for res_bkg in self.fitter.resonant_backgrounds.keys():
+                plot_name_list.append(f"{res_bkg}_bkg")
 
-        # plot_name_list = ["full_bkg_model", "jpsi_bkg", "psi2s_bkg", "nonresonant_bkg"]
         return plot_name_list
     
     def _create_pull_plot(self, frame: ROOT.RooPlot, fit_region: FitRegion) -> ROOT.RooPlot:
-        """Create pull distribution plot"""
+        """Create pull distribution plot
+        
+        Args:
+            frame: The RooPlot frame with data and model
+            fit_region: The fit region
+        """
         xmin, xmax = fit_region.range
         pull_frame = self.fitter.mass_var.frame(xmin, xmax)
         pull_frame.SetTitle("")
@@ -220,13 +273,13 @@ class BackgroundPlotter:
         pull_hist = frame.pullHist("data_obs", "full_bkg_model")
         pull_frame.addPlotable(pull_hist, "P")
         
-        # DEBUG: create resid hist just to print values
-        resid_hist = frame.residHist("data_obs", "full_bkg_model", False, True)  # normalized residuals
-        print("DEBUG: Residual values:", flush=True)
-        for i in range(resid_hist.GetN()):
-            x, y = ROOT.Long(0), ROOT.Long(0)
-            resid_hist.GetPoint(i, x, y)
-            print(f"  bin {i}: x={float(x):.3f}, residual={float(y):.3f}", flush=True)
+        # # DEBUG: create resid hist just to print values
+        # resid_hist = frame.residHist("data_obs", "full_bkg_model", False, True)  # normalized residuals
+        # print("DEBUG: Residual values:", flush=True)
+        # for i in range(resid_hist.GetN()):
+        #     x, y = ROOT.Long(0), ROOT.Long(0)
+        #     resid_hist.GetPoint(i, x, y)
+        #     print(f"  bin {i}: x={float(x):.3f}, residual={float(y):.3f}", flush=True)
 
         # Styling
         pull_frame.GetYaxis().SetTitle("Pull")
@@ -276,29 +329,6 @@ class BackgroundPlotter:
         pull_frame.addObject(line_3sigma_down)
         
         return pull_frame
-        
-    def _plot_background_models(self, frame: ROOT.RooPlot, fit_region: FitRegion):
-        """Plot background-only models"""
-        # colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
-        colors = [
-            ROOT.TColor.GetColor("#5790fc"),
-            ROOT.TColor.GetColor("#f89c20"),
-            ROOT.TColor.GetColor("#e42536"),
-            ROOT.TColor.GetColor("#964a8b"),
-            ROOT.TColor.GetColor("#9c9ca1"),
-            ROOT.TColor.GetColor("#7a21dd"),
-        ]
-        
-        for i, func_config in enumerate(self.config.background_functions):
-            func_name = func_config.name
-            if func_name in self.fitter.background_functions:
-                func = self.fitter.background_functions[func_name]
-                color = colors[i % len(colors)]
-                
-                func.plotOn(frame, 
-                          ROOT.RooFit.LineColor(color), 
-                          ROOT.RooFit.Name(func_name), 
-                          ROOT.RooFit.NormRange(fit_region.name))
                           
     def _calculate_chi2_values(self, frame: ROOT.RooPlot, 
                               results: Dict[str, FitResult]) -> Dict[str, float]:
@@ -308,6 +338,12 @@ class BackgroundPlotter:
         for name, result in results.items():
             if result.n_free_params > 0:
                 print(f"DEBUG: computing chi2 between data_obs and {name} with {result.n_free_params} free params", flush=True)
+                
+                # Skip if the model was not plotted (e.g., combined model when no_res is set)
+                if not frame.findObject(name):
+                    print(f"  Skipping chi2 for {name} (not plotted)", flush=True)
+                    continue
+                
                 # Get chi2 from frame
                 chi2_val = frame.chiSquare(name, "data_obs", result.n_free_params)
                 chi2_values[name] = chi2_val
@@ -411,6 +447,8 @@ class BackgroundPlotter:
             plot_path = self.config.get_plot_file_path(fit_region.name, tag, 
                                                      log_scale=False, file_format=fmt,
                                                      category=category_name)
+            # Ensure parent directories exist (supports nested paths)
+            plot_path.parent.mkdir(parents=True, exist_ok=True)
             canvas.SaveAs(str(plot_path))
             created_files.append(str(plot_path))
             
@@ -424,6 +462,8 @@ class BackgroundPlotter:
             plot_path = self.config.get_plot_file_path(fit_region.name, tag, 
                                                         log_scale=True, file_format=fmt,
                                                         category=category_name)
+            # Ensure parent directories exist (supports nested paths)
+            plot_path.parent.mkdir(parents=True, exist_ok=True)
             canvas.SaveAs(str(plot_path))
             created_files.append(str(plot_path))
             
@@ -551,10 +591,13 @@ class BackgroundPlotter:
         
         # Linear scale
         plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}.png"
+        # Ensure parent directories exist (supports nested paths)
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         canvas_prompt.SaveAs(str(plot_path))
         created_plots.append(str(plot_path))
         
         plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}.pdf"
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         canvas_prompt.SaveAs(str(plot_path))
         created_plots.append(str(plot_path))
         
@@ -563,10 +606,12 @@ class BackgroundPlotter:
         canvas_prompt.SetLogy()
         
         plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}_log.png"
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         canvas_prompt.SaveAs(str(plot_path))
         created_plots.append(str(plot_path))
         
         plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}_log.pdf"
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         canvas_prompt.SaveAs(str(plot_path))
         created_plots.append(str(plot_path))
         
@@ -698,7 +743,14 @@ class BackgroundPlotter:
             
             # Try to get category-specific data from workspace
             try:
-                dataset_name = f"data_obs{category_config.label}"
+                # Use same logic as fitter: respect fit_data flag
+                if self.config.fit_data and self.config.use_data:
+                    dataset_name = f"data_obs{category_config.label}"
+                elif self.config.use_data:
+                    dataset_name = f"data_obs{category_config.label}_minbias"
+                else:
+                    dataset_name = f"data_obs{category_config.label}"
+                
                 category_data = self.fitter.workspace.obj(dataset_name)
                 
                 if category_data:
@@ -737,6 +789,8 @@ class BackgroundPlotter:
             plot_path = self.config.get_plot_file_path(fit_region.name, comparison_tag,
                                                      log_scale=False, file_format=fmt,
                                                      category="all_categories")
+            # Ensure parent directories exist (supports nested paths)
+            plot_path.parent.mkdir(parents=True, exist_ok=True)
             canvas.SaveAs(str(plot_path))
             created_plots.append(str(plot_path))
             
@@ -746,6 +800,8 @@ class BackgroundPlotter:
             plot_path = self.config.get_plot_file_path(fit_region.name, comparison_tag,
                                                      log_scale=True, file_format=fmt,
                                                      category="all_categories")
+            # Ensure parent directories exist (supports nested paths)
+            plot_path.parent.mkdir(parents=True, exist_ok=True)
             canvas.SaveAs(str(plot_path))
             created_plots.append(str(plot_path))
             

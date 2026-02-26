@@ -14,14 +14,16 @@ parser.add_argument('-i', '--input_folders', type=str, nargs='+', required=True,
 parser.add_argument('-f', '--fit_tags', type=str, nargs='*', default=[], help='Fit tags to identify input files')
 parser.add_argument('-l', '--labels', type=str, nargs='*', default=[], help='Labels for legend (defaults to category, i.e. last subfolder)')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
-parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"], help='Mass region (for labeling purposes)')
+parser.add_argument('-r', '--region', type=str, nargs='+', default=['region1'], choices=["region0", "region1", "region2"], help='Mass region(s) (for labeling purposes)')
 parser.add_argument('-m', '--mu', action="store_true", help="Plot limits on mu rather than model-independent ones")
+parser.add_argument('--overlap', action="store_true", help="Load combined region file (limits_results_region0_region1_...) instead of separate files")
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
 args = parser.parse_args()
 tag = f"_{args.tag}" if args.tag else ""
 fit_tags = args.fit_tags
 labels = args.labels
+regions = args.region if isinstance(args.region, list) else [args.region]
 
 # PROCESSING INPUT FILE TAGS
 if len(fit_tags) > 0 and len(fit_tags) != len(args.input_folders):
@@ -43,22 +45,35 @@ if len(labels) > 0 and len(labels) != len(args.input_folders):
 if len(labels) == 0:
     labels = [os.path.basename(os.path.normpath(folder)) for folder in args.input_folders] 
 
+# If multiple regions and NOT overlap mode, append region to labels
+if len(regions) > 1 and not args.overlap:
+    labels = [f"{label} ({region})" for label in labels for region in regions]
+    # Expand folders and fit_tags to match the number of combinations
+    input_folders = [folder for folder in args.input_folders for _ in regions]
+    fit_tags = [fit_tag for fit_tag in fit_tags for _ in regions]
+    regions_expanded = [region for _ in args.input_folders for region in regions]
+elif args.overlap:
+    # In overlap mode, use the combined region string
+    input_folders = args.input_folders
+    regions_expanded = ["_".join(regions)] * len(input_folders)
+else:
+    input_folders = args.input_folders
+    regions_expanded = regions * len(input_folders)
+
 for label in labels:
     if label in label_map:
         labels[labels.index(label)] = label_map[label]
 
-input_folders = args.input_folders
 outfolder = args.output_folder
 os.makedirs(outfolder, exist_ok=True)
 
 base_folder = "/eos/home-n/npalmeri/www/DiElectron/sensitivity"
 
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(15 if len(regions) > 1 else 10, 10))
 
-
-for fit_tag, folder, label in zip(fit_tags, input_folders, labels):
+for fit_tag, folder, label, region in zip(fit_tags, input_folders, labels, regions_expanded):
     fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
-    with open(os.path.join(base_folder, folder, f'limits_results_{args.region}{fit_tag_label}.pkl'), 'rb') as f:
+    with open(os.path.join(base_folder, folder, f'limits_results_{region}{fit_tag_label}.pkl'), 'rb') as f:
         r_values = pickle.load(f)
     
     masses = np.array(sorted([float(mass) for mass in r_values.keys()]))
@@ -70,9 +85,12 @@ for fit_tag, folder, label in zip(fit_tags, input_folders, labels):
 plt.yscale('log')
 plt.xlabel('M(X) [GeV]')
 plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]" if not args.mu else "$\mu$")
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
+hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data = np.any(["data" in folder for folder in input_folders]))
 
 plt.legend()
 
+# Create output filename based on regions
+region_suffix = "_".join(args.region) if len(args.region) > 1 else args.region[0]
+overlap_suffix = "_overlap" if args.overlap else ""
 for ext in ['png', 'pdf']:
-    plt.savefig(os.path.join(outfolder, f'limits_comparison_{args.region}{tag}.{ext}'))
+    plt.savefig(os.path.join(outfolder, f'limits_comparison_{region_suffix}{overlap_suffix}{tag}.{ext}'))

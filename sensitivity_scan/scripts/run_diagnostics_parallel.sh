@@ -9,6 +9,7 @@ TAG_LABEL="" # same but with _ in front
 ## appended to output filenames only -- use when changing fit settings (e.g. freezing parameters)
 FIT_TAG=""
 FIT_TAG_LABEL="" # same but with _ in front
+FOLDER_TAG=""
 CATEGORY_TYPE="eta"  # Default to eta categories
 REGION="region1"
 INPUT_FOLDER="cards/cards"  # Default input folder
@@ -16,6 +17,7 @@ USE_REWEIGHT=true     # Default to using reweighting
 PLOT_ONLY=false
 USE_DATA=false
 USE_BINNED=false
+NO_RESONANT_BKGS=0
 while [[ $# -gt 0 ]]; do
     case $1 in
         --tag)
@@ -27,6 +29,12 @@ while [[ $# -gt 0 ]]; do
         --fit_tag)
             FIT_TAG="$2"
             FIT_TAG_LABEL="_$FIT_TAG"
+            shift # past argument
+            shift # past value
+            ;;
+        --folder_tag)
+            FOLDER_TAG="$2/"
+            INPUT_FOLDER="cards/${FOLDER_TAG}cards"
             shift # past argument
             shift # past value
             ;;
@@ -70,6 +78,11 @@ while [[ $# -gt 0 ]]; do
             echo "Using binned datasets."
             shift # past argument
             ;;
+        --no_res)
+            NO_RESONANT_BKGS=1
+            echo "Not including resonant backgrounds."
+            shift # past argument
+            ;;
         *)
             # Check if there are actually arguments to process
             if [[ -n "$1" ]]; then
@@ -85,7 +98,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set output folder based on reweighting setting
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/${FOLDER_TAG}fitDiagnostics_grid"
 if [ "$USE_DATA" = true ]; then
     OUTFOLDER="${OUTFOLDER}_data"
 elif [ "$USE_REWEIGHT" = true ]; then
@@ -184,7 +197,7 @@ esac
 export -f get_category_name
 export -f get_category_label
 export -f get_all_category_ids
-export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY USE_DATA USE_BINNED
+export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY USE_DATA USE_BINNED NO_RESONANT_BKGS
 export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
 
 # Print configuration
@@ -200,6 +213,7 @@ echo "  Category type: $CATEGORY_TYPE"
 echo "  Categories: $(get_all_category_ids)"
 echo "  Region: $REGION (mass min: $MIN_MASS [limit from $MIN_MASS_LIMIT], max: $MAX_MASS [limit up to $MAX_MASS_LIMIT])"
 echo "  Plot only: $PLOT_ONLY"
+echo "  Exclude resonant backgrounds: $NO_RESONANT_BKGS"
 
 # Create output folders for each category
 for cat_id in $(get_all_category_ids); do
@@ -258,6 +272,7 @@ process_dir() {
                         --keepFailures \
                         -n "_${cat_name}${FIT_TAG_LABEL}" \
                         -v 3 &> "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log"
+                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
                         # --preFitValue 0 \
                 tail -n 10 "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log"
                 cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_fitDiagnostics_${cat_name}.out" 2>/dev/null || true
@@ -271,6 +286,8 @@ process_dir() {
                         --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
                         -n "_${cat_name}${FIT_TAG_LABEL}_Bonly" \
                         -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
+                        # --freezeParameters r \
+                        # --freezeParameters "r,mean_nuisance_electronScaleVariation" \
                 cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_MultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
 
                 # # [FIXME] Temporary double, can be optimized
@@ -285,12 +302,12 @@ process_dir() {
 
                 # Create category-specific output folder
                 mkdir -p "$OUTFOLDER/$cat_name/M$mass"
-                cp "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log" "$txt_file" "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root" higgsCombine_${cat_name}${FIT_TAG_LABEL}.FitDiagnostics.mH120.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_Bonly.MultiDimFit.mH120.root fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log  "$OUTFOLDER/$cat_name/M$mass/"
+                cp "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log" "$txt_file" "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root" higgsCombine_${cat_name}${FIT_TAG_LABEL}.FitDiagnostics.mH120.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_Bonly.MultiDimFit.mH120.root fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/$cat_name/M$mass/"
                 # cp higgsCombine_${cat_name}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root fitMultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/$cat_name/M$mass/"
             fi
 
             echo "    Plotting for category $cat_name"
-            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG" --binned $USE_BINNED
+            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG" --binned $USE_BINNED #--no_res=$NO_RESONANT_BKGS
         else
             echo "  $txt_file not found for category $cat_id ($cat_name)"
         fi

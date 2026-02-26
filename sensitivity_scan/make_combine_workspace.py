@@ -16,14 +16,18 @@ parser.add_argument('--cat', type=str, default='inclusive', choices=["inclusive"
                     help='Which category to process')
 parser.add_argument('--region', '-r', type=str, default='region1', choices=["region0", "region1", "region2"],
                     help='Which mass region to process (possibilities: region0: (0, 2), region1: (2, 4.6), region2: (4.6, 11))')
+parser.add_argument('--withSyst', action='store_true', default=False,
+                    help='Include systematics in the datacard')
 parser.add_argument('--no_reweight', action='store_true',
-                    help='Use non-reweighted datasets (refers to trigger reweighting only -- applies to both signal and background modelling)')
+                    help='Use non-reweighted datasets (refers to trigger reweighting only -- applies to both signal and background modelling)')                    
 parser.add_argument('--input_tag', type=str, default="",
                     help='Tag used for dataset creation')
 parser.add_argument('--envelope', action='store_true',
                     help='Use dataset with envelope of background functions.')
 parser.add_argument('--tag', type=str, default="",
                     help='Tag to append to output folder name')
+parser.add_argument('--folder_tag', type=str, default="",
+                    help='Base folder output name; card folder is created inside.')
 parser.add_argument('--signal_multiplier', '-s', type=float, default=1.0,
                     help='Multiplier to apply to signal rates (for testing purposes)')
 parser.add_argument('--bkg_x2', action='store_true',
@@ -32,6 +36,8 @@ parser.add_argument('--bkg_div100', action='store_true',
                     help='Divide background rates by 100 (for testing purposes)')
 parser.add_argument('--binned', action='store_true',
                     help='Use binned data')
+parser.add_argument('--no_res', action='store_true',
+                    help='Exclude resonant backgrounds from the fit')
 args = parser.parse_args()
 
 cb = ch.CombineHarvester()
@@ -39,7 +45,10 @@ cb = ch.CombineHarvester()
 cb.SetVerbosity(5)
 
 if args.data:
-    input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/' # datasets/without_region_overlap for old files
+    if args.withSyst:
+        input_dir = f'/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/{args.folder_tag}/'
+    else:
+        input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/' # datasets/without_region_overlap for old files
 else:
     input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/nanov15_overlap/' # datasets/without_region_overlap for old files
     # input_dir = '/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/forPresentation_11062025/'
@@ -111,8 +120,15 @@ elif args.region == "region2":
     }
 elif args.region == "region0":
     bkg_procs = {
-        'ee': ['dy', 'phi', 'omega', 'eta']
+        'ee': ['dy', 'phi', 'omega']# 'eta']
     }
+else:
+    bkg_procs = {
+        'ee': ['dy']
+    }
+
+if args.no_res:
+    bkg_procs = {"ee": ['dy']}
 
 sig_procs = ['Zd']
 
@@ -152,6 +168,63 @@ for era in eras:
 
 print('>> Adding systematics...')
 
+# ID SF 
+### first, determine highest variation across mass values AND between up/down
+### apply worst case scenario as lnN uncertainty on signal yield
+id_variation_value = 1.0
+for mass in masses:
+    w_var_nominal = w.var(f"Zd_M{mass}_expected")
+    w_var_up = w.var(f"Zd_M{mass}_expected_electronID_up")
+    w_var_down = w.var(f"Zd_M{mass}_expected_electronID_down")
+    if w_var_nominal and w_var_up and w_var_down:
+        var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
+        if var_nominal > 0:
+            frac_up = 1 + abs(1 - var_up/var_nominal)
+            frac_down = 1 + abs(1 - var_down/var_nominal)
+            max_frac = max(frac_up, frac_down)
+            if max_frac > id_variation_value:
+                id_variation_value = max_frac
+        else:
+            print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping electron ID systematic for this mass point.")
+    else:
+        print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping electron ID systematic for this mass point.")
+
+print(f"Determined electron ID systematic lnN value: {id_variation_value:.4f}")
+cb.cp().signals().AddSyst(cb, 'electronID_syst', 'lnN', ch.SystMap()(id_variation_value))
+
+
+# Trigger SF 
+### first, determine highest variation across mass values AND between up/down
+### apply worst case scenario as lnN uncertainty on signal yield
+id_variation_value = 1.0
+for mass in masses:
+    w_var_nominal = w.var(f"Zd_M{mass}_expected")
+    w_var_up = w.var(f"Zd_M{mass}_expected_trigger_up")
+    w_var_down = w.var(f"Zd_M{mass}_expected_trigger_down")
+    if w_var_nominal and w_var_up and w_var_down:
+        var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
+        if var_nominal > 0:
+            frac_up = 1 + abs(1 - var_up/var_nominal)
+            frac_down = 1 + abs(1 - var_down/var_nominal)
+            max_frac = max(frac_up, frac_down)
+            if max_frac > id_variation_value:
+                id_variation_value = max_frac
+        else:
+            print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping trigger SF systematic for this mass point.")
+    else:
+        print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping trigger SF systematic for this mass point.")
+
+print(f"Determined trigger SF systematic lnN value: {id_variation_value:.4f}")
+cb.cp().signals().AddSyst(cb, 'triggerSF_syst', 'lnN', ch.SystMap()(id_variation_value))
+
+# Scale and smearing
+if args.withSyst:
+    print(f"DEBUG: adding systematic on signal scale for signal processes: {sig_procs}")    
+    # add a "param" systematic (gaussian distributed with mean = 0 and sigma = 1)
+    # cb.cp().process(sig_procs).AddSyst(cb, 'sigma_nuisance', 'shape', ch.SystMap()(1.0))
+    # NOTE: can't get param only to get added, so doing that manually using AddDatacardLineAtEnd
+    cb.AddDatacardLineAtEnd("mean_nuisance_electronScaleVariation      param 0 1")
+
 # # Discrete nuisance parameter for discrete profiling ("pdf_index")
 # cb.cp().backgrounds().AddSyst(cb, 'bkg_func_choice', 'discrete', ch.SystMap()(1))
 
@@ -162,7 +235,15 @@ print('>> Adding systematics...')
 # FOR OLD RATE APPROACH: use these inits
 # cb.cp().process(['dy', 'jpsi']).AddSyst(cb, 'scale_$PROCESS_$BIN', 'rateParam', ch.SystMap()(1.0))
 # cb.cp().process(['psi2s']).AddSyst(cb, 'scale_psi2s_$BIN', 'rateParam', ch.SystMap()(0.2))
-cb.cp().process(bkg_procs['ee']).AddSyst(cb, 'scale_$PROCESS_$BIN', 'rateParam', ch.SystMap()(1.0))
+
+# # NEW APPROACH
+# cb.cp().process(bkg_procs['ee']).AddSyst(cb, 'scale_$PROCESS_$BIN', 'rateParam', ch.SystMap()(1.0))
+
+# NEW APPROACH + different min/max values
+#FIXME: make min/max work with cb command
+for bkg in bkg_procs['ee']:
+    for bins_tuple in cats['ee_2023']:
+        cb.AddDatacardLineAtEnd(f"scale_{bkg}_{bins_tuple[1]} rateParam *       {bkg}       1 [0,10]")
 
 print('>> Extracting shapes...')
 # Update with actual root file and object naming convention
@@ -199,6 +280,12 @@ cb.cp().signals().ForEachProc(lambda p: p.set_rate(
     w.var(f'Zd_M{p.mass()}_expected').getValV() * signal_yield_scaling 
 ))
 
+# check that #expected signal is positive in every bin; throw error otherwise
+cb.cp().signals().ForEachProc(lambda p:
+    (p.rate() > 0) or
+    (_ := (_ for _ in ()).throw(RuntimeError(f"Error: Expected signal yield for process {p.process()} in bin {p.bin()} is non-positive: {p.rate()}")))
+)
+
 # get background process rates from the workspace (saved as jpsi_expected, psi2s_expected, etc.)
 for era in eras:
     for chn in chns:
@@ -207,6 +294,7 @@ for era in eras:
                 suffix = ""
             else:
                 suffix = f"_cat_{cat}"
+
             # # FIRST APPROACH: Use expected jpsi value (NO CATEG. FRACTION) and rescale empirically
             # n_jpsi = w.var(f'jpsi{suffix}_expected').getValV() * lumi.getValV()/7.98  # lumi rescale
             # cb.cp().channel([chn]).era([era]).bin([cat]).process(['jpsi']).ForEachProc(lambda p: p.set_rate(n_jpsi))
@@ -243,7 +331,8 @@ writer = ch.CardWriter('$TAG/$MASS/$ANALYSIS_$CHANNEL_$BINID_$ERA.txt',
 
 sample_cards_suffix = "_data" if args.data else ""
 
-outfolder = f"cards/cards_{args.region}{sample_cards_suffix}"
+subfolder = "" if args.folder_tag == "" else f"{args.folder_tag}/"
+outfolder = f"cards/{subfolder}cards_{args.region}{sample_cards_suffix}"
 
 if args.no_reweight:
     outfolder += "_noReweight"
@@ -252,6 +341,10 @@ if args.tag != "":
     outfolder += f"_{args.tag}"
 
 outfolder += binned_suffix
+
+# create subfolder if it doesn't exist
+if not os.path.exists(outfolder):
+    os.makedirs(outfolder, exist_ok=True)
 
 print(f'>> Writing datacards to folder: {outfolder}', flush = True)
 

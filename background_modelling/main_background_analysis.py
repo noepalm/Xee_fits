@@ -62,7 +62,12 @@ class BackgroundAnalysis:
         
         # Import mass variable from signal workspace (following create_dataset.py pattern)
         suffix = "" if not self.config.use_reduced_mass else "_reducedMass"
-        signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
+        # signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}_nanov15.root'
+        #FIXME: not available for reduced mass (anymore)
+        # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withSyst_scaleOnly_elenaSyst.root'
+        # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF.root'
+        era = getattr(self, 'era', '2023')  # Default to 2023 if not set
+        signal_ws_file = f'../signal_modelling/workspaces/{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
         
         if not os.path.exists(signal_ws_file):
             print(f"❌ Signal workspace not found: {signal_ws_file}")
@@ -87,9 +92,23 @@ class BackgroundAnalysis:
         if fit_region_name != "":
             fit_region = self.config.get_fit_region(fit_region_name)
             if fit_region:
-                m.setMin(fit_region.range[0])
-                m.setMax(fit_region.range[1])
-                print(f"✅ Mass variable imported from signal workspace: range [{fit_region.range[0]}, {fit_region.range[1]}] GeV")
+                # If no_res is set, use only sideband range
+                if self.config.no_res and fit_region.sidebands:
+                    all_sideband_mins = [sb[0] for sb in fit_region.sidebands]
+                    all_sideband_maxs = [sb[1] for sb in fit_region.sidebands]
+                    m.setMin(min(all_sideband_mins))
+                    m.setMax(max(all_sideband_maxs))
+                    
+                    # Set individual sideband ranges on the mass variable
+                    for i, (sb_min, sb_max) in enumerate(fit_region.sidebands):
+                        m.setRange(f"sideband_{i}", sb_min, sb_max)
+                        print(f"  Set sideband_{i} range: [{sb_min}, {sb_max}] GeV")
+                    
+                    print(f"✅ Mass variable imported from signal workspace: range [{min(all_sideband_mins)}, {max(all_sideband_maxs)}] GeV (sidebands only for --no_res)")
+                else:
+                    m.setMin(fit_region.range[0])
+                    m.setMax(fit_region.range[1])
+                    print(f"✅ Mass variable imported from signal workspace: range [{fit_region.range[0]}, {fit_region.range[1]}] GeV")
             else:
                 print(f"⚠️  Warning: Fit region '{fit_region_name}' not found, using full mass range from signal workspace")
         else:
@@ -184,25 +203,31 @@ class BackgroundAnalysis:
             from shared_config import parse_category_args
             categories = parse_category_args(args.categories)
         
-        # Create configuration
-        self.config = BackgroundModelConfig(categories=categories)
+        # Create configuration with era
+        self.config = BackgroundModelConfig(categories=categories, era=args.era)
         
-        # Set selected category for fitting
-        if args.category:
-            print(f"DEBUG: Setting selected category to '{args.category}'", flush=True)
-            self.config.set_category(args.category)
+        # Store era for later use
+        self.era = args.era
+        
+        # # Set selected category for fitting
+        # if args.category:
+        #     self.config.set_category(args.category)
         
         # Apply command line settings
         self.config.use_data = args.data
+        self.config.fit_data = args.fit_data  # Control whether to fit data or MinBias
         self.config.use_jpsi = args.use_jpsi
         self.config.use_reduced_mass = args.use_reduced_mass
         self.config.use_binned = args.binned
+        self.config.with_systematics = args.withSyst
+        self.config.corrected = args.corrected
         self.config.freeze_bkg_sidebands = args.freeze_bkg_sidebands
         self.config.floating_resonant = args.floating_resonant
         self.config.fit_jpsi_first = args.fit_jpsi_first
         self.config.fit_jpsi_prompt = args.fit_jpsi_prompt
         self.config.set_background_function(args.bkg_function)
         self.config.use_reweighting = not args.no_reweighting
+        self.config.no_res = args.no_res
         self.config.chosen_fit_region = self.config.get_fit_region(args.fit_region) if args.fit_region else None
         # TODO FIXME: currently it's Background Config blabla that returns dataset path -- that makes no sense, it's DatasetCreator's duty
         
@@ -215,8 +240,17 @@ class BackgroundAnalysis:
         # Weight multiplier for dataset creation
         self.weight_multiplier = args.weight_multiplier
 
+        # Apply folder tag first (creates subfolder structure)
+        # Include era in folder tag for organization
+        folder_tag = args.folder_tag
+        if folder_tag:
+            self.config.apply_folder_tag(folder_tag)
+
         # sets output tag and creates output folders accordingly
-        self.config.apply_tag(args.tag)
+        # Include era in output tag
+        tag = args.tag
+        if tag:
+            self.config.apply_tag(tag)
             
         print(f"Configuration setup complete")
         print(f"Use reweighting: {self.use_reweighting}")
@@ -256,7 +290,7 @@ class BackgroundAnalysis:
             cached_datasets = {}
             
             for category_name, category_config in categories.items():
-                # Load main dataset
+                # Load main dataset (data if use_data=True, else MinBias)
                 dataset_name = f'data_obs{category_config.label}'
                 cached_dataset = cached_workspace.data(dataset_name)
                 
@@ -266,6 +300,17 @@ class BackgroundAnalysis:
                     print(f"  ✅ Cached {dataset_name}: {cached_datasets[dataset_name].numEntries()} entries")
                 else:
                     print(f"  ⚠️  Warning: Dataset {dataset_name} not found in cached file")
+                
+                # If use_data is set, also load the MinBias dataset for background modeling
+                if self.config.use_data:
+                    minbias_dataset_name = f'data_obs{category_config.label}_minbias'
+                    cached_minbias_dataset = cached_workspace.data(minbias_dataset_name)
+                    
+                    if cached_minbias_dataset:
+                        cached_datasets[minbias_dataset_name] = cached_minbias_dataset.Clone()
+                        print(f"  ✅ Cached {minbias_dataset_name}: {cached_datasets[minbias_dataset_name].numEntries()} entries")
+                    else:
+                        print(f"  ⚠️  Warning: MinBias dataset {minbias_dataset_name} not found in cached file")
                 
                 # Load resonant dataset if it exists
                 if self.config.fit_jpsi_prompt:
@@ -322,14 +367,17 @@ class BackgroundAnalysis:
                 use_data=self.config.use_data,
                 use_jpsi=False,  # Always false for main dataset
                 use_reduced_mass=self.config.use_reduced_mass,
+                with_systematics=self.config.with_systematics,
+                corrected=self.config.corrected,
                 categories=self.config.categories,
                 output_workspace=self.output_workspace,
-                use_reweighting=self.use_reweighting,
+                use_reweighting=self.use_reweighting,                
                 weight_multiplier=self.weight_multiplier,
                 use_binned=self.config.use_binned,
                 fit_region=self.config.chosen_fit_region,
                 tag=tag,
-                cached_datasets=cached_datasets  # Pass cached datasets if provided
+                cached_datasets=cached_datasets,  # Pass cached datasets if provided
+                no_res=self.config.no_res  # Pass no_res flag
             )
             main_dataset_path = main_creator.create_full_dataset()
             
@@ -344,6 +392,9 @@ class BackgroundAnalysis:
                     use_data=False,
                     use_jpsi=True,
                     use_reduced_mass=self.config.use_reduced_mass,
+                    # with_systematics=False,
+                    with_systematics=self.config.with_systematics,
+                    corrected=self.config.corrected,
                     categories=self.config.categories,
                     output_workspace=self.output_workspace,
                     use_reweighting=self.use_reweighting,
@@ -428,7 +479,7 @@ class BackgroundAnalysis:
         
         try:
             # Fit background functions to sidebands
-            if fit_region_name != "region1" and False: #FIXME
+            if fit_region_name != "region1" and False:
                 print("DEBUG: fitting sidebands", flush=True)
                 self.background_results = self.fitter.fit_background_to_sidebands(fit_region)
                 
@@ -634,15 +685,35 @@ class BackgroundAnalysis:
                 print("Failed to fit sidebands")
                 success = False
                 
-            # Step 4: Fit combined background model (for main region)
-            if success:# and fit_region_name == "region1": #FIXME
-                if not self.fit_combined_background(fit_region_name):
-                    print("Failed to fit combined background model")
-                    success = False
+            # Step 4: Create combined model and optionally fit it
+            # When --no_res is set, combined model is just the background function (no fitting needed)
+            # When normal mode, fit the combined model with resonant components
+            if success:
+                if self.config.no_res:
+                    print("Creating combined model from sideband fit (--no_res set)")
+                    # Fit background to sidebands
+                    self.background_results = self.fitter.fit_background_to_sidebands(self.config.chosen_fit_region)
+                    
+                    # Create combined model (just wraps the background function)
+                    self.fitter.create_combined_model(self.config.chosen_fit_region)
+                    
+                    # Create a combined_result from the sideband fit for the chosen background
+                    chosen_func = self.config.get_chosen_background_function()
+                    if chosen_func.name in self.background_results:
+                        import copy
+                        # Deep copy the sideband result and just change the name
+                        self.combined_result = copy.deepcopy(self.background_results[chosen_func.name])
+                        self.combined_result.name = "full_bkg_model"
+                    
+                    print("Combined model set to background function (no additional fit)")
+                else:
+                    if not self.fit_combined_background(fit_region_name):
+                        print("Failed to fit combined background model")
+                        success = False
                     
             # Step 5: Create plots
             if success:
-                plots = self.create_plots(fit_region_name, tag)
+                plots = self.create_plots(fit_region_name, tag, category)
                 print(f"Created {len(plots)} plots")
                 
             # Step 6: Save workspace
@@ -716,10 +787,15 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description="Background Model Analysis - Object-oriented version")
     
     # Dataset creation options
+    parser.add_argument("--era", default="2023", type=str, help="Data-taking era (default: 2023). Supported values: 2022, 2022EE, 2023, 2023BPix")
     parser.add_argument("--create_datasets", action="store_true", default=False,
                        help="Create datasets from root files")
     parser.add_argument("--cached", action="store_true", default=False,
                        help="Use cached datasets from existing output file if available (still recreates the file with all objects)")
+    parser.add_argument("--withSyst", action="store_true", default=False,
+                       help="Include systematic variations in dataset creation")
+    parser.add_argument("--corrected", action="store_true", default=False,
+                       help="Use corrected mass value (electron scale and smearing).")
     parser.add_argument("--use_jpsi", action="store_true", default=False,
                        help="Use J/psi sample instead of MinBias sample")
     parser.add_argument("--use_reduced_mass", action="store_true", default=False,
@@ -728,20 +804,22 @@ def create_argument_parser():
                        help="Disable reweighting (set weights to luminosity rescale only)")
     parser.add_argument("--weight_multiplier", type=float, default=1.0,
                        help="Weight multiplier to scale dataset weights (default: 1.0)")
-    parser.add_argument('--categories', nargs='+', default=None,
-                       help='Custom categories to create (specify as key=value pairs, e.g. central="pt_1>20&&pt_2>20")')
-    parser.add_argument('--category', default=None,
-                       help='Specific category to fit (if not specified, uses all categories)')
+    parser.add_argument('--categories', default = None,
+                       help='Specify categories to fit (comma-separated); processes all otherwise.')
+    # parser.add_argument('--category', default=None,
+    #                    help='Specific category to fit (if not specified, uses all categories)')
     parser.add_argument('--all_categories', action='store_true', default=False,
                        help='Run analysis for all available categories')
     parser.add_argument('--data', action='store_true', default=False,
-                       help='Use real data instead of MC for dataset creation')
+                       help='Load real data files (in addition to MinBias for dataset creation)')
+    parser.add_argument('--fit_data', action='store_true', default=False,
+                       help='Use real data for fitting/plotting instead of MinBias (requires --data)')
     
     # Fitting options
     parser.add_argument("--fit_region", default="region1", 
                        choices=["region1", "region0", "region2", "full"],
                        help="Pick fit region")
-    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6],
+    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
                        help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; 4: Chebyshev, 5: Bernstein + exp, 6: modified BW. -1 for all)")
     parser.add_argument("--input_workspaces", nargs='+', default=[],
                        help="Input workspace files for envelope (only works with bkg_function=-1)")
@@ -755,9 +833,12 @@ def create_argument_parser():
                        help="Fit resonant models from prompt J/psi sample")
     parser.add_argument("--binned", action="store_true", default=False,
                        help="Use binned data instead of unbinned")
+    parser.add_argument("--no_res", action="store_true", default=False,
+                       help="Exclude resonant regions from fit (use only sidebands)")
     
     # Output options
     parser.add_argument("--tag", default="", help="Tag for output files")
+    parser.add_argument("--folder_tag", default="", help="Subfolder tag for organizing outputs")
     parser.add_argument("--no_plots", action="store_true", default=False,
                        help="Skip plot creation")
     parser.add_argument("--plot_all_categories", action="store_true", default=False,
@@ -790,6 +871,13 @@ def main():
     try:
         # Create analysis object
         analysis = BackgroundAnalysis()
+        
+        # Validate arguments
+        if args.fit_data and not args.data:
+            print("❌ Error: --fit_data requires --data to be set")
+            print("   (You need to load data files before you can fit them)")
+            return 1
+        
         print("DEBUG: SETTING ANALYZER", flush=True)
         analysis.setup_from_args(args)
         
@@ -799,7 +887,7 @@ def main():
 
         if args.bkg_function < 0:
             # TEMPORARY: only works for inclusive category for now
-            if args.category != "inclusive":
+            if args.categories != "inclusive":
                 print("❌ Background function envelope (-1) currently only supported for 'inclusive' category")
                 return 1
 
@@ -855,31 +943,33 @@ def main():
         # Step 2: Run fitting analysis
         if args.fit_only or args.full_analysis:# or (not args.create_datasets): # why was create_dataset here in the first place?
             # Determine analysis strategy based on category selection
-            if args.all_categories or (not args.category and not args.all_categories):
+            if args.all_categories or (not args.categories and not args.all_categories):
                 # Multi-category analysis (default if no specific category chosen)
                 print("Running analysis for all categories...")
                 results = analysis.run_analysis_for_all_categories(args.fit_region, args.tag)
                 success = any(results.values())  # Success if at least one category succeeds
-            elif args.category:
+            elif args.categories:
                 # Single category analysis
-                print(f"Running analysis for category '{args.category}'...")
+                print(f"Running analysis for categories '{args.categories}'...")
                 categories = analysis.config.get_available_categories()
-                if args.category in categories:
-                    # Create output workspace for single category if not already created
-                    if not analysis.output_workspace:
-                        if not analysis.create_output_workspace(args.tag):
-                            print("❌ Failed to create output workspace")
-                            return 1
-                    
-                    category_config = categories[args.category]
-                    success = analysis.run_complete_analysis(args.fit_region, args.tag, category_config)
-                    
-                    # Save workspace
-                    if not analysis.save_output_workspace():
-                        print("⚠️  Warning: Failed to save output workspace")
-                else:
-                    print(f"❌ Category '{args.category}' not found. Available: {list(categories.keys())}")
-                    return 1
+                arg_categories = args.categories.split(',')
+                for cat in arg_categories:
+                    if cat in categories:
+                        # Create output workspace for single category if not already created
+                        if not analysis.output_workspace:
+                            if not analysis.create_output_workspace(args.tag):
+                                print("❌ Failed to create output workspace")
+                                return 1
+                        
+                        category_config = categories[cat]
+                        success = analysis.run_complete_analysis(args.fit_region, args.tag, category_config)
+                        
+                        # Save workspace
+                        if not analysis.save_output_workspace():
+                            print("⚠️  Warning: Failed to save output workspace")
+                    else:
+                        print(f"❌ Category '{cat}' not found. Available: {list(categories.keys())}")
+                        return 1
             else:
                 # Fallback to old behavior (no category specified)
                 # Create output workspace for single category if not already created
@@ -900,12 +990,10 @@ def main():
         if args.plot_all_categories:
             print("\nCreating plots for all categories...")
             categories = analysis.config.get_available_categories()
-            category_config = categories[args.category]
-
-            plots = analysis.create_plots(args.fit_region, args.tag, category_config)
-
-            print(f"📊 Created {len(plots)} plots across all categories")
-                
+            for category_config in categories.values():
+                plots = analysis.create_plots(args.fit_region, args.tag, category_config)
+                print(f"📊 Created {len(plots)} plots for category {cat}")
+                    
         if success:
             print("\n🎉 Background analysis completed successfully!")
         else:

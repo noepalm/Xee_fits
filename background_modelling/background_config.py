@@ -58,11 +58,13 @@ class BackgroundFunction:
 class BackgroundModelConfig:
     """Main configuration class for background modeling"""
     
-    def __init__(self, categories: Dict[str, CategoryConfig] = None):
+    def __init__(self, categories: Dict[str, CategoryConfig] = None, era: str = "2023"):
         # Category settings (use shared configuration)
         if categories is None:
+            print(f"DEBUG: No categories provided, using default categories", flush=True)
             self.categories = get_default_categories()
         else:
+            print(f"DEBUG: Using provided categories", flush=True)
             self.categories = categories
             
         # Extract category names for convenience
@@ -78,9 +80,16 @@ class BackgroundModelConfig:
         # Tag for output files (initialized as empty, set via apply_tag)
         self.tag = ""
         
+        # Folder tag for subfolder organization (initialized as empty, set via apply_folder_tag)
+        self.folder_tag = ""
+        
+        # Era setting (stored for use in fit regions and dataset paths)
+        self.era = era
+        
         # I/O settings
         self.output_dir = Path("/eos/home-n/npalmeri/www/DiElectron/background_model")
         self.base_output_dir = self.output_dir  # Keep original for tag application
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # self.output_dir.mkdir(parents=True, exist_ok=True)
         # # make sure output sub-directories exist
@@ -89,16 +98,19 @@ class BackgroundModelConfig:
         #     (self.output_dir / cat).mkdir(parents=True, exist_ok=True)
         
         # Dataset settings
+        self.use_data = False  # Load data files (in addition to MinBias when creating datasets)
         self.use_jpsi = False
         self.use_reduced_mass = False
         self.use_binned = False
         self.use_reweighting = True
         
         # Fit settings
+        self.fit_data = False  # Use data for fitting/plotting (default: use MinBias)
         self.freeze_bkg_sidebands = False
         self.floating_resonant = False
         self.fit_jpsi_first = False
         self.fit_jpsi_prompt = False
+        self.no_res = False  # Use only sidebands, exclude resonant regions
         self.chosen_bkg_function = 0  # Index of background function to use
         
         # Define fit regions
@@ -123,11 +135,15 @@ class BackgroundModelConfig:
                 display_name="Left Background Region (0.2-2.0 GeV)",
                 range=(0.3, 2.4), #was 0.3, 2.0
                 sidebands=[
-                    (0.3, 0.9),
-                    (1.2, 2.4)],  # Entire region is sideband
-                backgrounds=["phi", "omega", "eta"],
+                    (0.3, 0.65),
+                    (0.85, 0.95),
+                    (1.15, 2.4)],
+                backgrounds=["phi", "omega"],#, "eta"],
                 background_fractions=[0.65, 0.25], # non-recursive fractions
-                background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_minBias_resonant_nanov15/zsnap/era2023/",
+                # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_minBias_resonant_nanov15/zsnap/era2023/",
+                # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_resonant_corrected_scaleOnly_elenaSyst/zsnap/era2023/",
+                # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_withScaleSyst_IDSF_noeta/zsnap/era2023/",
+                background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/",
                 description="Low mass background region",
             ),
             "region1": FitRegion(
@@ -135,13 +151,15 @@ class BackgroundModelConfig:
                 display_name="Central Region (2.0-4.2 GeV)",
                 range=(1.6, 4.6), #4.6 for overlap, 4.2 for strict
                 sidebands=[
-                    (1.6, 2.6),    # Left sideband
-                    (3.3, 3.5),    # Central sideband  
-                    (3.8, 4.6),    # Right sideband
+                    (1.6, 2.5),    # Left sideband
+                    # (3.3, 3.5),    # Central sideband  
+                    (3.85, 4.6),    # Right sideband
                 ],
                 backgrounds=["jpsi", "psi2s"],
                 background_fractions=[0.7],
-                background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Jpsi_reweight/zsnap/era2023/',
+                # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Jpsi_reweight/zsnap/era2023/',
+                # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Jpsi_corrected_scaleOnly_elenaSyst/zsnap/era2023/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
                 description="Main analysis region containing J/psi and psi(2S)",
             ),
             "region2": FitRegion(
@@ -149,12 +167,14 @@ class BackgroundModelConfig:
                 display_name="Right Background Region (4.2-11.0 GeV)",
                 range=(3.8, 11), #3.8 for overlap, 4.2 for strict
                 sidebands=[
-                    (3.8, 8.0),
+                    (3.8, 8.5),
                     (10.0, 11),
                 ],
                 backgrounds=["upsilon1s"],
                 background_fractions=[],
-                background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Upsilon_reweight/zsnap/era2023/',
+                # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Upsilon_reweight/zsnap/era2023/',
+                # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Upsilon_corrected_scaleOnly_elenaSyst/zsnap/era2023/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
                 description="High mass background region"
             ),
             "full": FitRegion(
@@ -270,12 +290,13 @@ class BackgroundModelConfig:
 
         chebyshev_inits_by_category = {
             "inclusive": {
-                # "region0" : [1.06946, 0.00463, -0.14197, -0.00807, 0.02420, -0.01174],
-                # "region1" : [-0.8, -0.115, 0.25, 0.02, -0.076, 0.1],
-                # "region2" : [-1.3, 0.5, -0.1, -0.01, -0.01, 0.05],
-                "region0" : [1.06946, 0.00463, -0.14197, -0.00807,],
-                "region1" : [-0.8, -0.115, 0.25, 0.02,],
-                "region2" : [-1.3, 0.5, -0.1, -0.01,],
+                "region0" : [1.06946, 0.00463, -0.14197, -0.00807, 0.02420, -0.01174],
+                "region1" : [-0.8, -0.115, 0.25, 0.02, -0.076, 0.1],
+                "region2" : [-1.3, 0.5, -0.1, -0.01, -0.01, 0.05],
+                # "region2" : [1.5, 2, 1, 0.1, 0.1, 0], # simplified init for testing
+                # "region0" : [1.06946, 0.00463, -0.14197, -0.00807,],
+                # "region1" : [-0.8, -0.115, 0.25, 0.02,],
+                # "region2" : [-1.3, 0.5, -0.1, -0.01,],
             },
             # Add category-specific overrides here as needed
         }
@@ -299,7 +320,7 @@ class BackgroundModelConfig:
 
         # Get initial parameters for the current category (fall back to inclusive if not specified)
         current_category = getattr(self, 'selected_category', 'inclusive')
-        print(f"DEBUG: trying to retrieve selceted cateogyr: {self.selected_category}", flush=True)
+        print(f"DEBUG: trying to retrieve selceted category: {self.selected_category}", flush=True)
         
         print(f"DEBUG: Using category '{current_category}' for background functions", flush=True)
 
@@ -339,7 +360,9 @@ class BackgroundModelConfig:
         inits_dict = chebyshev_inits_by_category.get(current_category,
                                                       chebyshev_inits_by_category["inclusive"])
         chebyshev_inits = inits_dict.get(fit_region_name,
-                                          inits_dict["region1"])    
+                                          inits_dict["region1"])
+        chebyshev_inits_4thdeg = chebyshev_inits[:4]  # First 4 params for 4th degree
+        chebyshev_inits_5thdeg = chebyshev_inits[:5]  # First 5 params for 5th degree
 
         inits_dict = bernsteinexp_inits_by_category.get(current_category,
                                                         bernsteinexp_inits_by_category["inclusive"])
@@ -402,16 +425,16 @@ class BackgroundModelConfig:
             description="Single exponential function"
         ))
 
-        # 6th degree Chebyshev polynomial
+        # 4th degree Chebyshev polynomial
         functions.append(BackgroundFunction(
             name="bkg_f4",
             display_name="Chebyshev Polynomial",
-            formula="Chebyshev polynomial of degree 6",
+            formula="Chebyshev polynomial of degree 4",
             n_params=4,
             param_names=[f"t{i}" for i in range(4)],
-            param_inits=chebyshev_inits,
+            param_inits=chebyshev_inits_4thdeg,
             param_limits=[(-5, 5) for _ in range(4)],
-            description="6th degree Chebyshev polynomial"
+            description="4th degree Chebyshev polynomial"
         ))
         
         # 5th deg Bernstein + exponential
@@ -428,7 +451,7 @@ class BackgroundModelConfig:
 
         # Modified BW
         functions.append(BackgroundFunction(
-            name="bkg_f6",
+            name="bkg_f6", 
             display_name="Modified BW",
             formula="Modified BW",
             n_params=3,
@@ -439,6 +462,30 @@ class BackgroundModelConfig:
             param_limits=[(0, 3), (-1, 0), (-80, 80)],
             description="Modified BW"
         ))
+
+        # 6th degree Chebyshev polynomial
+        functions.append(BackgroundFunction(
+            name="bkg_f7",
+            display_name="Chebyshev Polynomial deg 6",
+            formula="Chebyshev polynomial of degree 6",
+            n_params=6,
+            param_names=[f"t{i}" for i in range(6)],
+            param_inits=chebyshev_inits,
+            param_limits=[(-5, 5) for _ in range(6)],
+            description="6th degree Chebyshev polynomial"
+        ))        
+
+        # 5th degree Chebyshev polynomial
+        functions.append(BackgroundFunction(
+            name="bkg_f8",
+            display_name="Chebyshev Polynomial deg 5",
+            formula="Chebyshev polynomial of degree 5",
+            n_params=5,
+            param_names=[f"t{i}" for i in range(5)],
+            param_inits=chebyshev_inits_5thdeg,
+            param_limits=[(-5, 5) for _ in range(5)],
+            description="5th degree Chebyshev polynomial"
+        ))        
 
         # Validate all functions
         for func in functions:
@@ -545,13 +592,20 @@ class BackgroundModelConfig:
             # },
             "background_components": {
                 # with _param, everything is expressed as dataset max * <value>
-                "nphi" : {"init_param" : 0.02, "min_param" : 1e-6, "max_param" : 1}, # phi background
-                "nomega" : {"init_param" : 0.007, "min_param" : 1e-6, "max_param" : 1}, # omega background
-                "neta" : {"init_param" : 0.001, "min_param" : 1e-6, "max_param" : 1}, # eta background
-                "njpsi": {"init_param": 0.9, "min_param": 1e-4, "max_param": 1e2},    # J/psi background
-                "npsi2s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4},   # psi(2S) background
+                # "nphi" : {"init_param" : 0.02, "min_param" : 1e-6, "max_param" : 1}, # phi background
+                "nphi" : {"init_param" : 0.01, "min_param" : 1e-6, "max_param" : 1}, # phi background
+                # "nomega" : {"init_param" : 0.007, "min_param" : 1e-6, "max_param" : 1}, # omega background
+                "nomega" : {"init_param" : 0.0035, "min_param" : 1e-6, "max_param" : 1}, # omega background
+                # "neta" : {"init_param" : 0.001, "min_param" : 1e-6, "max_param" : 1}, # eta background ### FOR DATA
+                "neta" : {"init_param" : 0, "min_param" : 1e-6, "max_param" : 1}, # eta background
+                # "njpsi": {"init_param": 0.9, "min_param": 1e-4, "max_param": 1e2},    # J/psi background ### FOR DATA
+                # "npsi2s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4},   # psi(2S) background ### FOR DATA
+                "njpsi": {"init_param": 0.09, "min_param": 1e-4, "max_param": 1e2},    # J/psi background
+                "npsi2s": {"init_param": 0.02, "min_param": 1e-4, "max_param": 1e4},   # psi(2S) background
                 # "nupsilon1s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
-                "nupsilon1s": {"init_param": 0.05, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15
+                # "nupsilon1s": {"init_param": 0.01, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15 ### FOR DATA
+                # "nupsilon1s": {"init_param": 0.001, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
+                "nupsilon1s": {"init_param": 0.005, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
                 "ndy": {"init_param": 0.3, "min_param": 1e-4, "max_param": 1e4},     # Non-resonant background
             },
             "fractions": {
@@ -595,11 +649,12 @@ class BackgroundModelConfig:
         binning_suffix = "_binned" if self.use_binned else ""
         reweight_suffix = "" if self.use_reweighting else "_noReweight" 
         tag_suffix = f"_{self.tag}" if self.tag else ""
-        envelope_suffix = "_envelope" if self.chosen_bkg_function == -1 else ""        
+        envelope_suffix = "_envelope" if self.chosen_bkg_function == -1 else ""
+        folder_tag_prefix = f"{self.folder_tag}/" if self.folder_tag else ""
 
         # Single workspace file contains all categories
         # TODO FIXME: is the non _full one even used? REVERT BACK IF NEEDED
-        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
+        return Path(f"datasets/{folder_tag_prefix}dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
         
     def get_output_workspace_path(self) -> Path:
         """Get the path for the output workspace (single workspace with all categories)"""
@@ -609,9 +664,10 @@ class BackgroundModelConfig:
         reweight_suffix = "" if self.use_reweighting else "_noReweight" 
         tag_suffix = f"_{self.tag}" if self.tag else ""
         envelope_suffix = "_envelope" if self.chosen_bkg_function == -1 else ""
+        folder_tag_prefix = f"{self.folder_tag}/" if self.folder_tag else ""
         
         # Single workspace file contains all categories
-        return Path(f"datasets/dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
+        return Path(f"datasets/{folder_tag_prefix}dataset{sample_suffix}_{self.chosen_fit_region.name}{mass_suffix}{binning_suffix}{tag_suffix}{reweight_suffix}{envelope_suffix}_full.root")
         
     def get_log_file_path(self, fit_region: str, tag: str = "", category: str = None) -> Path:
         """Get the log file path for a specific category"""
@@ -642,6 +698,25 @@ class BackgroundModelConfig:
         
         return self.output_dir / category_folder / f"dataset{sample_suffix}{side_suffix}{category_suffix}{tag_suffix}{binning_suffix}{log_suffix}.{file_format}"
         
+    def apply_folder_tag(self, folder_tag: str):
+        """Apply folder tag to create subfolder structure for outputs
+        
+        This should be called before apply_tag to set up the subfolder structure.
+        """
+        if not folder_tag:
+            return
+            
+        self.folder_tag = folder_tag
+        
+        # Update base_output_dir to include subfolder (supports nested paths)
+        self.base_output_dir = self.base_output_dir / folder_tag
+        self.output_dir = self.base_output_dir
+        
+        # Ensure all parent directories are created
+        self.base_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Applied folder tag '{folder_tag}': base output dir set to {self.base_output_dir}")
+        
     def apply_tag(self, tag: str):
         """Apply a tag to output files and directories"""
         binning_suffix = "_binned" if self.use_binned else ""            
@@ -658,6 +733,13 @@ class BackgroundModelConfig:
             category_dir = self.output_dir / cat
             print(f"DEBUG: Creating tagged output directory {category_dir}", flush=True)
             category_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create dataset directory with era and folder_tag if needed
+        dataset_dir = Path("datasets") / self.era
+        if self.folder_tag:
+            dataset_dir = dataset_dir / self.folder_tag
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        print(f"DEBUG: Ensuring dataset directory exists: {dataset_dir}", flush=True)
     
     def set_category(self, category: str):
         """Set the selected category for fitting"""

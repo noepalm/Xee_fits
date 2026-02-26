@@ -21,20 +21,28 @@ class DatasetCreator:
     """This module handles the creation of RooDatasets from root files,
     importing resonant background templates, and interpolating cross-sections and efficiencies."""
 
-    def __init__(self, use_data: bool = False, use_jpsi: bool = False, use_reduced_mass: bool = False,
+    def __init__(self, use_data: bool = False, use_jpsi: bool = False, 
+                 use_reduced_mass: bool = False,
+                 with_systematics: bool = False,
+                 corrected: bool = False,
                  categories: Dict[str, CategoryConfig] = None,
                  fit_region: FitRegion = None,
                  output_workspace: "ROOT.RooWorkspace" = None, use_reweighting: bool = True,
                  use_binned: bool = False, weight_multiplier: float = 1.0,
-                 tag: str = "", cached_datasets: Dict[str, Any] = None):
+                 tag: str = "", cached_datasets: Dict[str, Any] = None, no_res: bool = False,
+                 era: str = "2023"):
 
         self.use_data = use_data
         self.use_jpsi = use_jpsi
         self.use_reduced_mass = use_reduced_mass
         self.use_reweighting = use_reweighting
+        self.with_systematics = with_systematics
+        self.corrected = corrected
         self.use_binned = use_binned
         self.fit_region = fit_region
+        self.no_res = no_res  # Exclude resonant regions
         self.tag = tag
+        self.era = era
         self.cached_datasets = cached_datasets  # Pre-loaded datasets to use instead of creating from files
         
         # Category definitions (use shared configuration)
@@ -65,9 +73,22 @@ class DatasetCreator:
         if use_jpsi:
             self.filepath = fit_region.background_resonant_data
         else:
-            self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/'
+            if corrected:
+                # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected_scaleOnly_elenaSyst/zsnap/era2023/'
+                # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF/zsnap/era2023/'
+                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
+            else:
+                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era{era}/'
 
-        if use_reweighting:
+        # FIXME: retrieve folders dynamically and only select latest step
+        if corrected:
+            if fit_region.name == "region0" and use_jpsi:
+                # self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
+                self.filepath += "all_11_AllResonances/" #different flow for resonant bkg sample in region 0
+            else:
+                # self.filepath += "base_2_Final/"
+                self.filepath += "base_3_full/"
+        elif use_reweighting:
             if fit_region.name == "region0" and use_jpsi:
                 self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
             else:
@@ -78,14 +99,18 @@ class DatasetCreator:
         self.weight_multiplier = weight_multiplier
             
         # Output settings
-        self.output_dir = Path("datasets")
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir = Path("datasets") / era
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Resonant background workspace settings
         suffix = "" if not use_reduced_mass else "_reducedMass"
         # TODO FIXME: all file names are hardcoded. Write them in common config file.
-        if self.use_reweighting:
-            self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}.root'
+        if self.with_systematics:
+            print(f"DEBUG: Using signal workspace with systematics", flush=True)
+            # self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withSyst_scaleOnly_elenaSyst.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF.root'
+        elif self.use_reweighting:
+            self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_withReweight_Categories{suffix}_nanov15.root'
         else:
             self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_no_reweight{suffix}.root'
         
@@ -136,8 +161,22 @@ class DatasetCreator:
         # Set up mass variable like in create_dataset.py
         m.SetName("mass")
         if self.fit_region:
-            m.setMin(self.fit_region.range[0])
-            m.setMax(self.fit_region.range[1])
+            # If no_res flag is set, use only sideband range
+            if self.no_res and self.fit_region.sidebands:
+                all_sideband_mins = [sb[0] for sb in self.fit_region.sidebands]
+                all_sideband_maxs = [sb[1] for sb in self.fit_region.sidebands]
+                m.setMin(min(all_sideband_mins))
+                m.setMax(max(all_sideband_maxs))
+                
+                # Set individual sideband ranges on the mass variable
+                for i, (sb_min, sb_max) in enumerate(self.fit_region.sidebands):
+                    m.setRange(f"sideband_{i}", sb_min, sb_max)
+                    print(f"  Set sideband_{i} range: [{sb_min}, {sb_max}] GeV")
+                
+                print(f"  Mass range set to sideband coverage: [{min(all_sideband_mins)}, {max(all_sideband_maxs)}] GeV (--no_res)")
+            else:
+                m.setMin(self.fit_region.range[0])
+                m.setMax(self.fit_region.range[1])
         else:
             print(f"  No fit region specified, using full range from signal workspace")
         
@@ -163,13 +202,21 @@ class DatasetCreator:
         return True
         
     def create_dataset_from_files(self, mass_var: ROOT.RooRealVar) -> Dict[str, Any]:
-        """Create RooDataSet from root files for each category using shared mass variable"""
+        """Create RooDataSet from root files for each category using shared mass variable
+        
+        When use_data=True, creates both data and MinBias datasets:
+        - data_obs{label} for actual data (used for combine)
+        - data_obs{label}_minbias for MinBias (used for background modeling)
+        """
         print("Creating datasets from files for all categories...")
         
         mass_var.setBins(100)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
+        bin_width = mass_var.getBinning().averageBinWidth()
 
         # Create datasets for each category (using signal modeling naming convention)
         datasets = {}
+        minbias_datasets = {}  # Separate storage for MinBias when use_data=True
+        
         for category_name, category_config in self.categories.items():
             # Dataset name with category label (like signal modeling)
             dataset_name = f'data_obs{category_config.label}{"_resonant" if self.use_jpsi else ""}'
@@ -178,30 +225,48 @@ class DatasetCreator:
             dataset_args = [ROOT.RooArgSet(mass_var)]
             
             # Add weight variable if dataset not binned
-            if (not self.use_binned and self.use_reweighting) and (not self.use_data):
+            # When use_data=True, MinBias still needs weights for background modeling
+            if not self.use_binned and self.use_reweighting:
                 weight_var_name = f"weight{category_config.label}"
                 weight_var = ROOT.RooRealVar(weight_var_name, weight_var_name, 1)
                 self.workspace.Import(weight_var, ROOT.RooCmdArg())
                 dataset_args.append(ROOT.RooFit.WeightVar(weight_var))
                 
-            # Create dataset
+            # Create main dataset (data if use_data=True, else MinBias)
             if self.use_binned:
                 datasets[category_name] = ROOT.RooDataHist(dataset_name, dataset_name, *dataset_args)
             else:
                 datasets[category_name] = ROOT.RooDataSet(dataset_name, dataset_name, *dataset_args)
+            
+            # If using data, also create MinBias dataset for background modeling
+            if self.use_data:
+                minbias_name = f'data_obs{category_config.label}_minbias'
+                if self.use_binned:
+                    minbias_datasets[category_name] = ROOT.RooDataHist(minbias_name, minbias_name, *dataset_args)
+                else:
+                    minbias_datasets[category_name] = ROOT.RooDataSet(minbias_name, minbias_name, *dataset_args)
         
         # Process files
-        n_files = 0
+        n_files_data = 0
+        n_files_minbias = 0
         category_events = {cat: 0 for cat in self.category_names}
+        category_events_minbias = {cat: 0 for cat in self.category_names} if self.use_data else None
         
         for filename in os.listdir(self.filepath):
             if not filename.endswith('.root'):
                 continue
 
-            if (self.use_data and "DoubleElectronNANO" not in filename) or (not self.use_data and "DoubleElectronNANO" in filename):
+            # Determine file type
+            # is_data_file = "DoubleElectronNANO" in filename
+            is_data_file = "ParkingDoubleElectronLowMass" in filename
+            
+            # Skip logic:
+            # - If NOT using data: skip data files (only process MinBias)
+            # - If using data: process BOTH data and MinBias files
+            if not self.use_data and is_data_file:
                 continue
                 
-            print(f"  Processing: {filename}")
+            print(f"  Processing: {filename} ({'DATA' if is_data_file else 'MinBias'})")
             file_path = os.path.join(self.filepath, filename)
             
             try:
@@ -215,12 +280,16 @@ class DatasetCreator:
                     print(f"    Warning: No 'Events' tree in {filename}")
                     root_file.Close()
                     continue
-
+    
                 for branch in tree.GetListOfBranches():
                     print(f"  {branch.GetName()}", flush=True)
 
                 # Process entries
                 file_events = {cat: 0 for cat in self.category_names}
+                # TEMPORARY: only process 100000 evts
+                # for i in range(1e5):
+                mass_branch = "DiElectron_fitted_mass_corrected" if self.corrected else "DiElectron_fitted_mass"
+
                 for i in range(tree.GetEntries()):
                     tree.GetEntry(i)
 
@@ -236,8 +305,7 @@ class DatasetCreator:
                             if var_name not in cat_vars:
                                 cat_vars[var_name] = getattr(tree, var_name)
 
-                    # Check category cuts for each dielectron pair
-                    for j, mass_val in enumerate(tree.DiElectron_fitted_mass):
+                    for j, mass_val in enumerate(getattr(tree, mass_branch)):
                         # Determine which categories this event belongs to
                         event_categories = []
                         for category_name, category_config in self.categories.items():
@@ -250,18 +318,53 @@ class DatasetCreator:
                             if self.fit_region:
                                 if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
                                     continue
-                            # args = [weight] if (self.use_reweighting and not self.use_binned) and (not self.use_data) else []
-                            args = [weight] if (self.use_reweighting) and (not self.use_data) else []
-                            datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
+                                # If no_res is set, only include events in sideband regions
+                                if self.no_res and self.fit_region.sidebands:
+                                    in_sideband = False
+                                    for sb_min, sb_max in self.fit_region.sidebands:
+                                        if sb_min <= mass_val <= sb_max:
+                                            in_sideband = True
+                                            break
+                                    if not in_sideband:
+                                        continue  # Skip events not in sidebands
+                            
+                            # Determine which dataset to fill based on file type
+                            if self.use_data:
+                                if is_data_file:
+                                    # Real data goes to main dataset (no weights for data)
+                                    datasets[category_name].add(ROOT.RooArgSet(mass_var))
+                                else:
+                                    # MinBias goes to separate dataset for background modeling (with weights)
+                                    args = [weight] if self.use_reweighting else []
+                                    minbias_datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
+                            else:
+                                # When not using data, only MinBias is loaded -> goes to main dataset
+                                args = [weight] if self.use_reweighting else []
+                                datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
+                            
                             file_events[category_name] += 1
                         
                 for cat in self.category_names:
                     category_events[cat] += file_events[cat]
+                    if self.use_data and not is_data_file:
+                        category_events_minbias[cat] += file_events[cat]
                     
-                n_files += 1
+                if is_data_file:
+                    n_files_data += 1
+                else:
+                    n_files_minbias += 1
+                    
                 print(f"    Added events: {', '.join([f'{cat}={file_events[cat]}' for cat in self.category_names])}")
-                print(f"    Total dataset entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
-                print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
+                if self.use_data:
+                    if is_data_file:
+                        print(f"    Total DATA entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
+                        print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
+                    else:
+                        print(f"    Total MinBias entries: {', '.join([f'{cat}={minbias_datasets[cat].numEntries()}' for cat in self.category_names])}")
+                        print(f"      sum of entries: {', '.join([f'{cat}={minbias_datasets[cat].sumEntries()}' for cat in self.category_names])}")
+                else:
+                    print(f"    Total dataset entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
+                    print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
 
 
                 root_file.Close()
@@ -271,9 +374,25 @@ class DatasetCreator:
                 continue
                 
         print(f"Dataset creation complete:")
-        print(f"  Files processed: {n_files}")
-        for category_name in self.category_names:
-            print(f"  {category_name}: {category_events[category_name]} events, {datasets[category_name].numEntries()} dataset entries")
+        if self.use_data:
+            print(f"  Data files processed: {n_files_data}")
+            print(f"  MinBias files processed: {n_files_minbias}")
+            print(f"\n  DATA (for combine):")
+            for category_name in self.category_names:
+                print(f"    {category_name}: {datasets[category_name].numEntries()} entries")
+            print(f"\n  MinBias (for background modeling):")
+            for category_name in self.category_names:
+                print(f"    {category_name}: {category_events_minbias[category_name]} events, {minbias_datasets[category_name].numEntries()} dataset entries")
+        else:
+            print(f"  MinBias files processed: {n_files_minbias}")
+            for category_name in self.category_names:
+                print(f"  {category_name}: {category_events[category_name]} events, {datasets[category_name].numEntries()} dataset entries")
+        
+        # Import MinBias datasets to workspace when using data
+        if self.use_data:
+            for category_name, category_config in self.categories.items():
+                self.workspace.Import(minbias_datasets[category_name], ROOT.RooCmdArg())
+                print(f"  Imported {minbias_datasets[category_name].GetName()} to workspace for background modeling")
         
         return datasets
         
@@ -293,12 +412,27 @@ class DatasetCreator:
             print(f"  Importing for category: {category_name}")
             
             # Find all models for this category (using category.label)
-            for model in signal_ws.allGenericObjects():
+
+            ### pdfs were correctly saved starting from corrected datasets onwards
+            ### before, they were saved in the workspace as objects: allGenericObjects have to be used
+            pdf_list_function = "allPdfs" if self.corrected else "allGenericObjects"
+            for model in getattr(signal_ws, pdf_list_function)():
                 model_name = model.GetName()
                 if model_name.startswith(f'model_test_M') and category_config.is_object_in_category(model_name):
-                    # Create new name: model_test_cat_central_M3p1 -> Zd_cat_central_M3.1
-                    mass_part = model_name.split("_M")[1].split("_cat")[0].replace("p", ".")
-                    new_name = f'Zd_M{mass_part}{category_config.label}'
+                    # Parse model name to extract mass and variation
+                    # Examples: model_test_cat_central_M3p1 -> Zd_M3.1_cat_central
+                    #           model_test_cat_central_M3p1_scale_up -> Zd_M3.1_cat_central_scale_up
+                    after_M = model_name.split("_M")[1]
+                    parts = after_M.split("_")
+                    mass_part = parts[0].replace("p", ".")
+                    
+                    # Check for systematic variation (last two parts are <variation>_up/down)
+                    variation_suffix = ""
+                    if len(parts) >= 3 and parts[-1] in ["up", "down"]:
+                        # Has variation: take everything after mass as variation suffix
+                        variation_suffix = "_" + "_".join(parts[1:])
+                    
+                    new_name = f'Zd_M{mass_part}{category_config.label}{variation_suffix}'
                     
                     # Import with new name to single workspace
                     self.workspace.Import(model, ROOT.RooFit.RenameVariable(model_name, new_name))
@@ -320,47 +454,45 @@ class DatasetCreator:
 
         print(f"DEBUG: interpolating xsec, effs for fit region {self.fit_region} (name: {self.fit_region.name if self.fit_region else 'none'})")
         
-        # Get the default linear interpolation functions for efficiency and cross-section
-        eff_result = get_efficiency_function(use_old=False)
+        # Get efficiency functions (nominal + all available variations)
+        from utilities.get_signal_effs_xsecs import get_all_efficiency_functions, get_xsec_function
+        eff_results = get_all_efficiency_functions(use_old=False)
         xsec_result = get_xsec_function(use_old=False)
         
-        eff_func = eff_result["fit_function"]
-        eff_params = eff_result["fit_parameters"]
+        # Dynamically determine available variations and create mapping
+        # Map: variation_key -> (workspace_suffix, descriptive_name)
+        available_keys = list(eff_results.keys())
+        print(f"Available efficiency variations: {available_keys}")
+        
+        variation_mapping = {'nominal': ('', 'nominal')}  # Always have nominal
+        
+        # Check if using old naming (up/down) or new naming (electronID_*, trigger_*)
+        if 'up' in available_keys and 'down' in available_keys:
+            # Old naming: assume up/down are ID variations
+            variation_mapping['up'] = ('_electronID_up', 'ID up')
+            variation_mapping['down'] = ('_electronID_down', 'ID down')
+            print("Using backward-compatible naming: 'up'/'down' → electronID variations")
+        else:
+            # New naming: use explicit variation names
+            if 'electronID_up' in available_keys:
+                variation_mapping['electronID_up'] = ('_electronID_up', 'electronID up')
+            if 'electronID_down' in available_keys:
+                variation_mapping['electronID_down'] = ('_electronID_down', 'electronID down')
+            if 'trigger_up' in available_keys:
+                variation_mapping['trigger_up'] = ('_trigger_up', 'trigger up')
+            if 'trigger_down' in available_keys:
+                variation_mapping['trigger_down'] = ('_trigger_down', 'trigger down')
+            print(f"Using explicit naming: {list(variation_mapping.keys())}")
+        
+        # Extract functions and parameters for each available variation
+        eff_funcs = {}
+        eff_params = {}
+        for var_key in variation_mapping.keys():
+            eff_funcs[var_key] = eff_results[var_key]["fit_function"]
+            eff_params[var_key] = eff_results[var_key]["fit_parameters"]
+        
         xsec_func = xsec_result["fit_function"]
         xsec_params = xsec_result["fit_parameters"]
-
-        # # Mass points for interpolation
-        # mass_points = np.array([1, 3.1, 5, 5.5, 6, 6.5])
-        
-        # # Fit efficiency with polynomial
-        # try:
-        #     popt_eff, _ = curve_fit(
-        #         lambda x, a, b, c, d: np.polyval((a, b, c, d), x), 
-        #         mass_points, effs, 
-        #         sigma=effs_err, 
-        #         absolute_sigma=True
-        #     )
-        #     print(f"  Efficiency fit coefficients: {popt_eff}")
-            
-        # except Exception as e:
-        #     print(f"  Warning: Efficiency fit failed: {e}")
-        #     # Use simple interpolation as fallback
-        #     popt_eff = np.polyfit(mass_points, effs, 3)
-            
-        # # Fit cross-section with polynomial
-        # try:
-        #     popt_xsec, _ = curve_fit(
-        #         lambda x, a, b, c, d, e: np.polyval((a, b, c, d, e), x), 
-        #         mass_points, xsecs, 
-        #         sigma=xsecs_err, 
-        #         absolute_sigma=True
-        #     )
-        #     print(f"  Cross-section fit coefficients: {popt_xsec}")
-            
-        # except Exception as e:
-        #     print(f"  Warning: Cross-section fit failed: {e}")
-        #     # Use simple interpolation as fallback
-        #     popt_xsec = np.polyfit(mass_points, xsecs, 4)
             
         # Calculate category fractions from inclusive dataset
         inclusive_events = datasets["inclusive"].sumEntries() if "inclusive" in datasets else 1.0
@@ -386,32 +518,63 @@ class DatasetCreator:
             for mass_str in masses:
                 mass_val = float(mass_str)
                 
-                # Calculate expected signal events using linear interpolation
-                if len(eff_params) > 0:  # parametric fit with parameters
-                    efficiency = eff_func(mass_val, *eff_params)
+                # Calculate cross-section (same for all variations)
+                if len(xsec_params) > 0:
                     cross_section = xsec_func(mass_val, *xsec_params)
-                else:  # interpolation function with no parameters
-                    efficiency = eff_func(mass_val)
+                else:
                     cross_section = xsec_func(mass_val)
-
-                print(f"DEBUG: efficiency for M={mass_val} GeV: {efficiency}, cross-section: {cross_section} pb", flush=True)
-
-                # efficiency = np.polyval(popt_eff, mass_val)
-                # cross_section = np.polyval(popt_xsec, mass_val)
-
-                n_expected_total = self.luminosity * efficiency * cross_section
-                n_expected = n_expected_total * category_fractions[category_name]
                 
-                print(f"  {category_name} M={mass_val} GeV: eff={efficiency:.4f}, xsec={cross_section:.3f} pb, frac={category_fractions[category_name]:.4f}, N_exp={n_expected:.1f}", flush=True)
+                # Calculate efficiencies and expected events for all variations
+                efficiencies = {}
+                n_expected_values = {}
                 
-                # Create RooRealVar for expected events (using category label)
-                norm_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected', f'Zd{category_config.label}_M{mass_str}_expected', n_expected)
-                self.workspace.Import(norm_var, ROOT.RooCmdArg())
+                for var_key in variation_mapping.keys():
+                    # Calculate efficiency for this variation
+                    if len(eff_params[var_key]) > 0:
+                        efficiencies[var_key] = eff_funcs[var_key](mass_val, *eff_params[var_key])
+                    else:
+                        efficiencies[var_key] = eff_funcs[var_key](mass_val)
+                    
+                    # Calculate expected events
+                    n_expected_total = self.luminosity * efficiencies[var_key] * cross_section
+                    n_expected_values[var_key] = n_expected_total * category_fractions[category_name]
                 
-                # Also save efficiency, cross-section, and fraction separately
-                eff_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency', f'Zd{category_config.label}_M{mass_str}_efficiency', efficiency)
-                eff_var.setConstant(True)
-                self.workspace.Import(eff_var, ROOT.RooCmdArg())
+                # Print debug info
+                eff_str = ", ".join([f"eff_{variation_mapping[k][1]}={efficiencies[k]:.4f}" for k in variation_mapping.keys()])
+                n_exp_str = ", ".join([f"N_exp_{variation_mapping[k][1]}={n_expected_values[k]:.1f}" for k in variation_mapping.keys()])
+                print(f"  {category_name} M={mass_val} GeV: {eff_str}, xsec={cross_section:.3f} pb, frac={category_fractions[category_name]:.4f}", flush=True)
+                print(f"    {n_exp_str}", flush=True)
+                
+                # Create RooRealVar for expected events - ALWAYS save nominal first (no suffix)
+                norm_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected', 
+                                                   f'Zd{category_config.label}_M{mass_str}_expected', 
+                                                   n_expected_values['nominal'])
+                self.workspace.Import(norm_var_nominal, ROOT.RooCmdArg())
+                
+                # Then save variations (with suffixes)
+                for var_key, (ws_suffix, desc_name) in variation_mapping.items():
+                    if var_key == 'nominal':
+                        continue  # Already saved above
+                    norm_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}', 
+                                              f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}', 
+                                              n_expected_values[var_key])
+                    self.workspace.Import(norm_var, ROOT.RooCmdArg())
+                
+                # Also save efficiencies - nominal first (no suffix), then variations
+                eff_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency', 
+                                                 f'Zd{category_config.label}_M{mass_str}_efficiency', 
+                                                 efficiencies['nominal'])
+                eff_var_nominal.setConstant(True)
+                self.workspace.Import(eff_var_nominal, ROOT.RooCmdArg())
+                
+                for var_key, (ws_suffix, desc_name) in variation_mapping.items():
+                    if var_key == 'nominal':
+                        continue  # Already saved above
+                    eff_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}', 
+                                             f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}', 
+                                             efficiencies[var_key])
+                    eff_var.setConstant(True)
+                    self.workspace.Import(eff_var, ROOT.RooCmdArg())
 
                 xsec_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_xsec', f'Zd{category_config.label}_M{mass_str}_xsec', cross_section)
                 xsec_var.setConstant(True)
@@ -487,6 +650,16 @@ class DatasetCreator:
                     print(f"  Using cached {dataset_name}: {datasets[category_name].numEntries()} entries")
                 else:
                     print(f"  Warning: Cached dataset {dataset_name} not found")
+                
+                # If using data, also load MinBias dataset for background modeling
+                if self.use_data:
+                    minbias_name = f'data_obs{category_config.label}_minbias{"_resonant" if self.use_jpsi else ""}'
+                    if minbias_name in self.cached_datasets:
+                        minbias_dataset = self.cached_datasets[minbias_name]
+                        self.workspace.Import(minbias_dataset, ROOT.RooCmdArg())
+                        print(f"  Using cached {minbias_name}: {minbias_dataset.numEntries()} entries")
+                    else:
+                        print(f"  Warning: Cached MinBias dataset {minbias_name} not found")
         else:
             # Create datasets from files
             datasets = self.create_dataset_from_files(mass_var)
@@ -561,6 +734,8 @@ def main():
                        help='Use binned data (RooDataHist) instead of unbinned (RooDataSet)')
     parser.add_argument('--no_reweighting', action='store_true', default=False,
                        help='Disable reweighting (set weights to luminosity rescale only)')
+    parser.add_argument('--withSyst', action='store_true', default=False,
+                       help='Include systematic uncertainties (not implemented yet)')
     parser.add_argument('--tag', type=str, default="",
                        help='Tag to append to output files')
     parser.add_argument('--categories', nargs='+', default=None,
@@ -581,6 +756,7 @@ def main():
             use_data=args.use_data,
             use_jpsi=args.use_jpsi,
             use_reduced_mass=args.use_reduced_mass,
+            with_systematics=args.withSyst,
             categories=categories,
             use_reweighting=use_reweighting,
             use_binned=args.binned,

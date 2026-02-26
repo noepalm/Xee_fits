@@ -135,7 +135,17 @@ class BackgroundFitter:
         self.workspace = self.output_workspace
             
         # Get category-specific data and shared mass variable
-        dataset_name = f"data_obs{self.category.label}"
+        # When fit_data=True and use_data=True: use real data for fitting
+        # When fit_data=False (default): use MinBias for fitting
+        if self.config.fit_data and self.config.use_data:
+            dataset_name = f"data_obs{self.category.label}"
+            print(f"  Using REAL DATA for fitting: {dataset_name}")
+        elif self.config.use_data:
+            dataset_name = f"data_obs{self.category.label}_minbias"
+            print(f"  Using MinBias for fitting (data loaded but not used for fit): {dataset_name}")
+        else:
+            dataset_name = f"data_obs{self.category.label}"
+            print(f"  Using MinBias for fitting: {dataset_name}")
         
         self.data = self.workspace.obj(dataset_name)
         self.mass_var = self.workspace.obj("mass")  # Shared mass variable
@@ -176,7 +186,6 @@ class BackgroundFitter:
         print(f"Setting up mass ranges for {fit_region.display_name}...")
         
         # Set main range
-        print("DEBUG: setting mass va rrange")
         self.mass_var.setRange(fit_region.name, fit_region.range[0], fit_region.range[1])
         
         # Set sideband ranges
@@ -224,6 +233,12 @@ class BackgroundFitter:
             elif func_config.name == "bkg_f6":
                 # modified BW
                 self._create_modified_bw(func_config)
+            elif func_config.name == "bkg_f7":
+                # 6th deg Chebyshev
+                self._create_chebyshev_function(func_config)
+            elif func_config.name == "bkg_f8":
+                # 5th deg Chebyshev
+                self._create_chebyshev_function(func_config)
                 
     def _create_bernstein_function(self, func_config: BackgroundFunction):
         """Create Bernstein polynomial function"""
@@ -557,23 +572,30 @@ class BackgroundFitter:
         
     def create_combined_model(self, fit_region: FitRegion):
         """Create combined resonant + non-resonant background model"""
-        print("Creating combined background model (resonant + non-resonant)...", flush = True) #FIXME: remove
         
         # Get chosen non-resonant background function
         chosen_bkg = self.get_chosen_background_function()
         if not chosen_bkg:
             raise ValueError("No non-resonant background function chosen")
+        
+        # When no_res is set, create a simple combined model with just the background function
+        # but keep the naming consistent (full_bkg_model)
+        if self.config.no_res:
+            print("Creating combined model (background-only for no_res mode)...", flush=True)
+            # Clone chosen_bkg function and rename it
+            self.combined_model = chosen_bkg.Clone(f"full_bkg_model{self.category.label}")
+            print("  Combined model created (background-only)", flush=True)
+            return
             
+        # Normal case: create combined model with resonant backgrounds
+        print("Creating combined background model (resonant + non-resonant)...", flush = True)
+        
         # Create combined model: resonant backgrounds + non-resonant background
         model_list = ROOT.RooArgList([model for model in self.resonant_backgrounds.values()] + [chosen_bkg])
         norm_list = ROOT.RooArgList([
             self.workspace.obj(f"{norm_name}{self.category.label}") for norm_name in self.config.normalization_settings["background_components"].keys()
             if norm_name[1:] in self.resonant_backgrounds.keys() or norm_name == "ndy"
         ])
-        # # FIXME: doesn't work with fractions anymore 
-        # norm_list = ROOT.RooArgList([
-        #     self.workspace.obj(f"{norm_name}{self.category.label}") for norm_name in self.config.normalization_settings["fractions"].keys()
-        # ])
 
         for norm in norm_list:
             print("DEBUG: norm ", norm.GetName(), " = ", norm.getValV(), flush = True)
@@ -581,7 +603,6 @@ class BackgroundFitter:
             print("DEBUG: model", model, flush=True)
 
         self.combined_model = ROOT.RooAddPdf(f"full_bkg_model{self.category.label}", f"full_bkg_model{self.category.label}", model_list, norm_list)
-        # self.combined_model = ROOT.RooAddPdf(f"full_bkg_model{self.category.label}", f"full_bkg_model{self.category.label}", model_list, norm_list, True)
         
         print("  Combined background model created", flush = True)
         
@@ -635,18 +656,23 @@ class BackgroundFitter:
             param_name = param.GetName()
             prefit_val = prefit_values.get(param_name)
             result.add_parameter(param_name, param, prefit_val)
-
-        # Freeze resonant background parameters
-        for resonant_bkg in self.resonant_backgrounds.values():
-            res_params = resonant_bkg.getParameters(self.data)
-            for param in res_params:
-                param.setConstant(True)
-                print(f"  Frozen: {param.GetName()} (on MinBias sample)")
         
         print(f"  DEBUG: post-total fit parameters:", flush = True)
         for pname, pval in result.parameters.items():
             print(f"      {pname} = {pval:.4f} ± {result.parameter_errors[pname]:.4f}", flush = True)
         print(f"  Fit status: {result.fit_status}, free params: {n_free}")
+
+        print(f"DEBUG: freezing resonant bkg parameters on total fit result", flush = True)
+        for resonant_bkg in self.resonant_backgrounds.values():
+            res_params = resonant_bkg.getParameters(self.data)
+            for param in res_params:
+                if param.isConstant():
+                    print("  Resonant parameters frozen on prompt MC already, skipping...", flush = True)
+                    continue
+                else:
+                    param.setConstant(True)
+                    print(f"  Frozen: {param.GetName()} (on MinBias sample)", flush = True)
+
         return result
         
     def freeze_background_parameters(self):
@@ -782,25 +808,29 @@ class BackgroundFitter:
         for param in params:
             self.log_print(f"param: {param.GetName()}, value: {param.getValV():.5f}, error: {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])")
             
-        # # Freeze resonant background parameters after fitting to prompt data
-        # print(f"DEBUG: freezing resonant background parameters", flush=True)
+        # Freeze resonant background parameters after fitting to prompt data
+        # if self.config.chosen_fit_region.name != "region1":
+        print(f"DEBUG: freezing resonant background parameters", flush=True)
+        for model in models:
+            # skip the jpsi
+            if "jpsi" in model.GetName():
+                continue
+            for param in model.getParameters(resonant_data):
+                param.setConstant(True)
+
+        # # CONSTRAINING resonant background parameters after fitting to prompt data
+        # print(f"DEBUG: constraining resonant background parameters", flush=True)
         # for model in models:
         #     for param in model.getParameters(resonant_data):
-        #         param.setConstant(True)
-
-        # Freeze resonant background parameters after fitting to prompt data
-        print(f"DEBUG: constraining resonant background parameters", flush=True)
-        for model in models:
-            for param in model.getParameters(resonant_data):
-                if not param.isConstant():
-                    central_val = param.getValV()
-                    error = param.getError()
-                    # Set limits to ±10% fitted value
-                    tol = 0.2
-                    new_min = max(param.getMin(), central_val*(1 - tol))
-                    new_max = min(param.getMax(), central_val*(1 + tol))
-                    param.setRange(new_min, new_max)
-                    print(f"  Constrained: {param.GetName()} = {central_val:.5f} ± {error:.5f} to [{new_min:.5f}, {new_max:.5f}]")
+        #         if not param.isConstant():
+        #             central_val = param.getValV()
+        #             error = param.getError()
+        #             # Set limits to ±20% fitted value
+        #             tol = 0.2
+        #             new_min = max(param.getMin(), central_val*(1 - tol))
+        #             new_max = min(param.getMax(), central_val*(1 + tol))
+        #             param.setRange(new_min, new_max)
+        #             print(f"  Constrained: {param.GetName()} = {central_val:.5f} ± {error:.5f} to [{new_min:.5f}, {new_max:.5f}]")
             
         # for param in jpsi_model.getParameters(resonant_data):
         #     param.setConstant(True)

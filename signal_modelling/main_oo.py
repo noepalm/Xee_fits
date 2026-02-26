@@ -19,21 +19,26 @@ from plotting_oo import SignalModelPlotter
 class AnalysisConfig:
     """Configuration class for the analysis"""
     
-    def __init__(self):
+    def __init__(self, all_cats : bool = True):
         # I/O settings
         self.wsfile = "signal_model.root"
-        self.base_path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/nanov15/signal_model_reweighted/zsnap/era2023/"
+        # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/nanov15/signal_model_reweighted/zsnap/era2023/"
+        # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withSyst_scaleOnly_elenaSyst/zsnap/era2023/"
+        # self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
+        # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withScaleSyst_IDSF/zsnap/era2023/"
+        self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withScaleSyst_IDSF_triggerSF/zsnap/era2023/"
         self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
         
         # Analysis parameters
         self.vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
         self.parametrized_vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
+        self.nuisanced_vars = {} #e.g. format: {"sigma": ["electronSmear", "electronScale"]}
         
         # Sample configurations
         self.samples = self._create_sample_configs()
         
         # Category configurations  
-        self.categories = self._create_category_configs()
+        self.categories = self._create_category_configs(all_cats)
         
         # Common parameter ranges
         self._apply_common_ranges()
@@ -101,9 +106,15 @@ class AnalysisConfig:
                 "filename": "HAHM_13p6TeV_M10.root",
                 "nominal_mass": 10,
                 "nominal_width": 0.02,
-                "mass_range": [10, 9, 11],
+                "mass_range": [10, 8, 11],
                 "mass_GEN_range": [10, 8, 12],
-                "mean_BW_range": [10, 9, 11],
+                "mean_BW_range": [10, 8, 11],
+                #custom ranges
+                "response_mean_range" : [0, -2, 0.5],
+                # "response_nL_range" : [5, 0, 20],
+                # "response_alphaL_range" : [1, 0.1, 20],
+                # "response_nR_range" : [5, 0.1, 10],
+                # "response_alphaR_range" : [1, 0.1, 20],
             },
             "UpsilonToEE": {
                 "filename": "UpsilonToEE.root",
@@ -126,13 +137,17 @@ class AnalysisConfig:
         samples = {}
         for name, data in samples_data.items():
             samples[name] = SampleConfig(name, **data)
-            # Set file paths
-            samples[name].file = os.path.join(self.base_path, "base_9_GenMatching", data["filename"])
-            samples[name].file_GEN = os.path.join(self.base_path, "base_8_GenSelection", data["filename"])
+            # # Set file paths
+            # samples[name].file = os.path.join(self.base_path, "base_9_GenMatching", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_8_GenSelection", data["filename"])
+            # samples[name].file = os.path.join(self.base_path, "base_10_Final", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_10_Final", data["filename"])
+            samples[name].file = os.path.join(self.base_path, "base_11_full", data["filename"])
+            samples[name].file_GEN = os.path.join(self.base_path, "base_11_full", data["filename"])
         
         return samples
     
-    def _create_category_configs(self) -> Dict[str, CategoryConfig]:
+    def _create_category_configs(self, all_cats : bool = True) -> Dict[str, CategoryConfig]:
         """Create category configurations"""
         categories_data = {
             "inclusive": {
@@ -164,6 +179,11 @@ class AnalysisConfig:
                 }
             }
         }
+
+        if not all_cats:
+            categories_data = {
+                "inclusive": categories_data["inclusive"]
+            }
         
         return {name: CategoryConfig(**data) for name, data in categories_data.items()}
     
@@ -172,7 +192,8 @@ class AnalysisConfig:
         common_ranges = {
             # Response function parameters
             "reduced_mass_range": [0, -0.6, 0.6],
-            "response_mean_range": [0, -0.2, 0.2],
+            "response_mean_range": [0, -1, 1],
+            # "response_mean_range": [0, -0.2, 0.2],
             "response_sigma_range": [0.02, 0, 1],
             "response_alphaL_range": [0.4, 0.1, 10],
             "response_alphaR_range": [5, 0.1, 10],
@@ -236,7 +257,7 @@ class AnalysisRunner:
         self.analyzer = None
         self.plotter = None
     
-    def setup_analyzer(self, use_reweighting: bool = True):
+    def setup_analyzer(self, use_reweighting: bool = True, use_syst: bool = False):
         """Setup the signal model analyzer"""
         wsfile = os.path.join("workspaces", self.config.wsfile)
         self.analyzer = SignalModelAnalyzer(
@@ -244,17 +265,19 @@ class AnalysisRunner:
             self.config.categories,
             wsfile,
             self.config.parametrized_vars,
+            self.config.nuisanced_vars,
             eos_folder=self.config.eos_folder,
-            use_reweighting=use_reweighting
+            use_reweighting=use_reweighting,
+            use_syst=use_syst,
         )
         
         # Setup plotter
         self.plotter = SignalModelPlotter(self.analyzer)
     
-    def run_response_analysis(self, use_reco_mass: bool = False):
+    def run_response_analysis(self, use_reco_mass: bool = False, max_workers: int = 4):
         """Run response function analysis"""
         print("=== Running Response Function Analysis ===")
-        self.analyzer.build_response_functions(use_reco_mass)
+        self.analyzer.build_response_functions(use_reco_mass, max_workers=max_workers)
         self.analyzer.fit_parameters()
     
     def run_gen_analysis(self):
@@ -264,26 +287,29 @@ class AnalysisRunner:
         # For now, we'll skip this part as it requires additional method implementation
         pass
     
-    def run_signal_model_analysis(self, use_reco_mass: bool = False):
+    def run_signal_model_analysis(self, use_reco_mass: bool = False, max_workers: int = 4):
         """Run signal model analysis"""
         print("=== Running Signal Model Analysis ===")
-        self.analyzer.build_signal_models(use_reco_mass)
+        self.analyzer.build_signal_models(use_reco_mass, max_workers=max_workers)
     
     def run_mass_testing(self, use_reco_mass: bool = False):
         """Run mass point testing"""
         print("=== Running Mass Point Testing ===")
-        # mass_points = np.concatenate([np.arange(0.5, 10.5, 0.1), [3.1, 3.7]])
         mass_points = np.concatenate([np.arange(0.1, 11.1, 0.1), [3.1, 3.7]])
         self.analyzer.test_model_for_masses(mass_points.tolist(), use_reco_mass)
     
-    def generate_plots(self, args):
-        """Generate all plots"""
+    def generate_plots(self, args, plot_max_workers: int = 1):
+        """Generate all plots
+        
+        Args:
+            plot_max_workers: Number of workers for parallel plotting (default=1 for thread safety)
+        """
         print("=== Generating Plots ===")
         
         if not (args.gen or args.test_signal_model):
-            self.plotter.plot_all_response_fits(args.use_reco_mass)
+            self.plotter.plot_all_response_fits(args.use_reco_mass, max_workers=plot_max_workers)
             self.plotter.plot_all_parametrizations(self.config.vars, gen=False)
-            self.plotter.plot_all_sample_fits(gen=False)
+            self.plotter.plot_all_sample_fits(gen=False, max_workers=plot_max_workers)
         
         if not args.no_test_signal_model and not args.gen:
             self.plotter.plot_parametric_models()
@@ -292,13 +318,18 @@ class AnalysisRunner:
         #     self.plotter.plot_all_parametrizations(["mean_BW", "width_BW"], gen=True)
         #     self.plotter.plot_all_sample_fits(gen=True)
     
-    def run_full_analysis(self, args):
-        """Run complete analysis pipeline"""
+    def run_full_analysis(self, args, analysis_max_workers: int = 4, plot_max_workers: int = 1):
+        """Run complete analysis pipeline
+        
+        Args:
+            analysis_max_workers: Number of workers for parallel analysis (default=4)
+            plot_max_workers: Number of workers for parallel plotting (default=1 for thread safety)
+        """
         print("=== Starting Full Signal Modeling Analysis ===")
         
         # Setup
         use_reweighting = not args.no_reweighting
-        self.setup_analyzer(use_reweighting)
+        self.setup_analyzer(use_reweighting, args.syst)
         
         # Delete existing workspace if requested
         if args.delete_ws:
@@ -306,7 +337,7 @@ class AnalysisRunner:
         
         # Response function analysis
         if args.response or (args.full and not args.no_response):
-            self.run_response_analysis(args.use_reco_mass)
+            self.run_response_analysis(args.use_reco_mass, max_workers=analysis_max_workers)
         
         # Generator-level analysis
         if args.gen or (args.full and not args.no_gen):
@@ -314,7 +345,7 @@ class AnalysisRunner:
         
         # Signal model analysis
         if args.signal_model or (args.full and not args.no_signal_model):
-            self.run_signal_model_analysis(args.use_reco_mass)
+            self.run_signal_model_analysis(args.use_reco_mass, max_workers=analysis_max_workers)
         
         # Mass testing
         if args.test_signal_model or (args.full and not args.no_test_signal_model):
@@ -322,7 +353,7 @@ class AnalysisRunner:
         
         # Generate plots
         if args.plots or (args.full and not args.no_plots):
-            self.generate_plots(args)
+            self.generate_plots(args, plot_max_workers=plot_max_workers)
         
         # Copy to EOS
         if args.copy_eos:
@@ -349,9 +380,15 @@ def create_argument_parser():
     parser.add_argument("--full", help="Run all steps", action="store_true", default=False)
     parser.add_argument("--parametrized_vars", help="Parametrized variables", nargs="+", 
                        default=["mean", "sigma", "alphaL", "alphaR", "nL", "nR"])
+    parser.add_argument("--nuisanced_vars", 
+                       help="Parametrized variables with their systematic variations. Format: var:syst1,syst2 (e.g., sigma:electronSmear or sigma:electronSmear,electronScale). Can specify multiple variables.", 
+                       nargs="+", 
+                       default=["sigma:electronSmearing,electronScaleVariations"])
     parser.add_argument("--use_reco_mass", help="Derive signal model from reco mass rather than reduced", 
                        action="store_true", default=False)
     parser.add_argument("--no_reweighting", help="Disable reweighting (set all weights to 1)", 
+                       action="store_true", default=False)
+    parser.add_argument("--syst", help="Enable systematic variations (and save shape nuisance parameters)", 
                        action="store_true", default=False)
     
     # Individual step options
@@ -366,6 +403,8 @@ def create_argument_parser():
                        action="store_true", default=False)
     
     # Skip options
+    parser.add_argument("--no_categories", help="Only process inclusive category",
+                       action="store_true", default=False)
     parser.add_argument("--no_response", help="Skip building response function workspace + fit parameters [works with --full]", 
                        action="store_true", default=False)
     parser.add_argument("--no_signal_model", help="Skip testing signal model workspace [works with --full]", 
@@ -389,7 +428,7 @@ def main():
     args = parser.parse_args()
     
     # Create configuration
-    config = AnalysisConfig()
+    config = AnalysisConfig(all_cats = not args.no_categories)
     
     # Apply configuration updates
     if args.wsfile != "signal_model.root":
@@ -405,10 +444,27 @@ def main():
     if not set(args.parametrized_vars).issubset(set(config.vars)):
         raise ValueError(f"parametrized_vars must be a subset of vars ({config.vars}), got {args.parametrized_vars}")
     config.parametrized_vars = args.parametrized_vars
+
+    # Parse nuisanced variables from format "var:syst1,syst2" to dict
+    nuisanced_vars = {}
+    for spec in args.nuisanced_vars:
+        if ':' in spec:
+            var, systs = spec.split(':', 1)
+            nuisanced_vars[var] = [s.strip() for s in systs.split(',')]
+        else:
+            # If no colon, assume all systematics (or handle as you prefer)
+            nuisanced_vars[spec] = []
+    
+    # Validate nuisanced variables are subset of parametrized variables
+    if not set(nuisanced_vars.keys()).issubset(set(config.parametrized_vars)):
+        raise ValueError(f"nuisanced_vars must be a subset of parametrized_vars ({config.parametrized_vars}), got {list(nuisanced_vars.keys())}")
+    
+    # Store the parsed nuisanced variables (you can add this to config or pass to analyzer)
+    config.nuisanced_vars = nuisanced_vars
     
     # Create and run analysis
     runner = AnalysisRunner(config)
-    runner.run_full_analysis(args)
+    runner.run_full_analysis(args, analysis_max_workers=4, plot_max_workers=1)
 
 
 if __name__ == "__main__":

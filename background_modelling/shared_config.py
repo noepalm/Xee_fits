@@ -27,7 +27,7 @@ class CategoryConfig:
         if self.label == "":
             return "cat" not in obj_name
         else:
-            return obj_name.endswith(self.label)
+            return self.label in obj_name
 
 @dataclass 
 class SampleConfig:
@@ -224,39 +224,23 @@ def update_shared_config(**kwargs):
             setattr(SHARED_CONFIG, key, value)
 
 
-def parse_category_args(category_args: List[str]) -> Dict[str, CategoryConfig]:
-    """Parse command line category arguments into CategoryConfig objects
+def parse_category_args(category_args: str) -> Dict[str, CategoryConfig]:
+    """Filter shared categories based on command line arguments
     
     Args:
-        category_args: List of strings in format 'name=cuts' where cuts is a ROOT cut string
+        category_args: List of category names to include (keys from SHARED_CONFIG.categories)
         
     Returns:
-        Dictionary mapping category names to CategoryConfig objects
+        Dictionary mapping category names to CategoryConfig objects (filtered from SHARED_CONFIG)
     """
     categories = {}
     
-    for arg in category_args:
-        if '=' in arg:
-            name, cut_string = arg.split('=', 1)
-            name = name.strip()
-            cut_string = cut_string.strip().strip('"\'')
-            
-            # For command line args, we create a simple CategoryConfig with the cut string
-            # This is a simplified version - for full parsing of cuts into ranges,
-            # additional logic would be needed
-            categories[name] = CategoryConfig(
-                name=name,
-                cuts={'cut_string': cut_string},  # Store as simple string for now
-                display_name=name
-            )
+    for arg in category_args.split(','):
+        name = arg.strip()
+        if name in SHARED_CONFIG.categories:
+            categories[name] = SHARED_CONFIG.categories[name]
         else:
-            # If no cuts specified, use default (inclusive)
-            name = arg.strip()
-            categories[name] = CategoryConfig(
-                name=name,
-                cuts={},
-                display_name=name
-            )
+            print(f"Warning: Category '{name}' not found in shared config. Available: {list(SHARED_CONFIG.categories.keys())}")
     
     return categories
 

@@ -2,20 +2,27 @@ import ROOT
 import os
 import argparse
 
+is_data = False
+
 # f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
-f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
+# f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_actualReweight/zsnap/era2023/base_8_TriggerPSReweight/InclusiveMinBias.root")
+
+if is_data:
+    f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected/zsnap/era2023/base_2_Final/DoubleElectronNANO_Run3_2023_data_allNano_2025Oct07_*.root_Run2023Dv1.root")
+else:
+    f = ROOT.TFile.Open("/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected/zsnap/era2023/base_2_Final/InclusiveMinBias.root")
 
 t = f.Get("Events")
 
 # plot DiElectron_fitted_mass distribution in 0-11 GeV range weighted by weight branch
-m = ROOT.RooRealVar("DiElectron_fitted_mass", "DiElectron_fitted_mass", 0, 11)
+m = ROOT.RooRealVar("DiElectron_fitted_mass_corrected", "DiElectron_fitted_mass_corrected", 0, 11)
 w = ROOT.RooRealVar("weight", "weight", 0, 1e6)
 data = ROOT.RooDataSet("data", "data", ROOT.RooArgSet(m), ROOT.RooFit.WeightVar(w))
 print(f"Filling dataset with {t.GetEntries()} entries from tree...")
 for i in range(t.GetEntries()):
     t.GetEntry(i)
 
-    for mass_val in t.DiElectron_fitted_mass:
+    for mass_val in t.DiElectron_fitted_mass_corrected:
         if mass_val < 0 or mass_val > 11:
             continue
 
@@ -23,7 +30,7 @@ for i in range(t.GetEntries()):
         m.setVal(mass_val)
         data.add(ROOT.RooArgSet(m), weight * 58.9/7.98)
 
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/fit"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/background_model/260122/fit_binned_data_altbkg_chebyshev_withSyst"
 
 # set batch mode
 ROOT.gROOT.SetBatch(True)
@@ -73,8 +80,9 @@ frame.SetMaximum(frame.GetMaximum() * 1.6)
 #     line.Draw("SAME")
 #     lines.append(line)  # Keep a reference to the line to prevent it from being garbage collected
 
-canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.png"))
-canvas.SaveAs(os.path.join(outfolder, f"data_fullRange.pdf"))
+prefix = "data" if is_data else "minbias"
+canvas.SaveAs(os.path.join(outfolder, f"{prefix}_fullRange.png"))
+canvas.SaveAs(os.path.join(outfolder, f"{prefix}_fullRange.pdf"))
 
 # make zoom in region 0-2 GeV (i.e. region 0)
 canvas_zoom = ROOT.TCanvas("canvas_zoom", "canvas_zoom", 1000, 600)
@@ -105,5 +113,5 @@ frame_zoom.Draw()
 frame_zoom.SetMinimum(1e1)
 frame_zoom.SetMaximum(frame_zoom.GetMaximum() * 1.6)
 
-canvas_zoom.SaveAs(os.path.join(outfolder, f"data_region0.png"))
-canvas_zoom.SaveAs(os.path.join(outfolder, f"data_region0.pdf"))
+canvas_zoom.SaveAs(os.path.join(outfolder, f"{prefix}_region0.png"))
+canvas_zoom.SaveAs(os.path.join(outfolder, f"{prefix}_region0.pdf"))

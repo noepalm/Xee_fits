@@ -11,6 +11,7 @@ parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Ou
 parser.add_argument('-m', '--mass', type=float, default=3.0, help='Mass value to plot')
 parser.add_argument('-c', '--cat_id', type=int, default=4, help='Category ID to plot')
 parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"],)
+# parser.add_argument("--no_res", type=bool, default=False, help='Exclude resonant backgrounds from the plot')
 parser.add_argument('--binned', type=bool, default=False, help='Use binned dataset for plotting')
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
@@ -61,20 +62,27 @@ f2 = ROOT.TFile.Open(args.fit_file, "READ")
 region_config = {
     "region0": {
         "resonant_bkgs": ["phi", "omega", "eta"],
-        "bkg_labels": ["DY", "phi", "omega", "eta"],
-        "all_labels": ["phi", "omega", "eta", "DY", "Signal", "Total S+B"]
+        "bkg_labels": ["Non-resonant", "#phi", "#omega", "#eta"],
+        "all_labels": ["#phi", "#omega", "#eta", "Non-resonant", "Signal", "Total S+B"]
     },
     "region1": {
         "resonant_bkgs": ["jpsi", "psi2s"],
-        "bkg_labels": ["DY", "J/#psi", "#psi(2S)"],
-        "all_labels": ["J/#psi", "#psi(2S)", "DY", "Signal", "Total S+B"]
+        "bkg_labels": ["Non-resonant", "J/#psi", "#psi(2S)"],
+        "all_labels": ["J/#psi", "#psi(2S)", "Non-resonant", "Signal", "Total S+B"]
     },
     "region2": {
         "resonant_bkgs": ["upsilon1s"],
-        "bkg_labels": ["DY", "#Upsilon(1S)"],
-        "all_labels": ["#Upsilon(1S)", "DY", "Signal", "Total S+B"]
+        "bkg_labels": ["Non-resonant", "#Upsilon(1S)"],
+        "all_labels": ["#Upsilon(1S)", "Non-resonant", "Signal", "Total S+B"]
     }
 }
+
+# if args.no_res:
+#     print(f"DEBUG: No resonant backgrounds will be included in the plot", flush=True)
+#     for region in ["region0", "region1", "region2"]:
+#         region_config[region]["resonant_bkgs"] = []
+#         region_config[region]["bkg_labels"] = ["Non-resonant"]
+#         region_config[region]["all_labels"] = ["Non-resonant", "Signal", "Total S+B"]
 
 resonant_bkgs = region_config[args.region]["resonant_bkgs"]
 all_bkgs = ["dy"] + resonant_bkgs + ["total_background"]
@@ -154,7 +162,10 @@ reduced_chi2 = chi2 / (bkgs["total_background"].GetNbinsX() - 1 - n_free_params)
 print("DEBUG: chi2 =", chi2, "nbins =", bkgs ["total_background"].GetNbinsX(), "n_free_params =", n_free_params, "reduced_chi2 =", reduced_chi2)
 
 # Make legend
-legend = ROOT.TLegend(0.2, 0.15, 0.5, 0.5)
+xmin = 0.5 if args.region == "region0" else 0.535 if args.region == "region1" else 0.2
+ymin = 0.15 if args.region == "region0" else 0.6 if args.region == "region1" else 0.2
+yheight = 0.25 if args.region == "region1" else 0.35
+legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + yheight)
 legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
@@ -167,14 +178,39 @@ for bkg_label, (bkg_name, bkg_norm) in zip(bkg_component_labels, bkg_norms.items
 # legend.AddEntry(psi2s_bkg, f"psi(2S) bkg = {psi2s_n:.0f}", "l")
 legend.Draw()
 
+# Add CMS labels
+latex = ROOT.TLatex()
+latex.SetNDC()
+latex.SetTextFont(42)
+latex.SetTextSize(0.045)
+
+# CMS Preliminary label (top left)
+latex_cms = ROOT.TLatex()
+latex_cms.SetNDC()
+latex_cms.SetTextFont(61)  # Bold font for "CMS"
+latex_cms.SetTextSize(0.05)
+latex_cms.DrawLatex(0.1, 0.92, "CMS")
+
+latex_prelim = ROOT.TLatex()
+latex_prelim.SetNDC()
+latex_prelim.SetTextFont(52)  # Italic font for "Preliminary"
+latex_prelim.SetTextSize(0.04)
+latex_prelim.DrawLatex(0.18, 0.92, "Preliminary")
+
+# Luminosity and energy label (top right)
+latex.SetTextAlign(31)  # Right align
+latex.DrawLatex(0.91, 0.92, "8.2 fb^{-1} (13.6 TeV)")
+
 if args.region == "region1":
-    frame.SetMinimum(0.1)
+    frame.SetMinimum(8e2)
 elif args.region == "region2":
     frame.SetMinimum(10)
 elif args.region == "region0":
     frame.SetMinimum(1)
 
-frame.SetMaximum(data_h.GetMaximum() * 5)
+max_factor = 2 if args.region == "region1" else 5
+
+frame.SetMaximum(data_h.GetMaximum() * max_factor)
 
 c.cd(2)
 # compute pulls
@@ -316,7 +352,9 @@ elif args.region == "region0":
 frame.SetMaximum(data_h.GetMaximum() * 5)
 
 # Make legend
-legend = ROOT.TLegend(0.2, 0.15, 0.5, 0.5)
+xmin = 0.5 if args.region == "region0" else 0.2
+ymin = 0.15 if args.region == "region0" else 0.2
+legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + 0.35)
 legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
@@ -330,6 +368,29 @@ for distro_label, (distro_name, norm) in zip(all_distro_labels, all_norms.items(
 # legend.AddEntry(psi2s_bkg, f"psi(2S) bkg = {psi2s_n:.0f}", "l")
 # legend.AddEntry(signal, f"Signal = {signal_n:.0f}", "l")
 legend.Draw()
+
+# Add CMS labels
+latex2 = ROOT.TLatex()
+latex2.SetNDC()
+latex2.SetTextFont(42)
+latex2.SetTextSize(0.045)
+
+# CMS Preliminary label (top left)
+latex_cms2 = ROOT.TLatex()
+latex_cms2.SetNDC()
+latex_cms2.SetTextFont(61)  # Bold font for "CMS"
+latex_cms2.SetTextSize(0.05)
+latex_cms2.DrawLatex(0.12, 0.91, "CMS")
+
+latex_prelim2 = ROOT.TLatex()
+latex_prelim2.SetNDC()
+latex_prelim2.SetTextFont(52)  # Italic font for "Preliminary"
+latex_prelim2.SetTextSize(0.04)
+latex_prelim2.DrawLatex(0.20, 0.91, "Preliminary")
+
+# Luminosity and energy label (top right)
+latex2.SetTextAlign(31)  # Right align
+latex2.DrawLatex(0.90, 0.91, "8.2 fb^{-1} (13.6 TeV)")
 
 c2.cd(2)
 # compute pulls

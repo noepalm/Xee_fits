@@ -12,6 +12,7 @@ data = w.obj("data")
 m = w.obj("mass_test")
 
 m.setRange("unblinded", 1.8, 4.2)
+m.setRange("unblinded", 0, 2)
 
 # make fourht degree polynomial
 polynomial_degree = 4

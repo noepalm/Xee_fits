@@ -1,20 +1,20 @@
-python main_background_analysis.py --full_analysis --bkg_function 0 \
-                                   --fit_jpsi_prompt --floating_resonant \
-                                   --data --tag="data" \
-                                   --category="inclusive" \
-                                   --fit_region="region0" &> logs/reweight_data_region0_log &
+# python main_background_analysis.py --full_analysis --bkg_function 0 \
+#                                    --fit_jpsi_prompt --floating_resonant \
+#                                    --data --tag="data" \
+#                                    --category="inclusive" \
+#                                    --fit_region="region0" &> logs/reweight_data_region0_log &
 
-python main_background_analysis.py --full_analysis --bkg_function 0 \
-                                   --fit_jpsi_prompt --floating_resonant \
-                                   --data --tag="data" \
-                                   --category="inclusive" \
-                                   --fit_region="region1" &> logs/reweight_data_region1_log &
+# python main_background_analysis.py --full_analysis --bkg_function 0 \
+#                                    --fit_jpsi_prompt --floating_resonant \
+#                                    --data --tag="data" \
+#                                    --category="inclusive" \
+#                                    --fit_region="region1" &> logs/reweight_data_region1_log &
 
-python main_background_analysis.py --full_analysis --bkg_function 0 \
-                                   --fit_jpsi_prompt --floating_resonant \
-                                   --data --tag="data" \
-                                   --category="inclusive" \
-                                   --fit_region="region2" &> logs/reweight_data_region2_log &
+# python main_background_analysis.py --full_analysis --bkg_function 0 \
+#                                    --fit_jpsi_prompt --floating_resonant \
+#                                    --data --tag="data" \
+#                                    --category="inclusive" \
+#                                    --fit_region="region2" &> logs/reweight_data_region2_log &
 
 # binned
 python main_background_analysis.py --full_analysis --bkg_function 0 \
@@ -35,7 +35,6 @@ python main_background_analysis.py --full_analysis --bkg_function 0 \
                                    --category="inclusive" \
                                    --binned \
                                    --fit_region="region2" &> logs/reweight_data_region2_binned_log &
-
 
 # ==========================
 #        ALT BKG TEST
@@ -240,7 +239,6 @@ python3 main_background_analysis.py --full_analysis --bkg_function -1 \
 
 # ==================================================
 # TEST: freeze resonant on MinBias
-
 python main_background_analysis.py --full_analysis --bkg_function 0 \
                                    --fit_jpsi_prompt --floating_resonant \
                                    --data --tag="data_altbkg_chebyshev_freezeResOnMinBias" \
@@ -248,3 +246,28 @@ python main_background_analysis.py --full_analysis --bkg_function 0 \
                                    --binned \
                                    --cached \
                                    --fit_region="region1" &> logs/reweight_data_freezeResOnMinBias_region1_binned_log &
+
+# TEST: produce updated signal model
+python main_background_analysis.py --full_analysis --bkg_function 4 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --data --tag="data_altbkg_chebyshev_newsignal" \
+                                   --category="inclusive" \
+                                   --binned \
+                                   --cached \
+                                   --fit_region="region0" &> logs/reweight_data_region0_altbkg_chebyshev_newsignal_binned_log &
+                                   
+python main_background_analysis.py --full_analysis --bkg_function 4 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --data --tag="data_altbkg_chebyshev_newsignal" \
+                                   --category="inclusive" \
+                                   --binned \
+                                   --cached \
+                                   --fit_region="region1" &> logs/reweight_data_region1_altbkg_chebyshev_newsignal_binned_log &
+
+python main_background_analysis.py --full_analysis --bkg_function 4 \
+                                   --fit_jpsi_prompt --floating_resonant \
+                                   --data --tag="data_altbkg_chebyshev_newsignal" \
+                                   --category="inclusive" \
+                                   --binned \
+                                   --cached \
+                                   --fit_region="region2" &> logs/reweight_data_region2_altbkg_chebyshev_newsignal_binned_log &

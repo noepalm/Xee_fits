@@ -9,6 +9,7 @@ TAG_LABEL="" # same but with _ in front
 ## appended to output filenames only -- use when changing fit settings (e.g. freezing parameters)
 FIT_TAG=""
 FIT_TAG_LABEL="" # same but with _ in front
+FOLDER_TAG=""
 CATEGORY_TYPE="eta"  # Default to eta categories
 REGION="region1"
 INPUT_FOLDER="cards/cards"  # Default input folder
@@ -31,6 +32,12 @@ while [[ $# -gt 0 ]]; do
         --fit_tag)
             FIT_TAG="$2"
             FIT_TAG_LABEL="_$FIT_TAG"
+            shift # past argument
+            shift # past value
+            ;;
+        --folder_tag)
+            FOLDER_TAG="$2/"
+            INPUT_FOLDER="cards/${FOLDER_TAG}cards"
             shift # past argument
             shift # past value
             ;;
@@ -105,7 +112,7 @@ done
 # Set input folder
 INPUT_FOLDER="$INPUT_FOLDER"_"$REGION"
 
-OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid"
+OUTFOLDER="/eos/home-n/npalmeri/www/DiElectron/sensitivity/${FOLDER_TAG}fitDiagnostics_grid"
 if [ "$USE_DATA" = true ]; then
     OUTFOLDER="${OUTFOLDER}_data"
 elif [ "$USE_REWEIGHT" = true ]; then
@@ -232,9 +239,9 @@ get_points_for_mass() {
             if (( $(echo "$mass < 0.65" | bc -l) )); then
                 echo "0.1 0.2 0.25 0.3 0.35 0.37 0.39 0.4 0.45 0.5 0.55 0.57 0.6 0.7 0.9 1 1.2 1.5 1.7 2 5 10"
             elif (( $(echo "$mass < 0.9" | bc -l) )); then
-                echo "0.0005 0.001 0.002 0.0025 0.00275 0.003 0.0035 0.004 0.005 0.007 0.008 0.009 0.01 0.0125 0.015 0.0175 0.018 0.02 0.021 0.023 0.025 0.027 0.028 0.03 0.05 0.06 0.07 0.08 0.1 0.2 0.3 0.4 0.5"
+                echo "0.0005 0.001 0.002 0.0025 0.00275 0.003 0.0035 0.004 0.005 0.007 0.008 0.009 0.01 0.0125 0.015 0.0175 0.018 0.02 0.021 0.023 0.025 0.027 0.028 0.03 0.05 0.06 0.07 0.08 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.9 1"
             else
-                echo "0.007 0.01 0.015 0.017 0.02 0.0225 0.025 0.03 0.035 0.04 0.045 0.05 0.55 0.06 0.065 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.15 0.16 0.17 0.19 0.2 0.21 0.23 0.25 0.27 0.29 0.3 0.32 0.33 0.34 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.45 0.5 0.55 0.57 0.6 0.62 0.65 0.7 0.8 0.1 2 5 10"
+                echo "0.007 0.01 0.015 0.017 0.02 0.0225 0.025 0.03 0.035 0.04 0.045 0.05 0.55 0.06 0.065 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.15 0.16 0.17 0.19 0.2 0.21 0.23 0.25 0.27 0.29 0.3 0.32 0.33 0.34 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.45 0.5 0.55 0.57 0.6 0.62 0.65 0.7 0.8  0.9 1 1.25 1.5 2 5 10"
             fi
             ;;
         "region1")
@@ -264,15 +271,15 @@ get_points_for_mass() {
             # Region 2: 4.2-11.0 GeV
             if (( $(echo "$mass >= 7 && $mass < 7.5" | bc -l) )); then
                 echo "0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
-            elif (( $(echo "$mass >= 7.5 && $mass < 8" | bc -l) )); then
+            elif (( $(echo "$mass >= 7.5 && $mass < 10" | bc -l) )); then
                 #NEW! same as above before
-                echo "0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
-            elif (( $(echo "$mass >= 8 && $mass < 9" | bc -l) )); then
-                echo "0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
-            elif (( $(echo "$mass >= 9 && $mass < 12" | bc -l) )); then
-                echo "1 2 3 4 5 6 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 105 110 115 120 130 140 150 160 170 180 190 200 210 220 230 240 250 280"
+                echo "0.0100 0.02 0.03 0.05 0.06 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100"
+            # elif (( $(echo "$mass >= 8 && $mass < 9" | bc -l) )); then
+            #     echo "0.01 0.02 0.05 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
+            elif (( $(echo "$mass >= 10 && $mass < 12" | bc -l) )); then
+                echo "0.5 0.7 0.9 1 2 3 4 5 5.5 6 7 7.5 8 8.5 9 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 105 110 115 120 130 140 150 160 170 180 190 200 210 220 230 240 250 280 300 350 400 450 500 550 600 650 700 750 800"
             else
-                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3"
+                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.6 0.8 1.2 1.8 2.5 3 3.5 4 4.5 5"
             fi
             ;;
         *)
@@ -348,26 +355,35 @@ run_combine_limits() {
     # Single-point runs with caching
 
     # Adjust rMin/rMax for high mass points
+
     local rmin_val=0
-    if (( $(echo "$mass > 9" | bc -l) )); then
-        rmin_val=1
-        echo "Setting rMin to $rmin_val for mass $mass"
-    fi
+    # if (( $(echo "$mass > 9.9" | bc -l) )); then
+    #     rmin_val=0.5
+    #     echo "    Setting rMin to $rmin_val for mass $mass"
+    # fi
 
     local rmax_val=10 #was 1, 10, 40, 50
-    if (( $(echo "$mass > 8.5" | bc -l) )); then
-        rmax_val=120
-        echo "Setting rMax to $rmax_val for mass $mass"
+    if (( $(echo "$mass > 9.4" | bc -l) )); then # WAS 9.9
+        # rmax_val=30
+        rmax_val=150 # after trigger SF implemented, worse limits
+        echo "    Setting rMax to $rmax_val for mass $mass"
     fi
 
-    if (( $(echo "$mass > 9" | bc -l) )); then
-        rmax_val=300
-        echo "Setting rMax to $rmax_val for mass $mass"
-    fi
+    # local rmin_val=0
+    # if (( $(echo "$mass > 9" | bc -l) )); then
+    #     rmin_val=1
+    #     echo "Setting rMin to $rmin_val for mass $mass"
+    # fi
 
-    # local r_init=0.1
-    # if (( $(echo "$mass == 3.1 || $mass == 3.7 || $mass == 1.0 || $mass == 0.8 || $mass > 9" | bc -l) )); then
-    #     r_init=1
+    # local rmax_val=10 #was 1, 10, 40, 50
+    # if (( $(echo "$mass > 8.5" | bc -l) )); then
+    #     rmax_val=120
+    #     echo "Setting rMax to $rmax_val for mass $mass"
+    # fi
+
+    # if (( $(echo "$mass > 9" | bc -l) )); then
+    #     rmax_val=300
+    #     echo "Setting rMax to $rmax_val for mass $mass"
     # fi
 
     for point in $points; do
@@ -390,7 +406,9 @@ run_combine_limits() {
                         --cminDefaultMinimizerStrategy 0 \
                         -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
                         # --X-rtd MINIMIZER_freezeDisassociatedParams \
+                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
                         # --freezeParameters bb0=0 \
+                        # --freezeParameters "sigma_nuisance,alphaR_nuisance,alphaL_nuisance,nR_nuisance,nL_nuisance"\
                         # --setParameters b0=-3.0,b1=3.3,b2=-1.4,b3=0.3,b4=-0.02 \
             fi
         fi
@@ -511,10 +529,10 @@ process_dir() {
     #     return
     # fi
 
-    # if (( $(echo "$mass != 10.5" | bc -l) )); then
-    #     echo "Skipping $dir, mass $mass is not within 0.7 -- 1.1 (TEMPORARY)"
-    #     return
-    # fi
+    if (( $(echo "$mass < 9.3" | bc -l) )); then
+        echo "Skipping $dir, mass $mass is not below 10 (TEMPORARY)"
+        return
+    fi
 
 
     echo "Processing directory: $dir"
@@ -655,3 +673,5 @@ else
     done
 fi
 
+# copy script itself to output folder
+cp "$BASEDIR/scripts/run_limits_parallel.sh" "$OUTFOLDER/limits_script.sh"

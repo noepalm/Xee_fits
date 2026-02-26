@@ -13,6 +13,8 @@ parser.add_argument('-t', '--tag', type=str, default="", help='Optional addition
 parser.add_argument('-r', '--region', type=str, nargs='+', default=['region1'], choices=["region0", "region1", "region2"], help='Region(s) to plot (can specify multiple)')
 args = parser.parse_args()
 
+is_data = ["data" in folder for folder in args.input_cards]
+
 # Validate that input_cards matches the number of regions
 if len(args.input_cards) != len(args.region):
     raise ValueError(f"Number of input_cards ({len(args.input_cards)}) must match number of regions ({len(args.region)})")
@@ -23,11 +25,19 @@ if len(args.input_cards) != len(args.region):
 #     "region2" : (4.4, 10.8),
 # }
 
+# 0.4, 10.8
 limit_bounds = {
-    "region0" : (0.5, 2.2),
+    "region0" : (0.9, 2.2),
     "region1" : (1.8, 4.4),
-    "region2" : (4.0, 10.8),
+    "region2" : (4.0, 10.7),
 }
+
+# # TEMPORARY: just for 18/12 plots
+# limit_bounds = {
+#     "region0" : (0.9, 2.2),
+#     "region1" : (1.8, 4.4),
+#     "region2" : (4.0, 10.4),
+# }
 
 # Create mapping from region to input_cards folder
 region_to_cards = {region: cards for region, cards in zip(args.region, args.input_cards)}
@@ -55,6 +65,7 @@ for region, cards in region_to_cards.items():
 
 
 outfolder = args.output_folder
+infolder = args.input_cards
 tag = f"_{args.tag}" if args.tag != "" else args.tag
 
 plt.style.use(hep.style.CMS)
@@ -81,66 +92,77 @@ category_label_map = {
 list_failed_mass_points = []
 
 # iterate over subfolders -- only consider the ones of the type M{X}.{Y}
-for folder in os.listdir(outfolder):
-    if not folder.startswith("M") or not folder[1:].replace(".", "").isdigit():
-        continue
-    
-    # Check if mass falls within any of the specified regions
-    mass_value = float(folder[1:])
-    if not is_mass_in_regions(mass_value, args.region):
-        continue
-    print("  Processing mass value:", mass_value)
+for region, cards_folder in zip(args.region, infolder):
+    print(f"### PROCESSING {region.upper()}")
+    for folder in os.listdir(f"{cards_folder}/ee"):
+        if not folder.replace(".", "").isdigit():
+            print(f"  Skipping {folder}, not a mass folder")
+            continue
 
-    folder_path = os.path.join(outfolder, folder)
-    
-    # check if it's a directory
-    if not os.path.isdir(folder_path):
-        continue
+        # Check if mass falls within any of the specified regions
+        mass_value = float(folder)
+        if not is_mass_in_regions(mass_value, [region]):
+            continue
+        print("    # processing mass value:", mass_value)
 
-    # iterate over files in the subfolder
-    for file in os.listdir(folder_path):
-        # find fitDiagnostics.log
-        if file == f"fitAsymptotic_{args.category}{tag}.log":
-            print("    Found log file:", file)
-            with open(os.path.join(folder_path, file), 'r') as f:
-                lines = f.readlines()
-                # find the line starting with "Best fit r"
-                for idx, line in enumerate(lines):
-                    if " -- AsymptoticLimits ( CLs ) --" in line:
-                        break
+        folder_path = os.path.join(cards_folder, "ee", folder)
+
+        # check if it's a directory
+        if not os.path.isdir(folder_path):
+            continue
+
+        # iterate over files in the subfolder
+        for file in os.listdir(folder_path):
+            # find higgsCombine_inclusive.AsymptoticLimits.mH120.root
+            if file == f"higgsCombine_{args.category}{tag}.AsymptoticLimits.mH120.root":
+                # print("    Found limit output root file:", file)
+                f = ROOT.TFile.Open(os.path.join(folder_path, file))
+                t = f.Get("limit")
+                quantiles = [-1, 0.025, 0.16, 0.5, 0.84, 0.975]
                 limit = {}
-                limit["observed"] = lines[idx+1].split("r < ")[1].strip()
+                
+                # apply cut on "quantileExpected" and find corresponding "limit"
+                for entry in t:
+                    quantile = entry.quantileExpected
+                    limit_value = entry.limit
 
-                # check if "Expected" lines are found at all (may not be computed)
-                if "Expected" in lines[idx+2]:
-                    limit["expected_2p5"] = lines[idx+2].split("r < ")[1].strip()
-                    limit["expected_16"] = lines[idx+3].split("r < ")[1].strip()
-                    limit["expected_50"] = lines[idx+4].split("r < ")[1].strip()
-                    limit["expected_84"] = lines[idx+5].split("r < ")[1].strip()
-                    limit["expected_97p5"] = lines[idx+6].split("r < ")[1].strip()
-                else:
-                    print("WARNING: no expected limits produced for mass", folder[1:], "; will use median and sigma.")
-                    list_failed_mass_points.append(folder[1:])
+                    if quantile == -1:
+                        limit["observed"] = str(limit_value)
+                    elif abs(quantile - 0.025) < 1e-3:
+                        limit["expected_2p5"] = str(limit_value)
+                    elif abs(quantile - 0.16) < 1e-3:
+                        limit["expected_16"] = str(limit_value)
+                    elif abs(quantile - 0.5) < 1e-3:
+                        limit["expected_50"] = str(limit_value)
+                    elif abs(quantile - 0.84) < 1e-3:
+                        limit["expected_84"] = str(limit_value)
+                    elif abs(quantile - 0.975) < 1e-3:
+                        limit["expected_97p5"] = str(limit_value)
+                
+                f.Close()
+
+                # throw warning if no expected limits saved
+                if "expected_50" not in limit:
+                    print("    WARNING: no expected limits produced for mass", folder, "; will use median and sigma.")
+                    list_failed_mass_points.append(folder)
                     continue
-                    # # find line "Median for expected limits = "
-                    # for line in lines:
-                    #     if "Median for expected limits = " in line:
-                    #         median = float(line.split("Median for expected limits = ")[1].split(",")[0])
-                    #         sigma = float(line.split("Sigma for expected limits = ")[1].strip())
-                    #         limit["expected_2p5"] = median - 2 * sigma
-                    #         limit["expected_16"] = median - sigma
-                    #         limit["expected_50"] = median
-                    #         limit["expected_84"] = median + sigma
-                    #         limit["expected_97p5"] = median + 2 * sigma
-                    #         break
 
                 # retrieve mass value as float
-                mass = folder[1:]
-                
+                mass = folder
+
+                # if mass point already saved: only update it if median limit is better
+                if mass in r_values:
+                    if r_values[mass]["expected_50"] < limit["expected_50"]:
+                        continue
+                    else:
+                        print(f"    UPDATED limit for mass {mass} to region {cards_folder.split('region')[1][0]}: prev median limit = {r_values[mass]['expected_50']} => new = {limit['expected_50']}")
+
                 r_values[mass] = limit
 
+fig_width = 15 if len(args.region) > 1 else 10
+
 # plot central expected limit with 1 sigma and 2 sigma bands IN BRAZILIAN STYLE PLOT
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(fig_width, 10))
 masses = [float(mass) for mass in sorted(r_values.keys(), key=float)]
 observed = [float(r_values[mass]["observed"]) for mass in sorted(r_values.keys(), key=float)]
 expected_50 = np.array([float(r_values[mass]["expected_50"]) for mass in sorted(r_values.keys(), key=float)])
@@ -197,20 +219,11 @@ ax.spines['right'].set_zorder(999)
 # ### TEMPORARY: fix mu range to 1e-2 - 5e-1
 # ax.set_ylim(1e-2, 5e-1)
 
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
+hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data=is_data)
 plt.xlabel("M(Zd) [GeV]")
 plt.ylabel(r"$\mu$")
 plt.yscale("log")
 plt.legend()
-
-print("DEBUG: limits for category", args.category)
-print("Masses:", masses)
-print("Observed:", observed)
-print("Expected 50%:", expected_50)
-print("Expected 16%:", expected_16)
-print("Expected 84%:", expected_84)
-print("Expected 2.5%:", expected_2p5)
-print("Expected 97.5%:", expected_97p5)
 
 for ext in ['png', 'pdf']:
     plt.savefig(os.path.join(outfolder, f"mu_limit_results{tag}_{region_tag}.{ext}"))
@@ -287,7 +300,7 @@ for idx, mass in enumerate(sorted(r_values.keys(), key=float)):
     # r_values[mass]["observed_indep"] = observed_indep[idx]
 
 # plot model-independent expected limit with 1 sigma and 2 sigma bands IN BRAZILIAN STYLE PLOT
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(fig_width, 10))
 plt.plot(masses, expected_50_indep, color="k", label="Median expected", zorder = 5, linestyle='--', alpha = 0.3)
 plt.fill_between(masses, expected_16_indep, expected_84_indep, color = '#FFDF7Fff', label="68% expected", zorder = 3)
 plt.fill_between(masses, expected_2p5_indep, expected_97p5_indep, color = '#85D1FBff', label="95% expected", zorder = 2)
@@ -319,7 +332,7 @@ ax.spines['left'].set_zorder(999)
 ax.spines['top'].set_zorder(999)
 ax.spines['right'].set_zorder(999)
 
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
+hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data=is_data)
 plt.xlabel("M(X) [GeV]")
 plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee)$ [pb]")
 plt.yscale("log")
@@ -346,7 +359,7 @@ for idx, mass in enumerate(sorted(r_values.keys(), key=float)):
     # r_values[mass]["observed_indep"] = observed_indep[idx]
 
 # plot model-independent expected limit with 1 sigma and 2 sigma bands IN BRAZILIAN STYLE PLOT
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(fig_width, 10))
 plt.plot(masses, expected_50_indep_accept, color="k", label="Median expected", zorder = 5, linestyle='--', alpha = 0.3)
 plt.fill_between(masses, expected_16_indep_accept, expected_84_indep_accept, color = '#FFDF7Fff', label="68% expected", zorder = 3)
 plt.fill_between(masses, expected_2p5_indep_accept, expected_97p5_indep_accept, color = '#85D1FBff', label="95% expected", zorder = 2)
@@ -378,11 +391,13 @@ ax.spines['left'].set_zorder(999)
 ax.spines['top'].set_zorder(999)
 ax.spines['right'].set_zorder(999)
 
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6)
+hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data=is_data)
 plt.xlabel("M(X) [GeV]")
 plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]")
 plt.yscale("log")
 plt.legend()
+
+plt.ylim(10, 7e2)
 
 for ext in ['png', 'pdf']:
     plt.savefig(os.path.join(outfolder, f"mu_limit_results_indep_xsecBRAcceptance{tag}_{region_tag}.{ext}"))
