@@ -18,6 +18,7 @@ PLOT_ONLY=false
 USE_DATA=false
 USE_BINNED=false
 NO_RESONANT_BKGS=0
+ERA="2023"  # Default era
 while [[ $# -gt 0 ]]; do
     case $1 in
         --tag)
@@ -83,11 +84,21 @@ while [[ $# -gt 0 ]]; do
             echo "Not including resonant backgrounds."
             shift # past argument
             ;;
+        --era)
+            ERA="$2"
+            if [[ "$ERA" != "2022" && "$ERA" != "2022EE" && "$ERA" != "2023" && "$ERA" != "2023BPix" ]]; then
+                echo "Error: Era must be 2022, 2022EE, 2023, or 2023BPix"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--era 2022|2022EE|2023|2023BPix] [--no_reweight] [--plot_only] [--data] [--binned]"
+                return 1
+            fi
+            shift # past argument
+            shift # past value
+            ;;
         *)
             # Check if there are actually arguments to process
             if [[ -n "$1" ]]; then
                 echo "Unknown argument: $1"
-                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--no_reweight] [--plot_only]"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--era 2022|2022EE|2023|2023BPix] [--no_reweight] [--plot_only] [--data] [--binned]"
                 return 1
             else
                 # No more arguments, break out of the loop
@@ -197,7 +208,7 @@ esac
 export -f get_category_name
 export -f get_category_label
 export -f get_all_category_ids
-export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY USE_DATA USE_BINNED NO_RESONANT_BKGS
+export CATEGORY_TYPE REGION TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT PLOT_ONLY USE_DATA USE_BINNED NO_RESONANT_BKGS ERA
 export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
 
 # Print configuration
@@ -209,6 +220,7 @@ echo "  Input folder: $INPUT_FOLDER"
 echo "  Output folder: $OUTFOLDER"
 echo "  Tag: ${TAG:-'(none)'}"
 echo "  Fit tag: ${FIT_TAG:-'(none)'}"
+echo "  Era: $ERA"
 echo "  Category type: $CATEGORY_TYPE"
 echo "  Categories: $(get_all_category_ids)"
 echo "  Region: $REGION (mass min: $MIN_MASS [limit from $MIN_MASS_LIMIT], max: $MAX_MASS [limit up to $MAX_MASS_LIMIT])"
@@ -218,13 +230,13 @@ echo "  Exclude resonant backgrounds: $NO_RESONANT_BKGS"
 # Create output folders for each category
 for cat_id in $(get_all_category_ids); do
     cat_name=$(get_category_name "$cat_id")
-    echo "Creating output folders $OUTFOLDER/$cat_name/s, b"
-    mkdir -p $OUTFOLDER/$cat_name/s
-    mkdir -p $OUTFOLDER/$cat_name/b
+    echo "Creating output folders $OUTFOLDER/${cat_name}_${ERA}/s, b"
+    mkdir -p $OUTFOLDER/${cat_name}_${ERA}/s
+    mkdir -p $OUTFOLDER/${cat_name}_${ERA}/b
 done
 
 # Copy common .root file to output folder (for future workspace recreation)
-cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/
+cp $INPUT_FOLDER/ee/common/Xee_ee_${ERA}.input.root $OUTFOLDER/
 
 process_dir() {
     dir="$1"
@@ -256,8 +268,8 @@ process_dir() {
     # Process each category
     for cat_id in $(get_all_category_ids); do
         cat_name=$(get_category_name "$cat_id")
-        txt_file="Xee_ee_${cat_id}_2023.txt"
-        root_file="Xee_ee_${cat_id}_2023.root"
+        txt_file="Xee_ee_${cat_id}_${ERA}.txt"
+        root_file="Xee_ee_${cat_id}_${ERA}.root"
         
         if [ -f "$txt_file" ]; then
             echo "  Processing category $cat_id ($cat_name): $txt_file"
@@ -270,25 +282,24 @@ process_dir() {
                         --saveShapes \
                         --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
                         --keepFailures \
-                        -n "_${cat_name}${FIT_TAG_LABEL}" \
-                        -v 3 &> "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log"
-                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
+                        -n "_${cat_name}${FIT_TAG_LABEL}_${ERA}" \
+                        -v 3 &> "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}_${ERA}.log"
                         # --preFitValue 0 \
-                tail -n 10 "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log"
-                cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_fitDiagnostics_${cat_name}.out" 2>/dev/null || true
+                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
+                tail -n 10 "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}_${ERA}.log"
+                cp combine_logger.out "$OUTFOLDER/${cat_name}_${ERA}/M$mass/combine_logger_fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
 
                 # [FIXME] Temporary double, can be optimized
                 # Also run a MultiDimFit to save a post-fit snapshot for B-only fit (serves as input for limits later)
                 combine -M MultiDimFit "$root_file" \
                         --saveWorkspace \
                         --setParameters r=0 \
-                        --freezeParameters r \
+                        --freezeParameters r \ 
                         --setParameterRanges mass=$MIN_MASS,$MAX_MASS \
-                        -n "_${cat_name}${FIT_TAG_LABEL}_Bonly" \
-                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
-                        # --freezeParameters r \
+                        -n "_${cat_name}${FIT_TAG_LABEL}_${ERA}_Bonly" \
+                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}_${ERA}.log"
                         # --freezeParameters "r,mean_nuisance_electronScaleVariation" \
-                cp combine_logger.out "$OUTFOLDER/$cat_name/M$mass/combine_logger_MultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
+                cp combine_logger.out "$OUTFOLDER/${cat_name}_${ERA}/M$mass/combine_logger_MultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.out" 2>/dev/null || true
 
                 # # [FIXME] Temporary double, can be optimized
                 # # Also run a MultiDimFit to save a post-fit snapshot of S+B fit (serves as input for limits later)
@@ -301,13 +312,13 @@ process_dir() {
 
 
                 # Create category-specific output folder
-                mkdir -p "$OUTFOLDER/$cat_name/M$mass"
-                cp "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.log" "$txt_file" "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root" higgsCombine_${cat_name}${FIT_TAG_LABEL}.FitDiagnostics.mH120.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_Bonly.MultiDimFit.mH120.root fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/$cat_name/M$mass/"
-                # cp higgsCombine_${cat_name}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root fitMultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/$cat_name/M$mass/"
+                mkdir -p "$OUTFOLDER/${cat_name}_${ERA}/M$mass"
+                cp "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}_${ERA}.log" "$txt_file" "fitDiagnostics_${cat_name}${FIT_TAG_LABEL}_${ERA}.root" higgsCombine_${cat_name}${FIT_TAG_LABEL}_${ERA}.FitDiagnostics.mH120.root higgsCombine_${cat_name}${FIT_TAG_LABEL}_${ERA}_Bonly.MultiDimFit.mH120.root fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}_${ERA}.log "$OUTFOLDER/${cat_name}_${ERA}/M$mass/"
+                # cp higgsCombine_${cat_name}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root fitMultiDimFit_SB_${cat_name}${FIT_TAG_LABEL}.log "$OUTFOLDER/${cat_name}_${ERA}/M$mass/"
             fi
 
             echo "    Plotting for category $cat_name"
-            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}.root -o "$OUTFOLDER/$cat_name" -m $mass -c $cat_id -r $REGION --tag "$FIT_TAG" --binned $USE_BINNED #--no_res=$NO_RESONANT_BKGS
+            python3 $BASEDIR/scripts/draw_mu0_fit.py -i "$root_file" -f fitDiagnostics_${cat_name}${FIT_TAG_LABEL}_${ERA}.root -o "$OUTFOLDER/${cat_name}_${ERA}" -m $mass -c $cat_id -r $REGION --era $ERA --tag "$FIT_TAG" --binned $USE_BINNED #--no_res=$NO_RESONANT_BKGS
         else
             echo "  $txt_file not found for category $cat_id ($cat_name)"
         fi
@@ -326,7 +337,7 @@ for cat_id in $(get_all_category_ids); do
     cat_name=$(get_category_name "$cat_id")
 
     # Build the command with optional tag argument
-    plot_cmd="python3 $BASEDIR/scripts/plot_diagnostics_result.py -o \"$OUTFOLDER/$cat_name\" -c $cat_name"
+    plot_cmd="python3 $BASEDIR/scripts/plot_diagnostics_result.py -o \"$OUTFOLDER/${cat_name}_${ERA}\" -c $cat_name"
     if [[ -n "$TAG" ]]; then
         plot_cmd="$plot_cmd --tag \"${REGION}_${FIT_TAG}\""
     fi
@@ -334,5 +345,5 @@ for cat_id in $(get_all_category_ids); do
     
     # Execute the command
     echo "Creating summary plots for category $cat_name"
-    eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/diagnostics_summary_${REGION}${FIT_TAG_LABEL}.log"
+    eval "$plot_cmd" &> "$OUTFOLDER/${cat_name}_${ERA}/diagnostics_summary_${REGION}${FIT_TAG_LABEL}.log"
 done

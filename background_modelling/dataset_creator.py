@@ -10,7 +10,7 @@ import argparse
 import sys
 sys.path.append('utilities')
 # from utilities.get_signal_effs_xsecs import effs, effs_err, xsecs, xsecs_err
-from utilities.get_signal_effs_xsecs import get_efficiency_function, get_xsec_function
+# from utilities.get_signal_effs_xsecs import get_efficiency_function, get_xsec_function
 
 # Import shared configuration
 from shared_config import CategoryConfig, get_default_categories
@@ -30,7 +30,7 @@ class DatasetCreator:
                  output_workspace: "ROOT.RooWorkspace" = None, use_reweighting: bool = True,
                  use_binned: bool = False, weight_multiplier: float = 1.0,
                  tag: str = "", cached_datasets: Dict[str, Any] = None, no_res: bool = False,
-                 era: str = "2023"):
+                 era: str = "2023", folder_tag: str = "", signal_folder_tag: str = ""):
 
         self.use_data = use_data
         self.use_jpsi = use_jpsi
@@ -43,6 +43,7 @@ class DatasetCreator:
         self.no_res = no_res  # Exclude resonant regions
         self.tag = tag
         self.era = era
+        self.signal_folder_tag = signal_folder_tag  # Store for efficiency/xsec retrieval
         self.cached_datasets = cached_datasets  # Pre-loaded datasets to use instead of creating from files
         
         # Category definitions (use shared configuration)
@@ -76,7 +77,8 @@ class DatasetCreator:
             if corrected:
                 # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected_scaleOnly_elenaSyst/zsnap/era2023/'
                 # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF/zsnap/era2023/'
-                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
+                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/'
             else:
                 self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era{era}/'
 
@@ -84,10 +86,14 @@ class DatasetCreator:
         if corrected:
             if fit_region.name == "region0" and use_jpsi:
                 # self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
-                self.filepath += "all_11_AllResonances/" #different flow for resonant bkg sample in region 0
+                # self.filepath += "all_11_AllResonances/" #different flow for resonant bkg sample in region 0
+                self.filepath += "all_12_AllResonances/" #different flow for resonant bkg sample in region 0
+            elif fit_region.name in ["region1", "region2"] and use_jpsi:
+                self.filepath += "base_4_full/"
             else:
+                # when running on data 
                 # self.filepath += "base_2_Final/"
-                self.filepath += "base_3_full/"
+                self.filepath += "base_3_full/"                
         elif use_reweighting:
             if fit_region.name == "region0" and use_jpsi:
                 self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
@@ -98,15 +104,23 @@ class DatasetCreator:
 
         self.weight_multiplier = weight_multiplier
             
-        # Output settings
-        self.output_dir = Path("datasets") / era
+        # Output settings - use folder_tag if provided (already contains era), otherwise use era
+        if folder_tag:
+            self.output_dir = Path("datasets") / folder_tag
+        else:
+            self.output_dir = Path("datasets") / era
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Resonant background workspace settings
         suffix = "" if not use_reduced_mass else "_reducedMass"
         # TODO FIXME: all file names are hardcoded. Write them in common config file.
-        if self.with_systematics:
-            print(f"DEBUG: Using signal workspace with systematics", flush=True)
+        if signal_folder_tag:
+            # Use new folder structure with signal_folder_tag and era
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            print(f"DEBUG: Using signal workspace with folder tag: {self.signal_ws_file}", flush=True)
+        elif self.with_systematics:
+            print(f"DEBUG: Using signal workspace with systematics (legacy path)", flush=True)
             # self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withSyst_scaleOnly_elenaSyst.root'
             self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF.root'
         elif self.use_reweighting:
@@ -210,7 +224,7 @@ class DatasetCreator:
         """
         print("Creating datasets from files for all categories...")
         
-        mass_var.setBins(100)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
+        mass_var.setBins(250)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
         bin_width = mass_var.getBinning().averageBinWidth()
 
         # Create datasets for each category (using signal modeling naming convention)
@@ -252,8 +266,14 @@ class DatasetCreator:
         category_events = {cat: 0 for cat in self.category_names}
         category_events_minbias = {cat: 0 for cat in self.category_names} if self.use_data else None
         
+        print("DEBUG: Starting to loop over files in directory:", self.filepath)
         for filename in os.listdir(self.filepath):
             if not filename.endswith('.root'):
+                continue
+            
+            # skip temporary files
+            if filename.startswith('.'):
+                print(f"  Skipping temporary file: {filename}")
                 continue
 
             # Determine file type
@@ -432,7 +452,8 @@ class DatasetCreator:
                         # Has variation: take everything after mass as variation suffix
                         variation_suffix = "_" + "_".join(parts[1:])
                     
-                    new_name = f'Zd_M{mass_part}{category_config.label}{variation_suffix}'
+                    # Add era suffix at the very end (after category and variation)
+                    new_name = f'Zd_M{mass_part}{category_config.label}{variation_suffix}_{self.era}'
                     
                     # Import with new name to single workspace
                     self.workspace.Import(model, ROOT.RooFit.RenameVariable(model_name, new_name))
@@ -454,10 +475,14 @@ class DatasetCreator:
 
         print(f"DEBUG: interpolating xsec, effs for fit region {self.fit_region} (name: {self.fit_region.name if self.fit_region else 'none'})")
         
-        # Get efficiency functions (nominal + all available variations)
+        # Use signal_folder_tag if available, otherwise use default
+        signal_folder_tag = self.signal_folder_tag if self.signal_folder_tag else "260226"
+        print(f"DEBUG: Using signal_folder_tag = {signal_folder_tag} for efficiency/xsec retrieval", flush=True)
+        
+        # Get efficiency functions (nominal + all available variations) for this era
         from utilities.get_signal_effs_xsecs import get_all_efficiency_functions, get_xsec_function
-        eff_results = get_all_efficiency_functions(use_old=False)
-        xsec_result = get_xsec_function(use_old=False)
+        eff_results = get_all_efficiency_functions(use_old=False, era=self.era, folder_tag=signal_folder_tag)
+        xsec_result = get_xsec_function(use_old=False, era=self.era, folder_tag=signal_folder_tag)
         
         # Dynamically determine available variations and create mapping
         # Map: variation_key -> (workspace_suffix, descriptive_name)
@@ -546,41 +571,43 @@ class DatasetCreator:
                 print(f"    {n_exp_str}", flush=True)
                 
                 # Create RooRealVar for expected events - ALWAYS save nominal first (no suffix)
-                norm_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected', 
-                                                   f'Zd{category_config.label}_M{mass_str}_expected', 
+                norm_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected_{self.era}', 
+                                                   f'Zd{category_config.label}_M{mass_str}_expected_{self.era}', 
                                                    n_expected_values['nominal'])
                 self.workspace.Import(norm_var_nominal, ROOT.RooCmdArg())
                 
-                # Then save variations (with suffixes)
+                # Then save variations (with suffixes before era)
                 for var_key, (ws_suffix, desc_name) in variation_mapping.items():
                     if var_key == 'nominal':
                         continue  # Already saved above
-                    norm_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}', 
-                                              f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}', 
+                    norm_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}_{self.era}', 
+                                              f'Zd{category_config.label}_M{mass_str}_expected{ws_suffix}_{self.era}', 
                                               n_expected_values[var_key])
                     self.workspace.Import(norm_var, ROOT.RooCmdArg())
                 
                 # Also save efficiencies - nominal first (no suffix), then variations
-                eff_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency', 
-                                                 f'Zd{category_config.label}_M{mass_str}_efficiency', 
+                eff_var_nominal = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency_{self.era}', 
+                                                 f'Zd{category_config.label}_M{mass_str}_efficiency_{self.era}', 
                                                  efficiencies['nominal'])
                 eff_var_nominal.setConstant(True)
                 self.workspace.Import(eff_var_nominal, ROOT.RooCmdArg())
+            
+                print(f"DEBUG: for era {self.era}, e.g. M3.8 has expected = {n_expected_values['nominal']:.1f}, ID up variation = {n_expected_values['electronID_up']}, ID down variation = {n_expected_values['electronID_down']} ", flush=True)
                 
                 for var_key, (ws_suffix, desc_name) in variation_mapping.items():
                     if var_key == 'nominal':
                         continue  # Already saved above
-                    eff_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}', 
-                                             f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}', 
+                    eff_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}_{self.era}', 
+                                             f'Zd{category_config.label}_M{mass_str}_efficiency{ws_suffix}_{self.era}', 
                                              efficiencies[var_key])
                     eff_var.setConstant(True)
                     self.workspace.Import(eff_var, ROOT.RooCmdArg())
 
-                xsec_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_xsec', f'Zd{category_config.label}_M{mass_str}_xsec', cross_section)
+                xsec_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_xsec_{self.era}', f'Zd{category_config.label}_M{mass_str}_xsec_{self.era}', cross_section)
                 xsec_var.setConstant(True)
                 self.workspace.Import(xsec_var, ROOT.RooCmdArg())
                 
-                frac_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_fraction', f'Zd{category_config.label}_M{mass_str}_fraction', category_fractions[category_name])
+                frac_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_fraction_{self.era}', f'Zd{category_config.label}_M{mass_str}_fraction_{self.era}', category_fractions[category_name])
                 frac_var.setConstant(True)
                 self.workspace.Import(frac_var, ROOT.RooCmdArg())
             
@@ -606,12 +633,12 @@ class DatasetCreator:
                 
             n_jpsi_exp = n_jpsi_exp_total * category_fraction
             
-            # J/psi expected events (using category label)
-            norm_jpsi = ROOT.RooRealVar(f"jpsi{category_config.label}_expected", f"jpsi{category_config.label}_expected", n_jpsi_exp)
+            # J/psi expected events (using category label) with era suffix
+            norm_jpsi = ROOT.RooRealVar(f"jpsi{category_config.label}_expected_{self.era}", f"jpsi{category_config.label}_expected_{self.era}", n_jpsi_exp)
             self.workspace.Import(norm_jpsi, ROOT.RooCmdArg())
             
-            # psi(2S) expected events (can be rescaled later)
-            norm_psi2s = ROOT.RooRealVar(f"psi2s{category_config.label}_expected", f"psi2s{category_config.label}_expected", n_jpsi_exp)
+            # psi(2S) expected events (can be rescaled later) with era suffix
+            norm_psi2s = ROOT.RooRealVar(f"psi2s{category_config.label}_expected_{self.era}", f"psi2s{category_config.label}_expected_{self.era}", n_jpsi_exp)
             self.workspace.Import(norm_psi2s, ROOT.RooCmdArg())
             
             print(f"  {category_name}: J/psi expected: {n_jpsi_exp:.1f}, psi(2S) expected: {n_jpsi_exp:.1f}")
@@ -623,7 +650,7 @@ class DatasetCreator:
         for category_name, category_config in self.categories.items():
             # Get total data events for this category
             n_data = datasets[category_name].sumEntries()
-            data_norm = ROOT.RooRealVar(f'data_obs{category_config.label}_expected', f'data_obs{category_config.label}_expected', n_data)
+            data_norm = ROOT.RooRealVar(f'data_obs{category_config.label}_expected_{self.era}', f'data_obs{category_config.label}_expected_{self.era}', n_data)
             self.workspace.Import(data_norm, ROOT.RooCmdArg())
             
             print(f"  {category_name}: {n_data:.1f} events")

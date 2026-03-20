@@ -19,15 +19,26 @@ from plotting_oo import SignalModelPlotter
 class AnalysisConfig:
     """Configuration class for the analysis"""
     
-    def __init__(self, all_cats : bool = True):
+    def __init__(self, all_cats : bool = True, era: str = "2023"):
         # I/O settings
+        self.era = era
         self.wsfile = "signal_model.root"
         # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/signal_model/fw_output/nanov15/signal_model_reweighted/zsnap/era2023/"
         # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withSyst_scaleOnly_elenaSyst/zsnap/era2023/"
         # self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
         # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withScaleSyst_IDSF/zsnap/era2023/"
-        self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withScaleSyst_IDSF_triggerSF/zsnap/era2023/"
-        self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/"
+        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/signal_model_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zsnap/era{era}/"
+        self.base_eos_folder = Path("/eos/home-n/npalmeri/www/DiElectron/signal_model")
+        self.eos_folder = str(self.base_eos_folder)
+        
+        # Base workspace directory for folder_tag support
+        self.base_ws_dir = Path("workspaces")
+        self.ws_dir = self.base_ws_dir
+        
+        # Folder tag for subfolder organization (initialized as empty, set via apply_folder_tag)
+        self.folder_tag = ""
         
         # Analysis parameters
         self.vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
@@ -116,6 +127,92 @@ class AnalysisConfig:
                 # "response_nR_range" : [5, 0.1, 10],
                 # "response_alphaR_range" : [1, 0.1, 20],
             },
+            
+            # "Zd_M0p5": {
+            #     "filename": "HAHM_13p6TeV_M0p5.root",
+            #     "nominal_mass": 0.5,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [0.5, 0.1, 0.9],
+            #     "mass_GEN_range": [0.5, 0.1, 0.9],
+            #     "mean_BW_range": [0.5, 0.1, 0.9],
+            # },
+            # "Zd_M1": {
+            #     "filename": "HAHM_13p6TeV_M1.root",
+            #     "nominal_mass": 1,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [1, 0.4, 1.4],
+            #     "mass_GEN_range": [1, 0.8, 1.2],
+            #     "mean_BW_range": [1, 0.7, 1.2],
+            # },
+            # "Zd_M2": {
+            #     "filename": "HAHM_13p6TeV_M2.root",
+            #     "nominal_mass": 2,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [2, 1.4, 2.7],
+            #     "mass_GEN_range": [2, 1.4, 2.7],
+            #     "mean_BW_range": [2, 1.4, 2.7],
+            # },
+            # "Zd_M3p1": {
+            #     "filename": "HAHM_13p6TeV_M3p1.root",
+            #     "nominal_mass": 3.1,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [3.1, 2, 3.6],
+            #     "mass_GEN_range": [3.1, 2.9, 3.3],
+            #     "mean_BW_range": [3.1, 2.9, 3.2],
+            # },
+            # "Zd_M4": {
+            #     "filename": "HAHM_13p6TeV_M4.root",
+            #     "nominal_mass": 4,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [4, 3.0, 5.0],
+            #     "mass_GEN_range": [4, 3.0, 5.0],
+            #     "mean_BW_range": [4, 3.0, 5.0],
+            # },
+            # "Zd_M6": {
+            #     "filename": "HAHM_13p6TeV_M6.root",
+            #     "nominal_mass": 6,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [6, 4.5, 7],
+            #     "mass_GEN_range": [6, 5.75, 6.25],
+            #     "mean_BW_range": [6, 5, 7],
+            # },
+            # "Zd_M8": {
+            #     "filename": "HAHM_13p6TeV_M8.root",
+            #     "nominal_mass": 8,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [8, 7, 9],
+            #     "mass_GEN_range": [8, 7.75, 8.25],
+            #     "mean_BW_range": [8, 7, 9],
+            # },
+            # "Zd_M10": {
+            #     "filename": "HAHM_13p6TeV_M10.root",
+            #     "nominal_mass": 10,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [10, 8, 11],
+            #     "mass_GEN_range": [10, 8, 12],
+            #     "mean_BW_range": [10, 8, 11],
+            #     #custom ranges
+            #     "response_mean_range" : [0, -2, 0.5],
+            #     # "response_nL_range" : [5, 0, 20],
+            #     # "response_alphaL_range" : [1, 0.1, 20],
+            #     # "response_nR_range" : [5, 0.1, 10],
+            #     # "response_alphaR_range" : [1, 0.1, 20],
+            # },
+            # "Zd_M12": {
+            #     "filename": "HAHM_13p6TeV_M12.root",
+            #     "nominal_mass": 12,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [12, 9.5, 14],
+            #     "mass_GEN_range": [12, 9.5, 14],
+            #     "mean_BW_range": [12, 9.5, 14],
+            #     #custom ranges
+            #     "response_mean_range" : [0, -2, 0.5],
+            #     # "response_nL_range" : [5, 0, 20],
+            #     # "response_alphaL_range" : [1, 0.1, 20],
+            #     # "response_nR_range" : [5, 0.1, 10],
+            #     # "response_alphaR_range" : [1, 0.1, 20],
+            # },
+
             "UpsilonToEE": {
                 "filename": "UpsilonToEE.root",
                 "nominal_mass": 9.460,
@@ -142,8 +239,10 @@ class AnalysisConfig:
             # samples[name].file_GEN = os.path.join(self.base_path, "base_8_GenSelection", data["filename"])
             # samples[name].file = os.path.join(self.base_path, "base_10_Final", data["filename"])
             # samples[name].file_GEN = os.path.join(self.base_path, "base_10_Final", data["filename"])
-            samples[name].file = os.path.join(self.base_path, "base_11_full", data["filename"])
-            samples[name].file_GEN = os.path.join(self.base_path, "base_11_full", data["filename"])
+            # samples[name].file = os.path.join(self.base_path, "base_11_full", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_11_full", data["filename"])
+            samples[name].file = os.path.join(self.base_path, "base_12_full", data["filename"])
+            samples[name].file_GEN = os.path.join(self.base_path, "base_12_full", data["filename"])
         
         return samples
     
@@ -242,11 +341,42 @@ class AnalysisConfig:
                     updated_range = [val * sample.nominal_mass for val in current_range]
                     setattr(sample, attr_name, updated_range)
     
+    def apply_folder_tag(self, folder_tag: str):
+        """Apply folder tag to update output directory structure
+        
+        Folder structure:
+        - Workspace: workspaces/<folder_tag>/era<era>/<file>
+        - Plots: <base_eos_folder>/<folder_tag>/use_reco_mass<tag>/era<era>/...
+        """
+        self.folder_tag = folder_tag
+        
+        if folder_tag:
+            # Update workspace directory: workspaces/<folder_tag>/era<era>/
+            self.ws_dir = self.base_ws_dir / folder_tag / f"era{self.era}"
+            self.ws_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Update eos_folder: <base>/folder_tag/ (tag will be added by apply_tag)
+            self.eos_folder = str(self.base_eos_folder / folder_tag)
+            Path(self.eos_folder).mkdir(parents=True, exist_ok=True)
+        else:
+            # Reset to base directories if no folder_tag
+            self.ws_dir = self.base_ws_dir / f"era{self.era}"
+            self.ws_dir.mkdir(parents=True, exist_ok=True)
+            self.eos_folder = str(self.base_eos_folder)
+    
     def apply_tag(self, tag: str):
-        """Apply tag to output files"""
+        """Apply tag to output files and EOS folder
+            Structure: <base_eos_folder>/<folder_tag>/use_reco_mass_<tag>/era<era>/
+        """
         if tag:
             self.wsfile = self.wsfile.replace(".root", f"_{tag}.root")
-            self.eos_folder = f"{self.eos_folder}_{tag}"
+            # Always apply tag to eos_folder for plot organization
+            self.eos_folder = str(Path(self.eos_folder) / f"use_reco_mass_{tag}" / f"era{self.era}")
+            Path(self.eos_folder).mkdir(parents=True, exist_ok=True)
+        else:
+            # If no tag, still add era subfolder
+            self.eos_folder = str(Path(self.eos_folder) / f"era{self.era}")
+            Path(self.eos_folder).mkdir(parents=True, exist_ok=True)
 
 
 class AnalysisRunner:
@@ -255,24 +385,31 @@ class AnalysisRunner:
     def __init__(self, config: AnalysisConfig):
         self.config = config
         self.analyzer = None
+        
+        # Ensure workspace directory exists
+        self.config.ws_dir.mkdir(parents=True, exist_ok=True)
         self.plotter = None
     
     def setup_analyzer(self, use_reweighting: bool = True, use_syst: bool = False):
         """Setup the signal model analyzer"""
-        wsfile = os.path.join("workspaces", self.config.wsfile)
+        # Update wsfile path to include folder_tag subdirectory
+        wsfile_path = str(self.config.ws_dir / self.config.wsfile)
+        
         self.analyzer = SignalModelAnalyzer(
             self.config.samples,
             self.config.categories,
-            wsfile,
+            wsfile_path,
             self.config.parametrized_vars,
             self.config.nuisanced_vars,
             eos_folder=self.config.eos_folder,
             use_reweighting=use_reweighting,
             use_syst=use_syst,
+            era=self.config.era,
         )
         
         # Setup plotter
         self.plotter = SignalModelPlotter(self.analyzer)
+        print(f"Analyzer setup complete with workspace: {wsfile_path}")
     
     def run_response_analysis(self, use_reco_mass: bool = False, max_workers: int = 4):
         """Run response function analysis"""
@@ -375,6 +512,8 @@ def create_argument_parser():
     parser.add_argument("--delete_ws", help="Delete workspace file", action="store_true", default=False)
     parser.add_argument("--copy_eos", help="Copy all output plots to EOS directory", action="store_true", default=False)
     parser.add_argument("--tag", help="Tag for output files", default="")
+    parser.add_argument("--folder_tag", help="Subfolder tag for organizing outputs", default="")
+    parser.add_argument("--era", help="Data-taking era (default: 2023)", default="2023", type=str)
     
     # Analysis options
     parser.add_argument("--full", help="Run all steps", action="store_true", default=False)
@@ -428,11 +567,14 @@ def main():
     args = parser.parse_args()
     
     # Create configuration
-    config = AnalysisConfig(all_cats = not args.no_categories)
+    config = AnalysisConfig(all_cats = not args.no_categories, era=args.era)
     
     # Apply configuration updates
     if args.wsfile != "signal_model.root":
         config.wsfile = args.wsfile
+    
+    if args.folder_tag:
+        config.apply_folder_tag(args.folder_tag)
     
     if args.tag:
         config.apply_tag(args.tag)

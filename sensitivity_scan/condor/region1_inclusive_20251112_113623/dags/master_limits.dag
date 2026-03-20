@@ -1,0 +1,10 @@
+# Master DAG coordinating all mass point calculations and plotting
+
+SUBDAG EXTERNAL mass_limits_M1.8 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/limits_M1.8.dag
+SUBDAG EXTERNAL mass_limits_M1.9 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/limits_M1.9.dag
+
+# Plotting job - runs after all mass calculations complete
+JOB plot_all /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/plot_results.jdl
+
+# Dependencies: plotting runs after all mass point DAGs complete
+PARENT mass_limits_M1.8 mass_limits_M1.9 CHILD plot_all

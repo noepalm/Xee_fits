@@ -1,0 +1,11 @@
+# DAG for mass 1.9
+
+# Category: inclusive
+JOB grid_inclusive_0.001 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/inclusive_M1.9_grid.jdl
+VARS grid_inclusive_0.001 Point="0.001"
+JOB grid_inclusive_0.005 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/inclusive_M1.9_grid.jdl
+VARS grid_inclusive_0.005 Point="0.005"
+JOB grid_inclusive_0.01 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/inclusive_M1.9_grid.jdl
+VARS grid_inclusive_0.01 Point="0.01"
+JOB merge_inclusive /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/dags/inclusive_M1.9_merge.jdl
+PARENT grid_inclusive_0.001 grid_inclusive_0.005 grid_inclusive_0.01 CHILD merge_inclusive

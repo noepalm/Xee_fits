@@ -209,14 +209,14 @@ class ParametrizationPlotter:
             
         for name, sample in samples.items():
             # FIXME: not very elegant, could invoke get_entry_counts_for_category somewhere higher up 
-            entry_counts = self.analyzer.dataset_loader.get_dataset_entry_count(f"response_data_{sample.label}{category.label}")
+            entry_counts = self.analyzer.dataset_loader.get_dataset_entry_count(f"response_data_{sample.label}{category.label}_{self.analyzer.era}")
             if entry_counts < min_entries:
                 print(f"Skipping {name} in category {category.label} due to insufficient entries: {entry_counts}")
                 continue
             
             for var, varname in zip(vars_to_plot, varnames):
-                # Nominal values
-                workspace_var = self.workspace.var(f"{varname}_{name}{category.label}")
+                # Nominal values (all variables have era suffix)
+                workspace_var = self.workspace.var(f"{varname}_{name}{category.label}_{self.analyzer.era}")
                 if workspace_var:
                     data_points[var]['x'].append(sample.nominal_mass)
                     data_points[var]['y'].append(workspace_var.getVal())
@@ -225,15 +225,16 @@ class ParametrizationPlotter:
                 # Systematic variations (only if enabled)
                 if self.analyzer.use_syst:
                     for variation in self.analyzer.dataset_loader.variations:
+                        # All variation variables have era suffix
                         # Up variation
-                        var_up = self.workspace.var(f"{varname}_{name}{category.label}_{variation}_up")
+                        var_up = self.workspace.var(f"{varname}_{name}{category.label}_{variation}_up_{self.analyzer.era}")
                         if var_up:
                             var_up_points[var][variation]['x'].append(sample.nominal_mass)
                             var_up_points[var][variation]['y'].append(var_up.getVal())
                             var_up_points[var][variation]['y_err'].append(var_up.getError())
                         
                         # Down variation
-                        var_down = self.workspace.var(f"{varname}_{name}{category.label}_{variation}_down")
+                        var_down = self.workspace.var(f"{varname}_{name}{category.label}_{variation}_down_{self.analyzer.era}")
                         if var_down:
                             var_down_points[var][variation]['x'].append(sample.nominal_mass)
                             var_down_points[var][variation]['y'].append(var_down.getVal())
@@ -250,7 +251,7 @@ class ParametrizationPlotter:
         varnames = [f"{var}_GEN_fit" if gen else f"response_{var}" for var in vars_to_plot]
         
         for var, varname in zip(vars_to_plot, varnames):
-            workspace_var = self.workspace.var(f"{varname}_JPsiToEE{category.label}")
+            workspace_var = self.workspace.var(f"{varname}_JPsiToEE{category.label}_{self.analyzer.era}")
             if workspace_var:
                 jpsi_points[var]['y'].append(workspace_var.getVal())
                 jpsi_points[var]['y_err'].append(workspace_var.getError())
@@ -269,7 +270,7 @@ class ParametrizationPlotter:
         varnames = [f"{var}_GEN_fit" if gen else f"response_{var}" for var in vars_to_plot]
         
         for var, varname in zip(vars_to_plot, varnames):
-            workspace_var = self.workspace.var(f"{varname}_UpsilonToEE{category.label}")
+            workspace_var = self.workspace.var(f"{varname}_UpsilonToEE{category.label}_{self.analyzer.era}")
             if workspace_var:
                 upsilon_points[var]['y'].append(workspace_var.getVal())
                 upsilon_points[var]['y_err'].append(workspace_var.getError())
@@ -413,8 +414,8 @@ class ParametrizationPlotter:
         # Plot fit curves or constant lines
         if var in self.analyzer.parametrized_vars:
             # Get fit parameters (with variation tag if specified)
-            par0_obj = self.workspace.obj(f"{var}{category.label}_fit_par0{variation_tag}")
-            par1_obj = self.workspace.obj(f"{var}{category.label}_fit_par1{variation_tag}")
+            par0_obj = self.workspace.obj(f"{var}{category.label}_fit_par0{variation_tag}_{self.analyzer.era}")
+            par1_obj = self.workspace.obj(f"{var}{category.label}_fit_par1{variation_tag}_{self.analyzer.era}")
             
             if par0_obj and par1_obj:
                 x_fit = np.linspace(0, 12, 100)
@@ -442,7 +443,7 @@ class ParametrizationPlotter:
         else:
             # Constant parameter
             tag = "_GEN" if gen else ""
-            const_obj = self.workspace.obj(f"{var}{category.label}{tag}_const")
+            const_obj = self.workspace.obj(f"{var}{category.label}{tag}_const_{self.analyzer.era}")
             if const_obj:
                 const_val = const_obj.getVal()
                 const_err = const_obj.getError()
@@ -467,12 +468,12 @@ class ParametrizationPlotter:
         """
         if var in self.analyzer.parametrized_vars:
             # Get fit parameters for up variation
-            par0_up = self.workspace.obj(f"{var}{category.label}_fit_par0_{variation_name}_up")
-            par1_up = self.workspace.obj(f"{var}{category.label}_fit_par1_{variation_name}_up")
+            par0_up = self.workspace.obj(f"{var}{category.label}_fit_par0_{variation_name}_up_{self.analyzer.era}")
+            par1_up = self.workspace.obj(f"{var}{category.label}_fit_par1_{variation_name}_up_{self.analyzer.era}")
             
             # Get fit parameters for down variation
-            par0_down = self.workspace.obj(f"{var}{category.label}_fit_par0_{variation_name}_down")
-            par1_down = self.workspace.obj(f"{var}{category.label}_fit_par1_{variation_name}_down")
+            par0_down = self.workspace.obj(f"{var}{category.label}_fit_par0_{variation_name}_down_{self.analyzer.era}")
+            par1_down = self.workspace.obj(f"{var}{category.label}_fit_par1_{variation_name}_down_{self.analyzer.era}")
             
             if par0_up and par1_up and par0_down and par1_down:
                 x_fit = np.linspace(0, 12, 100)
@@ -485,8 +486,8 @@ class ParametrizationPlotter:
         else:
             # Constant parameter
             tag = "_GEN" if gen else ""
-            const_up = self.workspace.obj(f"{var}{category.label}{tag}_const_{variation_name}_up")
-            const_down = self.workspace.obj(f"{var}{category.label}{tag}_const_{variation_name}_down")
+            const_up = self.workspace.obj(f"{var}{category.label}{tag}_const_{variation_name}_up_{self.analyzer.era}")
+            const_down = self.workspace.obj(f"{var}{category.label}{tag}_const_{variation_name}_down_{self.analyzer.era}")
             
             if const_up and const_down:
                 val_up = const_up.getVal()
@@ -594,11 +595,11 @@ class ModelPlotter:
         
         # Configure based on plot type
         if plot_type == "response":
-            data_name = f"response_data_{sample.label}{category.label}{variation_label}"
-            model_name = f"response_function_{sample.label}{category.label}{variation_label}"
+            data_name = f"response_data_{sample.label}{category.label}{variation_label}_{self.analyzer.era}"
+            model_name = f"response_function_{sample.label}{category.label}{variation_label}_{self.analyzer.era}"
             obs_name = "mass" if use_reco_mass else "reduced_mass"
             obs_title = "Mass" if use_reco_mass else "Reduced mass"
-            obs_var = self.workspace.var(f"{obs_name}_{sample.label}")
+            obs_var = self.workspace.var(f"{obs_name}_{sample.label}_{self.analyzer.era}")
             output_subdir = "response"
             file_prefix = "response_"
             canvas_name = f"c{sample.label}{category.label}"
@@ -611,8 +612,9 @@ class ModelPlotter:
         else:  # signal model
             tag = "_GEN" if gen else ""
             model_tag = "_GEN" if gen else "_param"
-            data_name = f"data{tag}_{sample.label}{category.label}"
-            model_name = f"model{model_tag}_{sample.label}{category.label}"
+            data_name = f"data{tag}_{sample.label}{category.label}_{self.analyzer.era}"
+            model_name = f"model{model_tag}_{sample.label}{category.label}_{self.analyzer.era}"
+            # Observable variable (mass) does NOT include era suffix - it's shared
             obs_var = self.workspace.var(f"mass{tag}_{sample.label}")
             output_subdir = "model_test"
             file_prefix = "GEN_test_BW_" if gen else "signal_model_"
@@ -811,9 +813,10 @@ class ModelPlotter:
     def _plot_models_for_category(self, category: CategoryConfig, category_label: str):
         """Plot models for a single category"""
 
-        # Find all test models in workspace
+        # Find all test models in workspace (including era suffix)
         all_objects = [key.GetName() for idx, key in enumerate(self.workspace.allPdfs()) 
                       if f"model_test_M" in key.GetName() and category.label in key.GetName()
+                      and f"_{self.analyzer.era}" in key.GetName()
                       and ("up" not in key.GetName()) and ("down" not in key.GetName())
                       and idx % 3 == 0]
         

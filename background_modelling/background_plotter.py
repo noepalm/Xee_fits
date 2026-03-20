@@ -142,6 +142,10 @@ class BackgroundPlotter:
         else:
             # Normal mode
             frame.SetMinimum(20)
+        
+        # if region0, set minimum to 1e-1
+        if fit_region.name == "region2":
+            frame.SetMinimum(1)
 
         frame.SetMaximum(frame.GetMaximum() * 2)      
         
@@ -214,7 +218,7 @@ class BackgroundPlotter:
 
         if not self.config.no_res:
             for idx, res_bkg in enumerate(self.fitter.resonant_backgrounds.keys()):
-                component_name = f"{res_bkg}_resonant_bkg{category_label}"
+                component_name = f"{res_bkg}_resonant_bkg{category_label}_{self.config.era}"
                 self.fitter.combined_model.plotOn(frame, 
                                                 ROOT.RooFit.Components(component_name),
                                                 ROOT.RooFit.LineColor(colors[idx % len(colors)]), 
@@ -223,7 +227,7 @@ class BackgroundPlotter:
                                                 ROOT.RooFit.NormRange(fit_region.name))
 
         # if "jpsi" in self.fitter.resonant_backgrounds:
-        #     jpsi_component_name = f"jpsi_resonant_bkg{category_label}"
+        #     jpsi_component_name = f"jpsi_resonant_bkg{category_label}_{self.config.era}"
         #     self.fitter.combined_model.plotOn(frame, 
         #                                     ROOT.RooFit.Components(jpsi_component_name),
         #                                     ROOT.RooFit.LineColor(ROOT.kRed), 
@@ -552,7 +556,7 @@ class BackgroundPlotter:
         for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
             print(f"DEBUG: resonant model = {model.GetName()}", flush=True)
             self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                        ROOT.RooFit.Components(model.GetName().split("_cat_")[0]),
+                        ROOT.RooFit.Components(model.GetName()),
                         ROOT.RooFit.LineColor(colors[idx]),
                         ROOT.RooFit.Name(model_name))
                         # ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))

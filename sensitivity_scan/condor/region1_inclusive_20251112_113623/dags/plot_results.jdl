@@ -1,0 +1,6 @@
+executable = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/scripts/condor_plot.sh
+output = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/plot_results.out
+error = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/plot_results.err
+log = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/plot_results.log
++JobFlavour = "espresso"
+queue 1

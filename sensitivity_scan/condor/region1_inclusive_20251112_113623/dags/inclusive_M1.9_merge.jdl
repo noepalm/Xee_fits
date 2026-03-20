@@ -1,0 +1,7 @@
+executable = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/scripts/condor_merge.sh
+arguments = 1.9 inclusive /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards/cards_region1_data_condor/ee/1.9/Xee_ee_4_2023.root region1  /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards/cards_region1_data_condor/ee/1.9 "0.001 0.005 0.01" /eos/home-n/npalmeri/www/DiElectron/sensitivity/fitDiagnostics_grid_condortest_data_condor/mu0
+output = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/merge_inclusive_M1.9.out
+error = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/merge_inclusive_M1.9.err
+log = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/merge_inclusive_M1.9_merge.log
++JobFlavour = "espresso"
+queue 1

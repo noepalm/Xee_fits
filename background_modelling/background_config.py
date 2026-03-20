@@ -143,7 +143,9 @@ class BackgroundModelConfig:
                 # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_minBias_resonant_nanov15/zsnap/era2023/",
                 # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_resonant_corrected_scaleOnly_elenaSyst/zsnap/era2023/",
                 # background_resonant_data = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_withScaleSyst_IDSF_noeta/zsnap/era2023/",
-                background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/",
+                # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_minBias_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/",
+                # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_minBias_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/",
+                background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_minBias_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/",
                 description="Low mass background region",
             ),
             "region1": FitRegion(
@@ -159,7 +161,9 @@ class BackgroundModelConfig:
                 background_fractions=[0.7],
                 # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Jpsi_reweight/zsnap/era2023/',
                 # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Jpsi_corrected_scaleOnly_elenaSyst/zsnap/era2023/',
-                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/',
                 description="Main analysis region containing J/psi and psi(2S)",
             ),
             "region2": FitRegion(
@@ -174,7 +178,9 @@ class BackgroundModelConfig:
                 background_fractions=[],
                 # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/fw_output_Upsilon_reweight/zsnap/era2023/',
                 # background_resonant_data = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Upsilon_corrected_scaleOnly_elenaSyst/zsnap/era2023/',
-                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF/zsnap/era{self.era}/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/',
                 description="High mass background region"
             ),
             "full": FitRegion(
@@ -292,11 +298,8 @@ class BackgroundModelConfig:
             "inclusive": {
                 "region0" : [1.06946, 0.00463, -0.14197, -0.00807, 0.02420, -0.01174],
                 "region1" : [-0.8, -0.115, 0.25, 0.02, -0.076, 0.1],
-                "region2" : [-1.3, 0.5, -0.1, -0.01, -0.01, 0.05],
-                # "region2" : [1.5, 2, 1, 0.1, 0.1, 0], # simplified init for testing
-                # "region0" : [1.06946, 0.00463, -0.14197, -0.00807,],
-                # "region1" : [-0.8, -0.115, 0.25, 0.02,],
-                # "region2" : [-1.3, 0.5, -0.1, -0.01,],
+                "region2" : [-1.3, 0.5, -0.1, -0.001, -0.01, 0.05], #SWITCH TO -1.3, 0.5, -0.01, -0.001, -0.01, 0.05 FOR 2023BPIX
+                # "region2" : [-1.4, 0.5, -0.05, -0.02, -0.02, 0.03], #for 2023 chebyshev r2
             },
             # Add category-specific overrides here as needed
         }
@@ -605,7 +608,8 @@ class BackgroundModelConfig:
                 # "nupsilon1s": {"init_param": 0.2, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
                 # "nupsilon1s": {"init_param": 0.01, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15 ### FOR DATA
                 # "nupsilon1s": {"init_param": 0.001, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
-                "nupsilon1s": {"init_param": 0.005, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
+                # UPSILON: 0.005 worked for all regions all suberas except 2023BPix region 2 (0.001) and 2023 region 2 region (0.0005)
+                "nupsilon1s": {"init_param": 0.001, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
                 "ndy": {"init_param": 0.3, "min_param": 1e-4, "max_param": 1e4},     # Non-resonant background
             },
             "fractions": {
@@ -734,10 +738,11 @@ class BackgroundModelConfig:
             print(f"DEBUG: Creating tagged output directory {category_dir}", flush=True)
             category_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create dataset directory with era and folder_tag if needed
-        dataset_dir = Path("datasets") / self.era
+        # Create dataset directory - use folder_tag if provided (already includes era), else add era
         if self.folder_tag:
-            dataset_dir = dataset_dir / self.folder_tag
+            dataset_dir = Path("datasets") / self.folder_tag
+        else:
+            dataset_dir = Path("datasets") / self.era
         dataset_dir.mkdir(parents=True, exist_ok=True)
         print(f"DEBUG: Ensuring dataset directory exists: {dataset_dir}", flush=True)
     

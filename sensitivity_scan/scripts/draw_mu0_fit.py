@@ -11,6 +11,7 @@ parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Ou
 parser.add_argument('-m', '--mass', type=float, default=3.0, help='Mass value to plot')
 parser.add_argument('-c', '--cat_id', type=int, default=4, help='Category ID to plot')
 parser.add_argument('-r', '--region', type=str, default='region1', choices=["region0", "region1", "region2"],)
+parser.add_argument('--era', type=str, default='2023', choices=["2022", "2022EE", "2023", "2023BPix", "allYears"], help='Data-taking era')
 # parser.add_argument("--no_res", type=bool, default=False, help='Exclude resonant backgrounds from the plot')
 parser.add_argument('--binned', type=bool, default=False, help='Use binned dataset for plotting')
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
@@ -18,6 +19,7 @@ parser.add_argument('--tag', type=str, default='', help='Tag to append to output
 args = parser.parse_args()
 cat_id = args.cat_id
 tag_label = f"_{args.tag}" if args.tag else ""
+era = args.era
 
 # print all arguments
 print("Arguments:")
@@ -31,12 +33,18 @@ m_min = m.getMin()
 m_max = m.getMax()
 print(f"Mass range: {m_min} - {m_max}")
 
+lumi = 6.68
+
 # if running binned, need to retrieve INPUT dataset to get correct uncertainties
 if args.binned:
-    f2 = ROOT.TFile.Open("../common/Xee_ee.input.root", "READ")
+    f2 = ROOT.TFile.Open(f"../common/Xee_ee_{era}.input.root", "READ")
     dataset = f2.Get("w").data("data_obs")
+    # also retrieve luminosity
+    lumi = f2.Get("w").var(f"luminosity_{era}").getVal()
 else:
     dataset = f1.Get("w").data("data_obs")
+
+print(f"Running on luminosity: {lumi} fb^-1")
 
 # # DEBUG: iterate over dataset entries and print weight + weightError
 # for i in range(dataset.numEntries()):
@@ -61,9 +69,12 @@ f2 = ROOT.TFile.Open(args.fit_file, "READ")
 # Define region-specific configurations
 region_config = {
     "region0": {
-        "resonant_bkgs": ["phi", "omega", "eta"],
-        "bkg_labels": ["Non-resonant", "#phi", "#omega", "#eta"],
-        "all_labels": ["#phi", "#omega", "#eta", "Non-resonant", "Signal", "Total S+B"]
+        # "resonant_bkgs": ["phi", "omega", "eta"],
+        # "bkg_labels": ["Non-resonant", "#phi", "#omega", "#eta"],
+        # "all_labels": ["#phi", "#omega", "#eta", "Non-resonant", "Signal", "Total S+B"]
+        "resonant_bkgs": ["phi", "omega"],
+        "bkg_labels": ["Non-resonant", "#phi", "#omega"],
+        "all_labels": ["#phi", "#omega", "Non-resonant", "Signal", "Total S+B"]
     },
     "region1": {
         "resonant_bkgs": ["jpsi", "psi2s"],
@@ -89,8 +100,14 @@ all_bkgs = ["dy"] + resonant_bkgs + ["total_background"]
 bkg_components = ["dy"] + resonant_bkgs
 bkg_component_labels = region_config[args.region]["bkg_labels"]
 
-bkgs = {bkg_name : f2.Get(f"shapes_fit_b/Xee_ee_{cat_id}_2023/{bkg_name}") for bkg_name in all_bkgs}
-bkg_norms = {bkg_name : f2.Get("norm_fit_b").selectByName(f"Xee_ee_{cat_id}_2023/{bkg_name}").first().getValV() for bkg_name in all_bkgs}
+# Build channel name based on era
+channel_name = f"Xee_ee_{cat_id}_{era}"
+
+for bkg_name in all_bkgs:
+    print(f'DEBUG: {f2.Get("norm_fit_b").selectByName(f"{channel_name}/{bkg_name}").first()}')
+
+bkgs = {bkg_name : f2.Get(f"shapes_fit_b/{channel_name}/{bkg_name}") for bkg_name in all_bkgs}
+bkg_norms = {bkg_name : f2.Get("norm_fit_b").selectByName(f"{channel_name}/{bkg_name}").first().getValV() for bkg_name in all_bkgs}
 
 
 # draw
@@ -199,7 +216,7 @@ latex_prelim.DrawLatex(0.18, 0.92, "Preliminary")
 
 # Luminosity and energy label (top right)
 latex.SetTextAlign(31)  # Right align
-latex.DrawLatex(0.91, 0.92, "8.2 fb^{-1} (13.6 TeV)")
+latex.DrawLatex(0.91, 0.92, f"{lumi:.2f}" + " fb^{-1} (13.6 TeV)")
 
 if args.region == "region1":
     frame.SetMinimum(8e2)
@@ -265,8 +282,8 @@ for ext in ['png', 'pdf']:
     c.SaveAs(os.path.join(args.output_folder, "b", f"mu0_fit_b_M{args.mass:.1f}{tag_label}.{ext}"))
 
 all_funcs = resonant_bkgs + ["dy", "Zd", "total"]
-all_distros = {name: f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/{name}") for name in all_funcs}
-all_norms = {name: f2.Get("norm_fit_s").selectByName(f"Xee_ee_{cat_id}_2023/{name}").first().getValV() for name in all_funcs}
+all_distros = {name: f2.Get(f"shapes_fit_s/{channel_name}/{name}") for name in all_funcs}
+all_norms = {name: f2.Get("norm_fit_s").selectByName(f"{channel_name}/{name}").first().getValV() for name in all_funcs}
 all_distro_labels = region_config[args.region]["all_labels"]
 
 # total_distro = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/total")
@@ -390,7 +407,7 @@ latex_prelim2.DrawLatex(0.20, 0.91, "Preliminary")
 
 # Luminosity and energy label (top right)
 latex2.SetTextAlign(31)  # Right align
-latex2.DrawLatex(0.90, 0.91, "8.2 fb^{-1} (13.6 TeV)")
+latex2.DrawLatex(0.90, 0.91, f"{lumi:.2f}" + " fb^{-1} (13.6 TeV)")
 
 c2.cd(2)
 # compute pulls

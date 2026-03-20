@@ -306,10 +306,11 @@ class WorkspaceManager:
 class DatasetLoader:
     """Handles loading and processing of ROOT datasets"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, use_reweighting: bool = True, use_syst: bool = False, variations: List[str] = None):
+    def __init__(self, workspace: ROOT.RooWorkspace, use_reweighting: bool = True, use_syst: bool = False, variations: List[str] = None,  era: str = "2023"):
         self.workspace = workspace
         self.use_reweighting = use_reweighting
         self.use_syst = use_syst
+        self.era = era
 
         if self.use_syst:
             # self.variations = ["electronSmearing", "electronScaleVariation"]
@@ -343,7 +344,7 @@ class DatasetLoader:
         """
         # Construct dataset name based on type
         prefix = "response_data" if dataset_type == "response" else "data"
-        data_name = f"{prefix}_{sample.label}{category.label}"
+        data_name = f"{prefix}_{sample.label}{category.label}_{self.era}"
         
         # Check if dataset already exists
         existing_data = self.workspace.data(data_name)
@@ -355,8 +356,8 @@ class DatasetLoader:
         print(f"DEBUG: opened file {sample.file} for sample {sample.label}")
         t = f.Get("Events")
         
-        weight_var = ROOT.RooRealVar(f"weightVar_{sample.label}{category.label}", 
-                                   f"weightVar_{sample.label}{category.label}", 1.0)
+        weight_var = ROOT.RooRealVar(f"weightVar_{sample.label}{category.label}_{self.era}", 
+                                   f"weightVar_{sample.label}{category.label}_{self.era}", 1.0)
         self.workspace.Import(weight_var, ROOT.RooCmdArg())
         
         obs_var = self.workspace.var(observable_name)
@@ -369,7 +370,7 @@ class DatasetLoader:
         if self.use_syst:
             for variation in self.variations:
                 for direction in self.directions:
-                    syst_data_name = f"{prefix}_{sample.label}{category.label}_{variation}_{direction}"
+                    syst_data_name = f"{prefix}_{sample.label}{category.label}_{variation}_{direction}_{self.era}"
                     dataset = ROOT.RooDataSet(syst_data_name, syst_data_name,
                                          ROOT.RooArgSet(obs_var), 
                                          ROOT.RooFit.WeightVar(weight_var.GetName()))
@@ -472,9 +473,9 @@ class DatasetLoader:
         entry_counts = {}
         for name, sample in samples.items():
             if dataset_type == "response":
-                dataset_name = f"response_data_{sample.label}{category.label}"
+                dataset_name = f"response_data_{sample.label}{category.label}_{self.era}"
             else:
-                dataset_name = f"data_{sample.label}{category.label}"
+                dataset_name = f"data_{sample.label}{category.label}_{self.era}"
             
             count = self.get_dataset_entry_count(dataset_name)
             entry_counts[f"{name}{category.label}"] = count
@@ -484,9 +485,10 @@ class DatasetLoader:
 class ParameterManager:
     """Manages fit parameters and their ranges"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, nuisanced_vars: Dict[str, List[str]] = None):
+    def __init__(self, workspace: ROOT.RooWorkspace, nuisanced_vars: Dict[str, List[str]] = None, era: str = "2023"):
         self.workspace = workspace
         self.nuisanced_vars = nuisanced_vars if nuisanced_vars else {}
+        self.era = era
         
         # Define parameter configurations
         self.response_vars = ["response_mean", "response_sigma", "response_alphaL", 
@@ -507,7 +509,8 @@ class ParameterManager:
         """
         
         for var in var_list:
-            var_name = f"{var}{tag}_{sample.label}{category.label}{variation_tag}"
+            # All parameters have era suffix (nuisance parameters are shared separately)
+            var_name = f"{var}{tag}_{sample.label}{category.label}{variation_tag}_{self.era}"
             range_key = f"{var}_range"
             
             if hasattr(sample, range_key):
@@ -535,12 +538,23 @@ class ParameterManager:
     def create_parametric_variable(self, var_name: str, formula: str, 
                                  dependencies: List[str]) -> ROOT.RooFormulaVar:
         """Create parametric variable using formula"""
-        dep_objects = [self.workspace.obj(dep) if not dep.replace(".", "").isdigit() else float(dep) for dep in dependencies]
-        for dep in dep_objects:
-            if dep is None:
-                raise ValueError(f"Dependency '{dep}' for parametric variable '{var_name}' not found in workspace.")
+        dep_objects = []
+        for dep in dependencies:
+            # Check if dependency is a numeric constant
+            if dep.replace(".", "").replace("-", "").isdigit():
+                # Convert numeric string to RooConstVar
+                const_val = float(dep)
+                const_var = ROOT.RooFit.RooConst(const_val)
+                dep_objects.append(const_var)
+            else:
+                # Get from workspace
+                dep_obj = self.workspace.obj(dep)
+                if dep_obj is None:
+                    raise ValueError(f"Dependency '{dep}' for parametric variable '{var_name}' not found in workspace.")
+                dep_objects.append(dep_obj)
+        
         param_var = ROOT.RooFormulaVar(var_name, var_name, formula, 
-                                     ROOT.RooArgList(dep_objects))
+                                     ROOT.RooArgList(*dep_objects))
         self.workspace.Import(param_var, ROOT.RooCmdArg())
         return param_var
     
@@ -557,9 +571,10 @@ class ParameterManager:
 class ModelBuilder:
     """Builds and manages physics models"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, param_manager: ParameterManager):
+    def __init__(self, workspace: ROOT.RooWorkspace, param_manager: ParameterManager, era: str = "2023"):
         self.workspace = workspace
         self.param_manager = param_manager
+        self.era = era
     
     def build_response_function(self, sample: SampleConfig, category: CategoryConfig, 
                               observable_name: str, variation_tag: str = "") -> ROOT.RooAbsPdf:
@@ -572,10 +587,12 @@ class ModelBuilder:
             variation_tag: Tag for systematic variation (e.g., "_electronSmearing_up")
         """
         
-        model_name = f"response_function_{sample.label}{category.label}{variation_tag}"
+        model_name = f"response_function_{sample.label}{category.label}{variation_tag}_{self.era}"
         
-        # Build variable list for Crystal Ball
-        var_names = [observable_name] + [f"{var}_{sample.label}{category.label}{variation_tag}" for var in self.param_manager.response_vars]
+        # Build variable list for Crystal Ball (all parameters have era suffix)
+        var_names = [observable_name]
+        for var in self.param_manager.response_vars:
+            var_names.append(f"{var}_{sample.label}{category.label}{variation_tag}_{self.era}")
         var_string = ",".join(var_names)
         
         self.workspace.factory(f"CrystalBall::{model_name}({var_string})")
@@ -599,13 +616,16 @@ class ModelBuilder:
         
         mass_string = f"mass," if use_shared_mass else f"mass_{sample.label},"
 
-        dcb_vars = [f"{dcb_var}_{tag}_{sample.label}{category.label}" for dcb_var in self.param_manager.dcb_vars]
+        # Build dcb variable names (all parameters have era suffix)
+        dcb_vars = []
+        for dcb_var in self.param_manager.dcb_vars:
+            dcb_vars.append(f"{dcb_var}_{tag}_{sample.label}{category.label}_{self.era}")
         dcb_var_string = mass_string + ",".join(dcb_vars)
-        dcb_name = f"crystalBall_{tag}_{sample.label}{category.label}"
+        dcb_name = f"crystalBall_{tag}_{sample.label}{category.label}_{self.era}"
         self.workspace.factory(f"CrystalBall::{dcb_name}({dcb_var_string})")
             
         if use_reco_mass:
-            model = self.workspace.pdf(dcb_name).Clone(f"model_{tag}_{sample.label}{category.label}")
+            model = self.workspace.pdf(dcb_name).Clone(f"model_{tag}_{sample.label}{category.label}_{self.era}")
             self.workspace.Import(model, ROOT.RooCmdArg())
         else:
             model = self._build_convolution_model(sample, category, f"{tag}", dcb_name)
@@ -617,7 +637,7 @@ class ModelBuilder:
         """Build convolution of Crystal Ball and Breit-Wigner"""
         
         # Build Breit-Wigner
-        bw_vars = [self.workspace.obj(f"{var}_{tag}_{sample.label}{category.label}") 
+        bw_vars = [self.workspace.obj(f"{var}_{tag}_{sample.label}{category.label}_{self.era}") 
                   for var in self.param_manager.bw_vars]
         mass_var = self.workspace.var(f"mass_{sample.label}")
         bw_vars.insert(0, mass_var)
@@ -627,7 +647,7 @@ class ModelBuilder:
                         "((@0**2 - @1**2)*(@0**2 - @1**2) + @1**2 * @2**2) / "
                         "(sqrt(@1**2 + @1*sqrt(@2**2 + @1**2)))")
         
-        relBW_name = f"relBW_{tag}_{sample.label}{category.label}"
+        relBW_name = f"relBW_{tag}_{sample.label}{category.label}_{self.era}"
         relBW = ROOT.RooGenericPdf(relBW_name, relBW_formula, bw_vars)
         self.workspace.Import(relBW)
         
@@ -637,7 +657,7 @@ class ModelBuilder:
         mass_var.setMax("cache", 20)
         
         # Build convolution
-        conv_name = f"model_{tag}_{sample.label}{category.label}"
+        conv_name = f"model_{tag}_{sample.label}{category.label}_{self.era}"
         self.workspace.factory(f"FFTConvPdf::{conv_name}(mass_{sample.label}, {dcb_name}, {relBW_name})")
         
         return self.workspace.pdf(conv_name)
@@ -646,9 +666,10 @@ class ModelBuilder:
 class FitManager:
     """Manages fitting operations"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, logger: Optional['FitLogger'] = None):
+    def __init__(self, workspace: ROOT.RooWorkspace, logger: Optional['FitLogger'] = None, era : str = "2023"):
         self.workspace = workspace
         self.logger = logger
+        self.era = era
     
     def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet) -> Optional[float]:
         """Compute Chi2/NDF for model-dataset comparison"""
@@ -746,6 +767,8 @@ class FitManager:
         # Filter out JPsi and Upsilon samples for parameter fitting
         fit_samples = {name: sample for name, sample in samples.items() 
                       if "JPsi" not in name and "Upsilon" not in name}
+                      # FIXME: excluding M10 bc of bad fit
+        print(f"DEBUG: fit_samples = {fit_samples.keys()}", flush = True)
                 
         # Create graphs for each variable (nominal + variations)
         graphs = {var: ROOT.TGraphErrors() for var in vars_to_fit}
@@ -770,7 +793,7 @@ class FitManager:
             
             print(f"DEBUG: vars to fit = {vars_to_fit}", flush = True)
             for var in vars_to_fit:
-                input_var = f"{var}_GEN_fit_{name}{category.label}" if gen else f"response_{var}_{name}{category.label}"
+                input_var = f"{var}_GEN_fit_{name}{category.label}_{self.era}" if gen else f"response_{var}_{name}{category.label}_{self.era}"
                 workspace_var = self.workspace.var(input_var)
                 if not workspace_var:
                     print(f"WARNING: Variable {input_var} not found in workspace, skipping {name}")
@@ -787,8 +810,10 @@ class FitManager:
                 if nuisanced_vars and var in nuisanced_vars:
                     print(f"DEBUG: processing nuisanced variable {var} for sample {name}", flush = True)
                     for variation in nuisanced_vars[var]:
-                        var_up = f"{var}_GEN_fit_{name}{category.label}_{variation}_up" if gen else f"response_{var}_{name}{category.label}_{variation}_up"
-                        var_down = f"{var}_GEN_fit_{name}{category.label}_{variation}_down" if gen else f"response_{var}_{name}{category.label}_{variation}_down"
+                        # All parameters have era suffix (nuisance parameters are shared separately)
+                        var_up = f"{var}_GEN_fit_{name}{category.label}_{variation}_up_{self.era}" if gen else f"response_{var}_{name}{category.label}_{variation}_up_{self.era}"
+                        var_down = f"{var}_GEN_fit_{name}{category.label}_{variation}_down_{self.era}" if gen else f"response_{var}_{name}{category.label}_{variation}_down_{self.era}"
+                        
                         workspace_var_up = self.workspace.var(var_up)
                         workspace_var_down = self.workspace.var(var_down)
                         
@@ -828,13 +853,13 @@ class FitManager:
                 
                 # Save nominal fit parameters to workspace
                 for i in range(2):
-                    param_name = f"{var}{category.label}_fit_par{i}"
+                    param_name = f"{var}{category.label}_fit_par{i}_{self.era}"
                     param_obj = ROOT.RooRealVar(param_name, param_name, fit_func.GetParameter(i))
                     param_obj.setError(fit_func.GetParError(i))
                     param_obj.setConstant()
                     self.workspace.Import(param_obj, True)
 
-                    param_err_name = f"{var}{category.label}_fit_par{i}_err"
+                    param_err_name = f"{var}{category.label}_fit_par{i}_err_{self.era}"
                     param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, fit_func.GetParError(i))
                     param_err_obj.setConstant()
                     self.workspace.Import(param_err_obj, True)
@@ -871,13 +896,13 @@ class FitManager:
                                 
                                 # Save variation fit parameters to workspace
                                 for i in range(2):
-                                    param_name = f"{var}{category.label}_fit_par{i}_{variation}_{direction}"
+                                    param_name = f"{var}{category.label}_fit_par{i}_{variation}_{direction}_{self.era}"
                                     param_obj = ROOT.RooRealVar(param_name, param_name, fit_func_var.GetParameter(i))
                                     param_obj.setError(fit_func_var.GetParError(i))
                                     param_obj.setConstant()
                                     self.workspace.Import(param_obj, True)
 
-                                    param_err_name = f"{var}{category.label}_fit_par{i}_err_{variation}_{direction}"
+                                    param_err_name = f"{var}{category.label}_fit_par{i}_err_{variation}_{direction}_{self.era}"
                                     param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, fit_func_var.GetParError(i))
                                     param_err_obj.setConstant()
                                     self.workspace.Import(param_err_obj, True)
@@ -898,7 +923,7 @@ class FitManager:
                                     # Average of absolute differences
                                     avg_diff = (abs(nominal_val - up_val) + abs(nominal_val - down_val)) / 2.0
                                     
-                                    diff_name = f"{var}{category.label}_fit_par{i}_{variation}_avgdiff"
+                                    diff_name = f"{var}{category.label}_fit_par{i}_{variation}_avgdiff_{self.era}"
                                     diff_obj = ROOT.RooRealVar(diff_name, diff_name, avg_diff)
                                     diff_obj.setConstant()
                                     self.workspace.Import(diff_obj, True)
@@ -916,7 +941,7 @@ class FitManager:
             mean = np.average(y_values, weights=weights)
             err = np.sqrt(1.0 / np.sum(weights))
             
-            const_name = f"{var}{category.label}{tag}_const"
+            const_name = f"{var}{category.label}{tag}_const_{self.era}"
             const_obj = ROOT.RooRealVar(const_name, const_name, mean)
             const_obj.setError(err)
             const_obj.setConstant()
@@ -937,13 +962,14 @@ class SignalModelAnalyzer:
     
     def __init__(self, samples: Dict[str, SampleConfig], categories: Dict[str, CategoryConfig], 
                  wsfile: str, parametrized_vars: List[str], nuisanced_vars: Dict[str, List[str]], log_file: str = "signal_model_analysis.log",
-                 eos_folder: Optional[str] = None, use_reweighting: bool = True, use_syst: bool = False):
+                 eos_folder: Optional[str] = None, use_reweighting: bool = True, use_syst: bool = False, era: str = "2023"):
         self.samples = samples
         self.categories = categories
         self.parametrized_vars = parametrized_vars
         self.nuisanced_vars = nuisanced_vars
         self.use_reweighting = use_reweighting
         self.use_syst = use_syst
+        self.era = era
         
         # Initialize logger
         self.logger = FitLogger(log_file, eos_folder)
@@ -952,10 +978,10 @@ class SignalModelAnalyzer:
         # Initialize managers
         self.workspace_manager = WorkspaceManager(wsfile)
         variations = set(sum(nuisanced_vars.values(), [])) #concatenate all variation branches; remove duplicates
-        self.dataset_loader = DatasetLoader(self.workspace_manager.workspace, use_reweighting, use_syst, variations)
-        self.param_manager = ParameterManager(self.workspace_manager.workspace, nuisanced_vars)
-        self.model_builder = ModelBuilder(self.workspace_manager.workspace, self.param_manager)
-        self.fit_manager = FitManager(self.workspace_manager.workspace, self.logger)
+        self.dataset_loader = DatasetLoader(self.workspace_manager.workspace, use_reweighting, use_syst, variations, era)
+        self.param_manager = ParameterManager(self.workspace_manager.workspace, nuisanced_vars, era)
+        self.model_builder = ModelBuilder(self.workspace_manager.workspace, self.param_manager, era)
+        self.fit_manager = FitManager(self.workspace_manager.workspace, self.logger, era)
         
         # Analysis state
         self._response_functions_built = False
@@ -982,7 +1008,7 @@ class SignalModelAnalyzer:
         for category_label, category in self.categories.items():
             self.logger.log_info(f"Processing category: {category_label}")
             
-            obs_name = f"{observables[0]}_{sample.label}"
+            obs_name = f"{observables[0]}_{sample.label}_{self.era}"
             
             # Create observable variable first (needed to load dataset)
             self.param_manager.create_variables(sample, category, observables)
@@ -1001,7 +1027,7 @@ class SignalModelAnalyzer:
                                                   variation_tag=variation_tag)
                 
                 # Load dataset
-                dataset_name = f"response_data_{sample.label}{category.label}{variation_tag}"
+                dataset_name = f"response_data_{sample.label}{category.label}{variation_tag}_{self.era}"
                 dataset = self.workspace_manager.workspace.data(dataset_name)
                 
                 if not dataset:
@@ -1180,7 +1206,8 @@ class SignalModelAnalyzer:
                 
         # Create variables for nominal and all variations
         for var in all_vars:
-            var_name = f"{var}{tag}_{label}{category.label}"
+            # All parameters have era suffix (nuisance parameters are shared separately)
+            var_name = f"{var}{tag}_{label}{category.label}_{self.era}"
             variations = self.param_manager.nuisanced_vars.get(var, [])
                 
             if var in self.parametrized_vars:
@@ -1189,12 +1216,15 @@ class SignalModelAnalyzer:
                         # FIXME: this only makes sense for ONE variation.
 
                         # NOTE: doesn't work for non-reco mass
-                        # create nuisance parameter
-                        nuisance = f"{var}{category.label}_nuisance_{variation}"
+                        # create nuisance parameter (no era suffix if electron scale mean - fully correlated)
+                        if var == "mean" and "electronScaleVariation" in variation:
+                            nuisance = f"{var}{category.label}_nuisance_{variation}"
+                        else:
+                            nuisance = f"{var}{category.label}_nuisance_{variation}_{self.era}"
                         self.param_manager.create_variable(nuisance, [0, -5, 5])
 
-                        par0_diff = f"{var}{category.label}_fit_par0_{variation}_avgdiff"
-                        par1_diff = f"{var}{category.label}_fit_par1_{variation}_avgdiff"
+                        par0_diff = f"{var}{category.label}_fit_par0_{variation}_avgdiff_{self.era}"
+                        par1_diff = f"{var}{category.label}_fit_par1_{variation}_avgdiff_{self.era}"
 
                         formula = "@0 + @1 * @2 + @5 * (@3 + @4 * @2)"
                         # formula = "@0 + @1 * @2 + @5 * sqrt((@3)**2 + (@4 * @2)**2)"
@@ -1203,8 +1233,8 @@ class SignalModelAnalyzer:
                         # @5 is nuisance parameter
                         # @2 is mass
 
-                        dependencies = [f"{var}{category.label}_fit_par0", 
-                                        f"{var}{category.label}_fit_par1", 
+                        dependencies = [f"{var}{category.label}_fit_par0_{self.era}", 
+                                        f"{var}{category.label}_fit_par1_{self.era}", 
                                         str(mass),
                                         par0_diff,
                                         par1_diff,
@@ -1214,12 +1244,17 @@ class SignalModelAnalyzer:
                 else:
                     # Create parametric variable
                     formula = "@0 + @1 * @2"  # @2 is mass OR mean, depending on variable
-                    mass_var = str(mass) if "mean" in var else f"mean{tag}_{label}{category.label}" #use the distribution mean value 
-                    # mass_var = str(mass)
+                    # Determine mass_var name (for variables that depend on mean, like sigma)
+                    if "mean" in var:
+                        mass_var = str(mass)
+                    else:
+                        # Mean parameter always has era suffix
+                        mass_var = f"mean{tag}_{label}{category.label}_{self.era}"
+                    
                     if var == "sigma" and not use_reco_mass:
                         formula = "(@0 + @1 * @2) * @2"
-                    dependencies = [f"{var}{category.label}_fit_par0", 
-                                f"{var}{category.label}_fit_par1", 
+                    dependencies = [f"{var}{category.label}_fit_par0_{self.era}", 
+                                f"{var}{category.label}_fit_par1_{self.era}", 
                                 mass_var]
                 
                 self.param_manager.create_parametric_variable(var_name, formula, dependencies)
@@ -1227,8 +1262,8 @@ class SignalModelAnalyzer:
             elif var in const_vars:
                 # Create and set constant variable
                 self.param_manager.create_variable(var_name, [0, -100, 100])
-                const_val = self.workspace_manager.workspace.obj(f"{var}{category.label}_const").getVal()
-                const_err = self.workspace_manager.workspace.obj(f"{var}{category.label}_const").getError()
+                const_val = self.workspace_manager.workspace.obj(f"{var}{category.label}_const_{self.era}").getVal()
+                const_err = self.workspace_manager.workspace.obj(f"{var}{category.label}_const_{self.era}").getError()
                 self.param_manager.set_constant_parameter(var_name, const_val, const_err)
             
             elif var in self.param_manager.bw_vars:

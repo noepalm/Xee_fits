@@ -39,6 +39,9 @@ class BackgroundAnalysis:
         # Reweighting setting (will be set from command line args)
         self.use_reweighting: bool = True
         
+        # Initialize signal_folder_tag (will be set from command line args)
+        self.signal_folder_tag: str = ""
+        
         print("Background analysis initialized")
         
     def create_output_workspace(self, tag: str = "", fit_region_name: str = "") -> bool:
@@ -67,7 +70,14 @@ class BackgroundAnalysis:
         # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withSyst_scaleOnly_elenaSyst.root'
         # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF.root'
         era = getattr(self, 'era', '2023')  # Default to 2023 if not set
-        signal_ws_file = f'../signal_modelling/workspaces/{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
+        signal_folder_tag = getattr(self, 'signal_folder_tag', '')
+        # signal_ws_file = f'../signal_modelling/workspaces/{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
+        if signal_folder_tag:
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
+            signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+        else:
+            print("WARNING: No signal folder tag specified, using default path for signal workspace.")
+            signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
         
         if not os.path.exists(signal_ws_file):
             print(f"❌ Signal workspace not found: {signal_ws_file}")
@@ -113,7 +123,7 @@ class BackgroundAnalysis:
                 print(f"⚠️  Warning: Fit region '{fit_region_name}' not found, using full mass range from signal workspace")
         else:
             print(f"⚠️  Warning: No fit region specified, using full mass range from signal workspace")
-        m.setBins(100)
+        m.setBins(300)
         self.output_workspace.Import(m, ROOT.RooCmdArg())
         
         signal_file.Close()
@@ -130,10 +140,29 @@ class BackgroundAnalysis:
         if not input_workspaces:
             print("❌ No input workspaces provided for envelope creation")
             return False
-            
+        
+        # Get era and category information
+        era = getattr(self, 'era', '2023')
+        categories = self.config.get_available_categories()
+        
+        # For now, envelope only works with single category
+        if len(categories) != 1:
+            print(f"❌ Envelope currently only supports single category (found {len(categories)})")
+            return False
+        
+        category_name = list(categories.keys())[0]
+        category_config = categories[category_name]
+        category_label = category_config.label
+        
         print(f"Creating workspace with envelope of background functions")
+        print(f"  Era: {era}")
+        print(f"  Category: {category_name} (label: {category_label})")
 
         bkg_funcs = []
+
+        # Construct expected function name based on category and era
+        func_name = f"dy{category_label}_{era}"
+        print(f"  Looking for functions named: {func_name}")
 
         # retrieve workspace from first input file
         with ROOT.TFile.Open(input_workspaces[0]) as f:
@@ -142,31 +171,45 @@ class BackgroundAnalysis:
                 print(f"❌ Workspace 'w' not found in {input_workspaces[0]}")
                 return False
             self.output_workspace = base_ws
-
-        # retrieve background functions from other input files
+    
+        funcs_to_remove = []
+        # retrieve background functions from all input files (including first)
         for idx, file in enumerate(input_workspaces):
             with ROOT.TFile.Open(file) as f:
                 ws = f.Get("w")
                 if not ws:
                     print(f"❌ Workspace 'w' not found in {file}")
                     return False
-                dy = ws.pdf("dy")
+                
+                # Try to get the era-specific function
+                dy = ws.pdf(func_name)
                 if not dy:
-                    print(f"❌ Non-resonant background function 'dy' not found in {file}")
+                    print(f"❌ Non-resonant background function '{func_name}' not found in {file}")
                     return False
                 else:
-                    # rename function to avoid name clashes
-                    dy.SetName(f"dy_component_{idx}")
+                    funcs_to_remove.append(dy)  # Mark this function for removal from workspace later
+                    # Rename function to avoid name clashes
+                    dy.SetName(f"dy{category_label}_component_{idx}_{era}")
                     bkg_funcs.append(dy)
+                    print(f"  ✅ Retrieved and renamed to: {dy.GetName()}")
 
-        # Create envelope function
-        pdf_index = ROOT.RooCategory("pdf_index", "pdf_index")
-        envelope_f = ROOT.RooMultiPdf("dy", "dy", pdf_index, ROOT.RooArgList(*bkg_funcs))
+        # Create envelope function with era-specific naming (including index)
+        pdf_index_name = f"pdf_index_{era}"
+        pdf_index = ROOT.RooCategory(pdf_index_name, pdf_index_name)
+        envelope_f = ROOT.RooMultiPdf(f"dy{category_label}_{era}", f"dy{category_label}_{era}", 
+                                      pdf_index, ROOT.RooArgList(*bkg_funcs))
+        print(f"  ✅ Created pdf_index: {pdf_index_name}")
 
-        # Remove all dy functions from base workspace
-        self.output_workspace.RecursiveRemove(self.output_workspace.pdf("dy"))
+        # Remove old dy function(s) from workspace if they exist 
+        old_func = self.output_workspace.pdf(func_name)
+        if old_func:
+            self.output_workspace.RecursiveRemove(old_func)
+            print(f"  ✅ Removed old function: {func_name}")
+
         # Import envelope function
-        self.output_workspace.Import(envelope_f, ROOT.RooCmdArg())
+        # self.output_workspace.Import(envelope_f, ROOT.RooCmdArg())
+        self.output_workspace.Import(envelope_f, ROOT.RooFit.RenameAllVariablesExcept("envelope", "mass"))
+        print(f"  ✅ Created envelope: {envelope_f.GetName()} with {len(bkg_funcs)} components")
 
         # Set output workspace file path
         self.output_workspace_file = str(self.config.get_output_workspace_path())
@@ -239,6 +282,9 @@ class BackgroundAnalysis:
 
         # Weight multiplier for dataset creation
         self.weight_multiplier = args.weight_multiplier
+
+        # Store signal folder tag for reading signal workspaces
+        self.signal_folder_tag = args.signal_folder_tag
 
         # Apply folder tag first (creates subfolder structure)
         # Include era in folder tag for organization
@@ -377,7 +423,10 @@ class BackgroundAnalysis:
                 fit_region=self.config.chosen_fit_region,
                 tag=tag,
                 cached_datasets=cached_datasets,  # Pass cached datasets if provided
-                no_res=self.config.no_res  # Pass no_res flag
+                no_res=self.config.no_res,  # Pass no_res flag
+                era=self.era,
+                folder_tag=self.config.folder_tag,
+                signal_folder_tag=self.signal_folder_tag
             )
             main_dataset_path = main_creator.create_full_dataset()
             
@@ -401,7 +450,10 @@ class BackgroundAnalysis:
                     use_binned=self.config.use_binned,
                     fit_region=self.config.chosen_fit_region,
                     tag=tag,
-                    cached_datasets=cached_datasets  # Pass cached datasets (includes resonant)
+                    cached_datasets=cached_datasets,  # Pass cached datasets (includes resonant)
+                    era=self.era,
+                    folder_tag=self.config.folder_tag,
+                    signal_folder_tag=self.signal_folder_tag
                 )
                 jpsi_dataset_path = jpsi_creator.create_full_dataset()
                 print(f"J/psi dataset created: {jpsi_dataset_path}")
@@ -432,7 +484,8 @@ class BackgroundAnalysis:
         
         # Pass the centralized output workspace to the fitter
         self.fitter = BackgroundFitter(self.config, category=category, 
-                                     output_workspace=self.output_workspace)
+                                     output_workspace=self.output_workspace,
+                                     era=self.era)
         
         # Load workspace for the specified category
         if not self.fitter.load_workspace():
@@ -839,6 +892,7 @@ def create_argument_parser():
     # Output options
     parser.add_argument("--tag", default="", help="Tag for output files")
     parser.add_argument("--folder_tag", default="", help="Subfolder tag for organizing outputs")
+    parser.add_argument("--signal_folder_tag", default="", help="Subfolder tag for signal modeling input workspaces (can differ from background folder_tag)")
     parser.add_argument("--no_plots", action="store_true", default=False,
                        help="Skip plot creation")
     parser.add_argument("--plot_all_categories", action="store_true", default=False,
@@ -957,7 +1011,7 @@ def main():
                     if cat in categories:
                         # Create output workspace for single category if not already created
                         if not analysis.output_workspace:
-                            if not analysis.create_output_workspace(args.tag):
+                            if not analysis.create_output_workspace(args.tag, args.fit_region):
                                 print("❌ Failed to create output workspace")
                                 return 1
                         
@@ -974,11 +1028,9 @@ def main():
                 # Fallback to old behavior (no category specified)
                 # Create output workspace for single category if not already created
                 if not analysis.output_workspace:
-                    if not analysis.create_output_workspace(args.tag):
+                    if not analysis.create_output_workspace(args.tag, args.fit_region):
                         print("❌ Failed to create output workspace")
                         return 1
-                    print("❌ Failed to create output workspace")
-                    return 1
                 
                 success = analysis.run_complete_analysis(args.fit_region, args.tag)
                 

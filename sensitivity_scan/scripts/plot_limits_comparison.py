@@ -24,6 +24,7 @@ tag = f"_{args.tag}" if args.tag else ""
 fit_tags = args.fit_tags
 labels = args.labels
 regions = args.region if isinstance(args.region, list) else [args.region]
+base_folder = "/eos/home-n/npalmeri/www/DiElectron/sensitivity"
 
 # PROCESSING INPUT FILE TAGS
 if len(fit_tags) > 0 and len(fit_tags) != len(args.input_folders):
@@ -43,31 +44,43 @@ if len(labels) > 0 and len(labels) != len(args.input_folders):
     raise ValueError("If labels are provided, their number must match the number of input_folders")
 
 if len(labels) == 0:
-    labels = [os.path.basename(os.path.normpath(folder)) for folder in args.input_folders] 
+    labels = [os.path.basename(os.path.normpath(folder)) for folder in args.input_folders]
 
-# If multiple regions and NOT overlap mode, append region to labels
-if len(regions) > 1 and not args.overlap:
-    labels = [f"{label} ({region})" for label in labels for region in regions]
-    # Expand folders and fit_tags to match the number of combinations
-    input_folders = [folder for folder in args.input_folders for _ in regions]
-    fit_tags = [fit_tag for fit_tag in fit_tags for _ in regions]
-    regions_expanded = [region for _ in args.input_folders for region in regions]
-elif args.overlap:
-    # In overlap mode, use the combined region string
-    input_folders = args.input_folders
-    regions_expanded = ["_".join(regions)] * len(input_folders)
+labels = [label_map.get(label, label) for label in labels]
+
+# If multiple regions are requested, first try to use the combined file for all inputs.
+if len(regions) > 1:
+    combined_region = "_".join(regions)
+    combined_exists_for_all = True
+    for folder, fit_tag in zip(args.input_folders, fit_tags):
+        fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
+        combined_path = os.path.join(base_folder, folder, f"limits_results_{combined_region}{fit_tag_label}.pkl")
+        if not os.path.exists(combined_path):
+            combined_exists_for_all = False
+            break
+
+    use_combined = args.overlap or combined_exists_for_all
+
+    if use_combined:
+        input_folders = args.input_folders
+        regions_expanded = [combined_region] * len(input_folders)
+        if args.overlap and not combined_exists_for_all:
+            print("WARNING: --overlap requested but at least one combined file is missing.")
+            print("Falling back to per-region files.")
+            use_combined = False
+
+    if not use_combined:
+        # Fallback behavior: plot each region separately on the same canvas.
+        labels = [f"{label} ({region})" for label in labels for region in regions]
+        input_folders = [folder for folder in args.input_folders for _ in regions]
+        fit_tags = [fit_tag for fit_tag in fit_tags for _ in regions]
+        regions_expanded = [region for _ in args.input_folders for region in regions]
 else:
     input_folders = args.input_folders
     regions_expanded = regions * len(input_folders)
 
-for label in labels:
-    if label in label_map:
-        labels[labels.index(label)] = label_map[label]
-
 outfolder = args.output_folder
 os.makedirs(outfolder, exist_ok=True)
-
-base_folder = "/eos/home-n/npalmeri/www/DiElectron/sensitivity"
 
 fig, ax = plt.subplots(figsize=(15 if len(regions) > 1 else 10, 10))
 
@@ -85,7 +98,7 @@ for fit_tag, folder, label, region in zip(fit_tags, input_folders, labels, regio
 plt.yscale('log')
 plt.xlabel('M(X) [GeV]')
 plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]" if not args.mu else "$\mu$")
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data = np.any(["data" in folder for folder in input_folders]))
+hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data = np.any(["data" in folder for folder in input_folders]), lumi = "6.68")
 
 plt.legend()
 

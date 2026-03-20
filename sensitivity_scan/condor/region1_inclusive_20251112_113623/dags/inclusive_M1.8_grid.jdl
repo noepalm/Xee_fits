@@ -1,0 +1,11 @@
+executable = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/scripts/condor_worker.sh
+arguments = 1.8 inclusive /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards/cards_region1_data_condor/ee/1.8/Xee_ee_4_2023.root $(Point) "" region1 false  /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/cards/cards_region1_data_condor/ee/1.8
+output = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/grid_inclusive_M1.8_$(Point).out
+error = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/grid_inclusive_M1.8_$(Point).err
+log = /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/condor/region1_inclusive_20251112_113623/logs/grid_inclusive_M1.8.log
++JobFlavour = "longlunch"
+queue Point from (
+0.001
+0.005
+0.01
+)

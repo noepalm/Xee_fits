@@ -20,6 +20,8 @@ RUN_COMBINATION=false  # Default to individual categories
 USE_SB_SNAPSHOT=false
 USE_DATA=false
 CACHING=true
+ERA="2023"  # Default era
+RUN_YEAR_COMBINATION=false  # Default to single year
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -95,11 +97,25 @@ while [[ $# -gt 0 ]]; do
             echo "Disabling caching of grid points."
             shift # past argument
             ;;
+        --era)
+            ERA="$2"
+            if [[ "$ERA" != "2022" && "$ERA" != "2022EE" && "$ERA" != "2023" && "$ERA" != "2023BPix" && "$ERA" != "allYears" ]]; then
+                echo "Error: Era must be 2022, 2022EE, 2023, 2023BPix, or allYears"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--era 2022|2022EE|2023|2023BPix|allYears] [--no_reweight] [--plot_only] [--freeze_jpsi] [--combination]"
+                return 1
+            fi
+            if [[ "$ERA" == "allYears" ]]; then
+                RUN_YEAR_COMBINATION=true
+                echo "Running combination of all years."
+            fi
+            shift # past argument
+            shift # past value
+            ;;
         *)
             # Check if there are actually arguments to process
             if [[ -n "$1" ]]; then
                 echo "Unknown argument: $1"
-                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--no_reweight] [--plot_only] [--freeze_jpsi] [--combination]"
+                echo "Usage: $0 [--tag TAG_VALUE] [--fit_tag FIT_TAG_VALUE] [--category eta|dR|inclusive] [--region region0|region1|region2] [--era 2022|2022EE|2023|2023BPix|allYears] [--no_reweight] [--plot_only] [--freeze_jpsi] [--combination]"
                 return 1
             else
                 # No more arguments, break out of the loop
@@ -133,6 +149,13 @@ fi
 
 # append final suffix to outfolder
 OUTFOLDER="${OUTFOLDER}/mu0"
+
+# Determine era suffix for output folders
+if [ "$RUN_YEAR_COMBINATION" = true ]; then
+    ERA_SUFFIX="allYears"
+else
+    ERA_SUFFIX="$ERA"
+fi
 
 # Category ID to name mapping (based on shared_config.py categories)
 # Define as a function that can be exported and called from parallel processes
@@ -239,9 +262,17 @@ get_points_for_mass() {
             if (( $(echo "$mass < 0.65" | bc -l) )); then
                 echo "0.1 0.2 0.25 0.3 0.35 0.37 0.39 0.4 0.45 0.5 0.55 0.57 0.6 0.7 0.9 1 1.2 1.5 1.7 2 5 10"
             elif (( $(echo "$mass < 0.9" | bc -l) )); then
-                echo "0.0005 0.001 0.002 0.0025 0.00275 0.003 0.0035 0.004 0.005 0.007 0.008 0.009 0.01 0.0125 0.015 0.0175 0.018 0.02 0.021 0.023 0.025 0.027 0.028 0.03 0.05 0.06 0.07 0.08 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.9 1"
+                # FIXME!! SHORT LIST
+                # echo "0.0005 0.001 0.002 0.0025 0.00275 0.003 0.0035 0.004 0.005 0.007 0.008 0.009 0.01 0.0125 0.015 0.0175 0.018 0.02 0.021 0.023 0.025 0.027 0.028 0.03 0.05 0.06 0.07 0.08 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.9 1"
+                echo "0.0005 0.001 0.002 0.0025 0.003 0.0035 0.005 0.007 0.009 0.01 0.015 0.025 0.05 0.06 0.08 0.1 0.2 0.3 0.5 0.6 0.9 1 2 3.5 5"
+            elif (( $(echo "$mass < 1.1 && $mass >= 0.95" | bc -l) )); then
+                echo "0.1 0.15 0.2 0.3 0.37 0.45 0.7 0.8 0.9 1 1.25 1.5 2 5 10 12.5 15 17.5 20"
             else
-                echo "0.007 0.01 0.015 0.017 0.02 0.0225 0.025 0.03 0.035 0.04 0.045 0.05 0.55 0.06 0.065 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.15 0.16 0.17 0.19 0.2 0.21 0.23 0.25 0.27 0.29 0.3 0.32 0.33 0.34 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.45 0.5 0.55 0.57 0.6 0.62 0.65 0.7 0.8  0.9 1 1.25 1.5 2 5 10"
+                # FIXME!! SHORT LIST
+                # echo "0.007 0.01 0.015 0.017 0.02 0.0225 0.025 0.03 0.035 0.04 0.045 0.05 0.55 0.06 0.065 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.15 0.16 0.17 0.19 0.2 0.21 0.23 0.25 0.27 0.29 0.3 0.32 0.33 0.34 0.35 0.37 0.39 0.4 0.41 0.42 0.43 0.45 0.5 0.55 0.57 0.6 0.62 0.65 0.7 0.8  0.9 1 1.25 1.5 2 5 10"
+                echo "0.007 0.015 0.02 0.025 0.04 0.06 0.075 0.09 0.1 0.15 0.2 0.3 0.37 0.45 0.7 0.8 0.9 1 1.25 1.5 2 5 10 15 20"
+                # # AVOIDING SUPER SMALL POINTS FOR 2023
+                # echo "0.1 0.15 0.2 0.3 0.37 0.45 0.7 0.8 0.9 1 1.25 1.5 2 5 10 12.5 15 17.5 20"
             fi
             ;;
         "region1")
@@ -255,13 +286,13 @@ get_points_for_mass() {
                 # echo "0.005 0.01 0.05 0.1 0.5 1 2 3 4 5"
                 # # DATA TESTING (reduced set)
                 # echo "0.2 0.203 0.2035 0.204 0.2045 0.205 0.207 0.209 0.21 0.22 0.23 0.24 0.25 0.27 0.3 0.4 0.5 0.6 0.65 0.7 1 1.5 2 2.5 3.5 4 4.2 4.3 4.6 4.7 5.1 5.4 6 7"
-                echo "0.01 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 1 1.5 2 2.5 3.5 4 4.2 4.3 4.6 4.7 5.1 5.4 6 7"
+                echo "0.01 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 1 1.5 2 2.5 3.5 4 4.2 4.3 4.6 4.7 5.1 5.4 6 7 10 20 50 70 100"
             elif (( $(echo "$mass >= 3.67 && $mass <= 3.73" | bc -l) )); then
                 echo "0.01 0.025 0.05 0.075 0.1 0.15 0.2 0.25 0.27 0.3 0.35 0.4 0.5 0.9 1 10"
             else
                 # otherwise, look at 10^-2 - 10^-1 range (uniform in log space)
                 # TEMPORARY SHORT LIST FOR DEBUG
-                echo "0.001 0.005 0.0100 0.0207 0.0336 0.0546 0.0886 0.1000 0.15 0.2 0.3 0.4 0.5 0.6 0.7 1 2.5 5"
+                echo "0.001 0.005 0.0100 0.0207 0.0336 0.0546 0.0886 0.1000 0.15 0.2 0.3 0.4 0.5 0.6 0.7 1 2.5 5 10 20 40 50 70 100"
                 # echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 5 10 11 13 15 20"
                 # echo "0.001 0.005 0.0100 0.0113 0.0183 0.0207 0.023 0.0428 0.0483 0.0886 0.1000 0.2 0.6 0.7"
                 # echo "0.0183 0.0207 0.023 0.0428 0.0483 0.0886 0.1000 0.2 0.6 0.7 1 5 10"
@@ -270,16 +301,22 @@ get_points_for_mass() {
         "region2")
             # Region 2: 4.2-11.0 GeV
             if (( $(echo "$mass >= 7 && $mass < 7.5" | bc -l) )); then
-                echo "0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
+                # FIXME!! SHORT LIST
+                # echo "0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
+                echo "0.0100 0.0162 0.0264 0.0379 0.0546 0.0695 0.0886 0.1000 0.2 0.4 0.6 0.8 1 2 5 10 15 20 25 30 35 40 50 60"
             elif (( $(echo "$mass >= 7.5 && $mass < 10" | bc -l) )); then
                 #NEW! same as above before
-                echo "0.0100 0.02 0.03 0.05 0.06 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100"
+                echo "0.0100 0.02 0.03 0.05 0.06 0.0785 0.0886 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 120 160 200 210 270 300"
             # elif (( $(echo "$mass >= 8 && $mass < 9" | bc -l) )); then
             #     echo "0.01 0.02 0.05 0.1000 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 2 3 5 7 10 12 15 17 20 25 30 35 40 50 60"
             elif (( $(echo "$mass >= 10 && $mass < 12" | bc -l) )); then
-                echo "0.5 0.7 0.9 1 2 3 4 5 5.5 6 7 7.5 8 8.5 9 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 105 110 115 120 130 140 150 160 170 180 190 200 210 220 230 240 250 280 300 350 400 450 500 550 600 650 700 750 800"
+                # FIXME!! SHORT LIST
+                # echo "0.5 0.7 0.9 1 2 3 4 5 5.5 6 7 7.5 8 8.5 9 10 12 15 17 20 25 30 35 40 50 60 70 80 90 100 105 110 115 120 130 140 150 160 170 180 190 200 210 220 230 240 250 280 300 350 400 450 500 550 600 650 700 750 800"
+                echo "0.5 0.7 0.9 1 2 3 4 5 5.5 6 7 7.5 8 8.5 9 10 15 20 25 35 50 60 70 85 100 115 130 150 180 220 250 350 500 650 800"
             else
-                echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.6 0.8 1.2 1.8 2.5 3 3.5 4 4.5 5"
+                # FIXME!! SHORT LIST
+                # echo "0.001 0.005 0.006 0.007 0.008 0.009 0.0100 0.0113 0.0127 0.0144 0.0162 0.0183 0.0207 0.0234 0.0264 0.0298 0.0336 0.0379 0.0428 0.0483 0.0546 0.0616 0.0695 0.0785 0.0886 0.1000 0.2 0.3 0.6 0.8 1.2 1.8 2.5 3 3.5 4 4.5 5"
+                echo "0.001 0.005 0.007 0.009 0.0100 0.0144 0.0207 0.0298 0.0483 0.0616 0.0695 0.0785 0.09 0.1000 0.2 0.3 0.6 0.8 1.2 1.8 2.5 3 3.5 4 4.5 5 7 8 9 10"
             fi
             ;;
         *)
@@ -354,20 +391,46 @@ run_combine_limits() {
     ### LIMIT FROM GRID
     # Single-point runs with caching
 
-    # Adjust rMin/rMax for high mass points
-
+    # Adjust rMin/rMax for high mass points based on era
     local rmin_val=0
-    # if (( $(echo "$mass > 9.9" | bc -l) )); then
-    #     rmin_val=0.5
-    #     echo "    Setting rMin to $rmin_val for mass $mass"
-    # fi
-
-    local rmax_val=10 #was 1, 10, 40, 50
-    if (( $(echo "$mass > 9.4" | bc -l) )); then # WAS 9.9
-        # rmax_val=30
-        rmax_val=150 # after trigger SF implemented, worse limits
-        echo "    Setting rMax to $rmax_val for mass $mass"
-    fi
+    local rmax_val=10  # default value
+    
+    # Era-dependent rMax settings
+    case "$ERA" in
+        "2022")
+            if (( $(echo "$mass > 9.4" | bc -l) )); then
+                rmax_val=90
+                echo "    Setting rMax to $rmax_val for mass $mass (era: $ERA)"
+            fi
+            ;;
+        "2022EE")
+            if (( $(echo "$mass > 9.3" | bc -l) )); then
+                rmax_val=250
+                echo "    Setting rMax to $rmax_val for mass $mass (era: $ERA)"
+            fi
+            ;;
+        "2023")
+            if (( $(echo "$mass > 8.6" | bc -l) )); then
+                rmax_val=500
+                echo "    Setting rMax to $rmax_val for mass $mass (era: $ERA)"
+            fi
+            ;;
+        "2023BPix")
+            if (( $(echo "$mass > 8.6" | bc -l) )); then
+                rmax_val=500
+                echo "    Setting rMax to $rmax_val for mass $mass (era: $ERA)"
+            fi
+            ;;
+        "allYears")
+            if (( $(echo "$mass > 9.4" | bc -l) )); then
+                rmax_val=90
+                echo "    Setting rMax to $rmax_val for mass $mass (era: $ERA)"
+            fi
+            ;;
+        *)
+            echo "    Warning: Unknown era $ERA, using default rMax=$rmax_val"
+            ;;
+    esac
 
     # local rmin_val=0
     # if (( $(echo "$mass > 9" | bc -l) )); then
@@ -404,10 +467,12 @@ run_combine_limits() {
                         --singlePoint "$point" \
                         -n "_${label}${FIT_TAG_LABEL}_point_$point" \
                         --cminDefaultMinimizerStrategy 0 \
+                        --setParameters pdf_index_2022EE=0,pdf_index_2023=0,pdf_index_2023BPix=0 \
+                        --freezeParameters "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix" \
                         -v 3 &> "fitAsymptotic_${label}${FIT_TAG_LABEL}_point_$point.log"
                         # --X-rtd MINIMIZER_freezeDisassociatedParams \
-                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
                         # --freezeParameters bb0=0 \
+                        # --freezeParameters "mean_nuisance_electronScaleVariation" \
                         # --freezeParameters "sigma_nuisance,alphaR_nuisance,alphaL_nuisance,nR_nuisance,nL_nuisance"\
                         # --setParameters b0=-3.0,b1=3.3,b2=-1.4,b3=0.3,b4=-0.02 \
             fi
@@ -456,7 +521,7 @@ export -f get_all_category_ids
 export -f get_points_for_mass
 export -f run_combine_limits
 # Export the category type so parallel processes can access it
-export CATEGORY_TYPE TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT FREEZE_JPSI PLOT_ONLY RUN_COMBINATION REGION USE_SB_SNAPSHOT USE_DATA CACHING
+export CATEGORY_TYPE TAG_LABEL FIT_TAG_LABEL INPUT_FOLDER USE_REWEIGHT FREEZE_JPSI PLOT_ONLY RUN_COMBINATION REGION USE_SB_SNAPSHOT USE_DATA CACHING ERA ERA_SUFFIX RUN_YEAR_COMBINATION
 export MIN_MASS MIN_MASS_LIMIT MAX_MASS MAX_MASS_LIMIT
 
 # Print configuration
@@ -466,29 +531,37 @@ echo "  Use reweighting: $USE_REWEIGHT"
 echo "  Input folder: $INPUT_FOLDER"
 echo "  Output folder: $OUTFOLDER"
 echo "  Tag: ${TAG:-'(none)'}"
+echo "  Era: $ERA"
 echo "  Category type: $CATEGORY_TYPE"
 echo "  Categories: $(get_all_category_ids)"
 echo "  Region: $REGION (mass min: $MIN_MASS [limit from $MIN_MASS_LIMIT], max: $MAX_MASS [limit up to $MAX_MASS_LIMIT])"
 echo "  Plot only: $PLOT_ONLY"
 echo "  Run combination: $RUN_COMBINATION"
+echo "  Run year combination: $RUN_YEAR_COMBINATION"
 echo "  Caching grid points?: $CACHING"
 
 # Create output folders for each category
 if [ "$RUN_COMBINATION" = true ]; then
-    echo "Creating output folders $OUTFOLDER/${CATEGORY_TYPE}Combination/s, b"
-    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination/s
-    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination/b
+    echo "Creating output folders $OUTFOLDER/${CATEGORY_TYPE}Combination_${ERA_SUFFIX}/s, b"
+    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination_${ERA_SUFFIX}/s
+    mkdir -p $OUTFOLDER/${CATEGORY_TYPE}Combination_${ERA_SUFFIX}/b
 else
     for cat_id in $(get_all_category_ids); do
         cat_name=$(get_category_name "$cat_id")
-        echo "Creating output folders $OUTFOLDER/$cat_name/s, b"
-        mkdir -p $OUTFOLDER/$cat_name/s
-        mkdir -p $OUTFOLDER/$cat_name/b
+        echo "Creating output folders $OUTFOLDER/${cat_name}_${ERA_SUFFIX}/s, b"
+        mkdir -p $OUTFOLDER/${cat_name}_${ERA_SUFFIX}/s
+        mkdir -p $OUTFOLDER/${cat_name}_${ERA_SUFFIX}/b
     done
 fi
 
 # copy input .root file
-cp $INPUT_FOLDER/ee/common/Xee_ee.input.root $OUTFOLDER/Xee_ee.input.${REGION}.root
+if [ "$RUN_YEAR_COMBINATION" = true ]; then
+    # For year combination, we might need to copy multiple input files or a combined one
+    # For now, just indicate this is a combination
+    echo "Year combination: input files should be pre-combined"
+else
+    cp $INPUT_FOLDER/ee/common/Xee_ee_${ERA}.input.root $OUTFOLDER/Xee_ee_${ERA}.input.${REGION}.root
+fi
 
 process_dir() {
     dir="$1"
@@ -529,11 +602,10 @@ process_dir() {
     #     return
     # fi
 
-    if (( $(echo "$mass < 9.3" | bc -l) )); then
-        echo "Skipping $dir, mass $mass is not below 10 (TEMPORARY)"
-        return
-    fi
-
+    # if (( $(echo "$mass < 8.6" | bc -l) )); then
+    #     echo "Skipping $dir, mass $mass is not below 10 (TEMPORARY)"
+    #     return
+    # fi
 
     echo "Processing directory: $dir"
 
@@ -545,12 +617,69 @@ process_dir() {
     # Operate in the mass directory and return when done
     pushd "$dir" > /dev/null || { echo "Failed to cd into $dir"; return 1; }
 
+    # Handle year combination if requested
+    if [ "$RUN_YEAR_COMBINATION" = true ]; then
+        # For year combination, combine datacards from all years for each category separately
+        local all_years=("2022" "2022EE" "2023" "2023BPix")
+        # local all_years=("2022" "2022EE")
+        
+        for cat_id in $(get_all_category_ids); do
+            local cat_name
+            cat_name=$(get_category_name "$cat_id")
+            
+            local year_card_files=()
+            for year in "${all_years[@]}"; do
+                local card_name="Xee_ee_${cat_id}_${year}.txt"
+                if [[ -f "$card_name" ]]; then
+                    year_card_files+=("$card_name")
+                fi
+            done
+            
+            if [ ${#year_card_files[@]} -eq 0 ]; then
+                echo "  No datacards found for category $cat_id ($cat_name) allYears at mass ${mass}; skipping"
+                continue
+            fi
+            
+            local txt_file="Xee_ee_${cat_id}_allYears.txt"
+            local root_file="Xee_ee_${cat_id}_allYears.root"
+            echo "  Combining all years for category $cat_id ($cat_name) into ${txt_file}"
+            combineCards.py "${year_card_files[@]}" > "$txt_file"
+            echo "  Building workspace: ${root_file}"
+            text2workspace.py "$txt_file"
+            
+            local freeze_params=""
+            local input_root="$root_file"
+            if [ "$FREEZE_JPSI" = true ]; then
+                echo "    Running MultiDimFit (B-only snapshot) for ${cat_name} allYears"
+                combine -M MultiDimFit "$root_file" \
+                        --saveWorkspace \
+                        --setParameters r=0 \
+                        --freezeParameters r \
+                        -n "_${cat_name}_allYears_Bonly${FIT_TAG_LABEL}" \
+                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}_allYears${FIT_TAG_LABEL}.log"
+                
+                freeze_params="scale_jpsi_$(get_category_label "$cat_name")"
+                input_root="higgsCombine_${cat_name}_allYears_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
+            fi
+            
+            if [ "$USE_SB_SNAPSHOT" = true ]; then
+                echo "    Using sideband snapshot for category ${cat_name} allYears"
+                input_root="higgsCombine_${cat_name}_allYears${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root"
+            fi
+            
+            run_combine_limits "${cat_name}_allYears" "$input_root" "$freeze_params" "$mass"
+        done
+        
+        popd > /dev/null || exit
+        return
+    fi
+
     if [ "$RUN_COMBINATION" = true ]; then
         # Build combination datacard by combining category datacards with the expected names
         # Exactly match naming in run_limits_combination_parallel.sh
         local card_files=()
         for cat_id in $(get_all_category_ids); do
-            local card_name="Xee_ee_${cat_id}_2023.txt"
+            local card_name="Xee_ee_${cat_id}_${ERA}.txt"
             if [[ -f "$card_name" ]]; then
                 card_files+=("$card_name")
             else
@@ -559,8 +688,8 @@ process_dir() {
             fi
         done
 
-        local txt_file="Xee_ee_${CATEGORY_TYPE}Combination_2023.txt"
-        local root_file="Xee_ee_${CATEGORY_TYPE}Combination_2023.root"
+        local txt_file="Xee_ee_${CATEGORY_TYPE}Combination_${ERA}.txt"
+        local root_file="Xee_ee_${CATEGORY_TYPE}Combination_${ERA}.root"
         echo "  Combining the categories into ${txt_file}"
         combineCards.py "${card_files[@]}" > "$txt_file"
 
@@ -575,8 +704,8 @@ process_dir() {
                     --saveWorkspace \
                     --setParameters r=0 \
                     --freezeParameters r \
-                    -n "_${CATEGORY_TYPE}Combination_Bonly${FIT_TAG_LABEL}" \
-                    -v 3 &> "fitMultiDimFit_Bonly_${CATEGORY_TYPE}Combination${FIT_TAG_LABEL}.log"
+                    -n "_${CATEGORY_TYPE}Combination_${ERA_SUFFIX}_Bonly${FIT_TAG_LABEL}" \
+                    -v 3 &> "fitMultiDimFit_Bonly_${CATEGORY_TYPE}Combination_${ERA_SUFFIX}${FIT_TAG_LABEL}.log"
 
             # Freeze J/psi scale parameters for all categories in this combination
             local freeze_list=()
@@ -586,17 +715,17 @@ process_dir() {
                 freeze_list+=("scale_jpsi_$(get_category_label "$cname")")
             done
             freeze_params=$(IFS=,; echo "${freeze_list[*]}")
-            input_root="higgsCombine_${CATEGORY_TYPE}Combination_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
+            input_root="higgsCombine_${CATEGORY_TYPE}Combination_${ERA_SUFFIX}_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
         fi
 
-        run_combine_limits "${CATEGORY_TYPE}Combination" "$input_root" "$freeze_params" "$mass"
+        run_combine_limits "${CATEGORY_TYPE}Combination_${ERA_SUFFIX}" "$input_root" "$freeze_params" "$mass"
     else
         # Per-category loop
         for cat_id in $(get_all_category_ids); do
             local cat_name
             cat_name=$(get_category_name "$cat_id")
-            txt_file="Xee_ee_${cat_id}_2023.txt"
-            root_file="Xee_ee_${cat_id}_2023.root"
+            txt_file="Xee_ee_${cat_id}_${ERA}.txt"
+            root_file="Xee_ee_${cat_id}_${ERA}.root"
 
             if [[ -z "$txt_file" ]]; then
                 echo "  $txt_file not found for category $cat_id ($cat_name)"
@@ -620,19 +749,19 @@ process_dir() {
                         --saveWorkspace \
                         --setParameters r=0 \
                         --freezeParameters r \
-                        -n "_${cat_name}_Bonly${FIT_TAG_LABEL}" \
-                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}${FIT_TAG_LABEL}.log"
+                        -n "_${cat_name}_${ERA_SUFFIX}_Bonly${FIT_TAG_LABEL}" \
+                        -v 3 &> "fitMultiDimFit_Bonly_${cat_name}_${ERA_SUFFIX}${FIT_TAG_LABEL}.log"
 
                 freeze_params="scale_jpsi_$(get_category_label "$cat_name")"
-                input_root="higgsCombine_${cat_name}_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
+                input_root="higgsCombine_${cat_name}_${ERA_SUFFIX}_Bonly${FIT_TAG_LABEL}.MultiDimFit.mH120.root"
             fi
 
             if [ "$USE_SB_SNAPSHOT" = true ]; then
                 echo "    Using sideband snapshot for category ${cat_name}"                            
-                input_root="higgsCombine_${cat_name}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root"
+                input_root="higgsCombine_${cat_name}_${ERA_SUFFIX}${FIT_TAG_LABEL}_SB.MultiDimFit.mH120.root"
             fi
 
-            run_combine_limits "$cat_name" "$input_root" "$freeze_params" "$mass"
+            run_combine_limits "${cat_name}_${ERA_SUFFIX}" "$input_root" "$freeze_params" "$mass"
         done
     fi
 
@@ -648,20 +777,20 @@ find $INPUT_FOLDER/ee -mindepth 1 -maxdepth 1 -type d | \
 # produce summary plots 
 if [ "$RUN_COMBINATION" = true ]; then
     echo "Creating summary plots for ${CATEGORY_TYPE} combination"
-    plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/${CATEGORY_TYPE}Combination\" -i \"$INPUT_FOLDER\" -c ${CATEGORY_TYPE}Combination -r $REGION" 
+    plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/${CATEGORY_TYPE}Combination_${ERA_SUFFIX}\" -i \"$INPUT_FOLDER\" -c ${CATEGORY_TYPE}Combination -r $REGION --era $ERA_SUFFIX" 
     if [[ -n "$FIT_TAG" ]]; then
         plot_cmd="$plot_cmd --tag \"$FIT_TAG\""
     fi
 
     # Execute the command
-    eval "$plot_cmd" &> "$OUTFOLDER/${CATEGORY_TYPE}Combination/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
+    eval "$plot_cmd" &> "$OUTFOLDER/${CATEGORY_TYPE}Combination_${ERA_SUFFIX}/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
 else
     for cat_id in $(get_all_category_ids); do
         cat_name=$(get_category_name "$cat_id")
         echo "Creating summary plots for category $cat_name (log file: limits_summary_${REGION}${FIT_TAG_LABEL}.log)"
         
         # Build the command with optional tag argument
-        plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/$cat_name\" -i \"$INPUT_FOLDER\" -c $cat_name -r $REGION"
+        plot_cmd="python3 $BASEDIR/scripts/plot_limits_result.py -o \"$OUTFOLDER/${cat_name}_${ERA_SUFFIX}\" -i \"$INPUT_FOLDER\" -c ${cat_name} -r $REGION --era $ERA_SUFFIX"
         if [[ -n "$FIT_TAG" ]]; then
             plot_cmd="$plot_cmd --tag \"$FIT_TAG\""
         fi
@@ -669,7 +798,7 @@ else
         echo $plot_cmd
         
         # Execute the command
-        eval "$plot_cmd" &> "$OUTFOLDER/$cat_name/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
+        eval "$plot_cmd" &> "$OUTFOLDER/${cat_name}_${ERA_SUFFIX}/limits_summary_${REGION}${FIT_TAG_LABEL}.log"
     done
 fi
 
