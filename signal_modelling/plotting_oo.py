@@ -88,9 +88,12 @@ class ParametrizationPlotter:
         """Plot parameter values vs nominal mass"""
         print(f"Plotting parametrization {'(GEN)' if gen else ''}...")
         
+        # # Filter out JPsi samples for parameter fit visualization
+        # plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
+        #                if "JPsiToEE" not in name and "Upsilon" not in name}
         # Filter out JPsi samples for parameter fit visualization
         plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
-                       if "JPsiToEE" not in name and "Upsilon" not in name}
+                       if "JPsiToEE" not in name}
         
         for category_label, category in self.analyzer.categories.items():
             self._plot_parametrization_for_category(plot_samples, category, category_label, 
@@ -333,40 +336,41 @@ class ParametrizationPlotter:
         
         # Plot systematic variations (only if systematics are enabled)
         # Each variation gets its own color and marker style
-        if var_up_points:
-            color_idx = 3  # Start from C3
-            for variation_name, points in var_up_points.items():
-                if len(points.get('x', [])) > 0:
-                    # FIXME: temporarily hiding alphaR variation at M10 
-                    #        (fit visibly bad + uncertainty not considered anyway)
-                    if var == "alphaR" and variation_name == "electronScaleVariation":
-                        points['x'] = points['x'][:-1]
-                        points['y'] = points['y'][:-1]
-                        points['y_err'] = points['y_err'][:-1]
-                    var_plot_args = var_plot_args_base.copy()
-                    var_plot_args["marker"] = "^"  # Triangle up
-                    color = f"C{color_idx}"
-                    ax.errorbar(points['x'], points['y'], points['y_err'],
-                               **var_plot_args, color=color, markeredgecolor=color, 
-                               label=f"{variation_name} ↑")
-                    color_idx += 1
-        
-        if var_down_points:
-            color_idx = 3  # Reset color index to match up variations
-            for variation_name, points in var_down_points.items():
-                if len(points.get('x', [])) > 0:
-                    if var == "alphaR" and variation_name == "electronScaleVariation":
-                        points['x'] = points['x'][:-1]
-                        points['y'] = points['y'][:-1]
-                        points['y_err'] = points['y_err'][:-1]
-                    var_plot_args = var_plot_args_base.copy()
-                    var_plot_args["marker"] = "v"  # Triangle down
-                    color = f"C{color_idx}"
-                    ax.errorbar(points['x'], points['y'], points['y_err'],
-                               **var_plot_args, color=color, markeredgecolor=color, 
-                               label=f"{variation_name} ↓")
-                    color_idx += 1
-        
+        if var in self.analyzer.param_manager.nuisanced_vars:
+            if var_up_points:
+                color_idx = 3  # Start from C3
+                for variation_name, points in var_up_points.items():
+                    if len(points.get('x', [])) > 0:
+                        # FIXME: temporarily hiding alphaR variation at M10 
+                        #        (fit visibly bad + uncertainty not considered anyway)
+                        if var == "alphaR" and variation_name == "electronScaleVariation":
+                            points['x'] = points['x'][:-1]
+                            points['y'] = points['y'][:-1]
+                            points['y_err'] = points['y_err'][:-1]
+                        var_plot_args = var_plot_args_base.copy()
+                        var_plot_args["marker"] = "^"  # Triangle up
+                        color = f"C{color_idx}"
+                        ax.errorbar(points['x'], points['y'], points['y_err'],
+                                **var_plot_args, color=color, markeredgecolor=color, 
+                                label=f"{variation_name} ↑")
+                        color_idx += 1
+            
+            if var_down_points:
+                color_idx = 3  # Reset color index to match up variations
+                for variation_name, points in var_down_points.items():
+                    if len(points.get('x', [])) > 0:
+                        if var == "alphaR" and variation_name == "electronScaleVariation":
+                            points['x'] = points['x'][:-1]
+                            points['y'] = points['y'][:-1]
+                            points['y_err'] = points['y_err'][:-1]
+                        var_plot_args = var_plot_args_base.copy()
+                        var_plot_args["marker"] = "v"  # Triangle down
+                        color = f"C{color_idx}"
+                        ax.errorbar(points['x'], points['y'], points['y_err'],
+                                **var_plot_args, color=color, markeredgecolor=color, 
+                                label=f"{variation_name} ↓")
+                        color_idx += 1
+            
         # Plot JPsi point
         if jpsi_points['y'][0] != 0:
             ax.errorbar(jpsi_points['x'], jpsi_points['y'], jpsi_points['y_err'], 
@@ -389,7 +393,7 @@ class ParametrizationPlotter:
             "alphaR": r"$\alpha_R$", "nR": r"$n_R$",
         }
         
-        hep.cms.label(ax=ax, label="Preliminary", data=False, com=13.6, year=2023, fontsize=20)
+        hep.cms.label(ax=ax, label="Preliminary", data=False, com=13.6, year=self.analyzer.era, fontsize=20)
         ax.set_xlabel("Nominal mass [GeV]")
         ax.set_ylabel(ylabels.get(var, var))
         
@@ -416,15 +420,21 @@ class ParametrizationPlotter:
             # Get fit parameters (with variation tag if specified)
             par0_obj = self.workspace.obj(f"{var}{category.label}_fit_par0{variation_tag}_{self.analyzer.era}")
             par1_obj = self.workspace.obj(f"{var}{category.label}_fit_par1{variation_tag}_{self.analyzer.era}")
+
+            # also retrieve errors and covariance
+            par0_err_obj = self.workspace.obj(f"{var}{category.label}_fit_par0_err{variation_tag}_{self.analyzer.era}")
+            par1_err_obj = self.workspace.obj(f"{var}{category.label}_fit_par1_err{variation_tag}_{self.analyzer.era}")
+            par01_cov_obj = self.workspace.obj(f"{var}{category.label}_fit_par01_cov{variation_tag}_{self.analyzer.era}")
             
             if par0_obj and par1_obj:
-                x_fit = np.linspace(0, 12, 100)
+                x_fit = np.linspace(0, 10.5, 100)
                 y_fit = x_fit * par1_obj.getVal() + par0_obj.getVal()
                 
                 # Create label
                 if show_fit_params:
-                    fit_label = f"Fit:\nm = {par1_obj.getVal():.3g} ± {par1_obj.getError():.3g}"
-                    fit_label += f"\nq = {par0_obj.getVal():.3g} ± {par0_obj.getError():.3g}"
+                    fit_label = f"Fit:\nm = {par1_obj.getVal():.3g} ± {par0_err_obj.getVal():.3g}"
+                    fit_label += f"\nq = {par0_obj.getVal():.3g} ± {par1_err_obj.getVal():.3g}"
+                    fit_label += f"\ncorr(m,q) = {par01_cov_obj.getVal()/par0_err_obj.getVal()/par1_err_obj.getVal():.3g}"
                 else:
                     fit_label = category_label
                 
@@ -436,7 +446,7 @@ class ParametrizationPlotter:
                 # y_plus = y_fit + par0_obj.getError() + par1_obj.getError() * x_fit
                 # y_minus = y_fit - par0_obj.getError() - par1_obj.getError() * x_fit
                 # Uncertainty bands (alternative)
-                error = np.sqrt(par0_obj.getError()**2 + (x_fit * par1_obj.getError())**2)
+                error = np.sqrt(par0_err_obj.getVal()**2 + (x_fit * par1_err_obj.getVal())**2 + 2 * x_fit * par01_cov_obj.getVal())
                 y_plus = y_fit + error
                 y_minus = y_fit - error
                 ax.fill_between(x_fit, y_plus, y_minus, color=color, alpha=0.15)
@@ -454,9 +464,9 @@ class ParametrizationPlotter:
                 else:
                     label = category_label
                 
-                ax.hlines(const_val, 0, 12, color=color, linestyle="--", linewidth=2,
+                ax.hlines(const_val, 0, 10.5, color=color, linestyle="--", linewidth=2,
                          label=label)
-                ax.fill_between([0, 12], const_val - const_err, const_val + const_err, 
+                ax.fill_between([0, 10.5], const_val - const_err, const_val + const_err, 
                                color=color, alpha=0.15)
     
     def _plot_parameter_variation_band(self, ax, var: str, category: CategoryConfig, 
@@ -476,7 +486,7 @@ class ParametrizationPlotter:
             par1_down = self.workspace.obj(f"{var}{category.label}_fit_par1_{variation_name}_down_{self.analyzer.era}")
             
             if par0_up and par1_up and par0_down and par1_down:
-                x_fit = np.linspace(0, 12, 100)
+                x_fit = np.linspace(0, 10.5, 100)
                 y_up = x_fit * par1_up.getVal() + par0_up.getVal()
                 y_down = x_fit * par1_down.getVal() + par0_down.getVal()
                 
@@ -674,6 +684,9 @@ class ModelPlotter:
                         param_name = param.GetName()
                         if "nuisance" in param_name:
                             variation = param_name.split("_")[-1]
+                            # if it's an era, skip that, it's a nuisance to be ignored
+                            if "2022" in variation or "2023" in variation:
+                                continue
                             nuisances[variation] = param
 
                     print(f"Found nuisances for {model_name}: {list(nuisances.keys())}")
@@ -683,14 +696,13 @@ class ModelPlotter:
                         # Plot up variation (dashed line, thicker)
                         nuisance.setVal(1.0)
                         model.plotOn(frame, ROOT.RooFit.Name(f"{model_legend_name}_{var_base}_up"),
-                                ROOT.RooFit.LineColor(darker_color), ROOT.RooFit.LineWidth(3),
-                                ROOT.RooFit.LineStyle(ROOT.kDashed))
+                                ROOT.RooFit.LineColor(darker_color), ROOT.RooFit.LineWidth(2))
                         
                         # Plot down variation (dotted line, thicker)
                         nuisance.setVal(-1.0)
                         model.plotOn(frame, ROOT.RooFit.Name(f"{model_legend_name}_{var_base}_down"),
                                     ROOT.RooFit.LineColor(darker_color), ROOT.RooFit.LineWidth(3),
-                                    ROOT.RooFit.LineStyle(ROOT.kDotted))
+                                    ROOT.RooFit.LineStyle(ROOT.kDashed))
                         
                         # Reset nuisance to nominal
                         nuisance.setVal(0.0)
@@ -698,6 +710,21 @@ class ModelPlotter:
                 # plot nominal model on top (solid line, standard width)
                 model.plotOn(frame, ROOT.RooFit.Name(model_legend_name), 
                             ROOT.RooFit.LineWidth(2), ROOT.RooFit.LineColor(color))
+
+                # # when using envelope: plot alternative model
+                # if self.analyzer.envelope and plot_type == "signal":
+                #     # pdf_index = self.workspace.obj(f"signal_model_index_{self.analyzer.era}")
+                #     # pdf_index.setIndex(1)  # Switch to alternative model
+                #     # model.Print("v")
+                #     params = model.getParameters(data)
+                #     # print(f"DBEUG: parameters for {model_name}:", params.Print("v"))
+                #     index = params[f"signal_model_index_{self.analyzer.era}"]
+                #     index.setIndex(1)
+                #     #retrieve index parm
+                #     model.plotOn(frame, ROOT.RooFit.Name(f"{model_legend_name}_alt"),
+                #                 ROOT.RooFit.LineWidth(2), ROOT.RooFit.LineColor(ROOT.kRed), ROOT.RooFit.Normalization(data.sumEntries() * 0.7, ROOT.RooAbsReal.NumEvent))
+                #     # reset index
+                #     index.setIndex(0)
                 
                 # # TEMPORARY: also print fit parameters on canvas
                 # model.paramOn(frame, ROOT.RooFit.Layout(0.1, 0.5, 0.5), ROOT.RooFit.Format("NEU", ROOT.RooFit.AutoPrecision(2)),
@@ -755,7 +782,7 @@ class ModelPlotter:
         
         if plot_fit and model:
             # Compute chi2 using the analyzer's fit manager  
-            chi2_result = self.analyzer.fit_manager.compute_chi2(model, data)
+            chi2_result = self.analyzer.fit_manager.compute_chi2(model, data, 1 if plot_type == "signal" else None)
             if chi2_result is not None:
                 chi2_ndf, ndof = chi2_result
                 leg.AddEntry(model_legend_name, f"Fit, #chi^2/ndf = {chi2_ndf:.2f} (ndf = {ndof})", "L")
@@ -781,6 +808,12 @@ class ModelPlotter:
                         leg.AddEntry(curve_up, f"{variation} #uparrow", "L")
                     if curve_down:
                         leg.AddEntry(curve_down, f"{variation} #downarrow", "L")
+            
+            # # add alternative model to legend if envelope is used
+            # if self.analyzer.envelope:
+            #     alt_curve = frame.getCurve(f"{model_legend_name}_alt")
+            #     if alt_curve:
+            #         leg.AddEntry(alt_curve, f"{model_legend_name} (gaussian alt.)", "L")
         
         leg.Draw()
         
@@ -814,11 +847,11 @@ class ModelPlotter:
         """Plot models for a single category"""
 
         # Find all test models in workspace (including era suffix)
-        all_objects = [key.GetName() for idx, key in enumerate(self.workspace.allPdfs()) 
+        all_objects = [key.GetName() for key in self.workspace.allPdfs() 
                       if f"model_test_M" in key.GetName() and category.label in key.GetName()
                       and f"_{self.analyzer.era}" in key.GetName()
-                      and ("up" not in key.GetName()) and ("down" not in key.GetName())
-                      and idx % 3 == 0]
+                      and ("up" not in key.GetName()) and ("down" not in key.GetName())]
+        all_objects = all_objects[::3] #take every third mass point
         
         # For the inclusive category:
         if category.label == "":
@@ -830,42 +863,55 @@ class ModelPlotter:
         if not models:
             print(f"No test models found for category {category_label}")
             return
-        
-        # Create canvas and frame
-        c = ROOT.TCanvas("c", "c", 1200, 900)
-        mass_var = self.workspace.var("mass")
-        frame = mass_var.frame(
-            ROOT.RooFit.Title(f"Parametric model for several mass points, cat. {category_label}")
-        )
-        
-        # Plot all models
-        for idx, (sample, model_name) in enumerate(models.items()):
-            model = self.workspace.obj(model_name)
-            if model:
-                model.plotOn(frame, ROOT.RooFit.Name(sample), ROOT.RooFit.LineWidth(3),
-                           ROOT.RooFit.LineColor(59 + idx))
-            else:
-                print("WARNING: No model found for", model_name)
-        
-        # Set labels and draw
-        frame.GetXaxis().SetTitle("M(ee) [GeV]")
-        frame.GetYaxis().SetTitle("Density")
-        frame.Draw()
-        
-        # Save plots
-        outname = f"signal_model_testing{category.label}"
-        for ext in ["png", "pdf"]:
-            c.SaveAs(str(self.plot_manager.output_folder / "model_test" / category.name / f"{outname}.{ext}"))
-            print(f"Saved model comparison plot: {self.plot_manager.output_folder / 'model_test' / category.name / f'{outname}.{ext}'}")
-        
-        # Log scale version
-        c.SetLogy()
-        for ext in ["png", "pdf"]:
-            c.SaveAs(str(self.plot_manager.output_folder / "model_test" / category.name / f"{outname}_log.{ext}"))
-            print(f"Saved log model comparison plot: {self.plot_manager.output_folder / 'model_test' / category.name / f'{outname}_log.{ext}'}")
-        
-        # Clean up ROOT objects
-        c.Close()
+
+        def draw_models_and_save(index_label: str = "", envelope_index: Optional[int] = None):
+            if envelope_index is not None:
+                index_obj = self.workspace.cat(f"signal_model_index_{self.analyzer.era}")
+                if index_obj:
+                    index_obj.setIndex(envelope_index)
+
+            # Create canvas and frame
+            c = ROOT.TCanvas(f"c{index_label}", f"c{index_label}", 1200, 900)
+            mass_var = self.workspace.var("mass")
+            title_suffix = f" (gaussian alt signal)" if index_label else ""
+            frame = mass_var.frame(
+                ROOT.RooFit.Title(f"Parametric model for several mass points, cat. {category_label}{title_suffix}")
+            )
+            
+            # Plot all models
+            for idx, (sample, model_name) in enumerate(models.items()):
+                model = self.workspace.obj(model_name)
+                if model:
+                    model.plotOn(frame, ROOT.RooFit.Name(sample), ROOT.RooFit.LineWidth(3),
+                            ROOT.RooFit.LineColor(59 + idx))
+                else:
+                    print("WARNING: No model found for", model_name)
+            
+            # Set labels and draw
+            frame.GetXaxis().SetTitle("M(ee) [GeV]")
+            frame.GetYaxis().SetTitle("Density")
+            frame.Draw()
+            
+            # Save plots
+            plot_suffix = f"_gaussian_alt" if index_label else ""
+            outname = f"signal_model_testing{category.label}{plot_suffix}"
+            for ext in ["png", "pdf"]:
+                c.SaveAs(str(self.plot_manager.output_folder / "model_test" / category.name / f"{outname}.{ext}"))
+                print(f"Saved model comparison plot: {self.plot_manager.output_folder / 'model_test' / category.name / f'{outname}.{ext}'}")
+            
+            # Log scale version
+            c.SetLogy()
+            for ext in ["png", "pdf"]:
+                c.SaveAs(str(self.plot_manager.output_folder / "model_test" / category.name / f"{outname}_log.{ext}"))
+                print(f"Saved log model comparison plot: {self.plot_manager.output_folder / 'model_test' / category.name / f'{outname}_log.{ext}'}")
+            
+            # Clean up ROOT objects
+            c.Close()
+
+        draw_models_and_save()
+
+        if self.analyzer.envelope:
+            draw_models_and_save("_envelope_gaussian", envelope_index=1)
 
 class SignalModelPlotter:
     """Main plotting interface for signal model analysis"""
@@ -952,9 +998,13 @@ class SignalModelPlotter:
         if vars_to_plot is None:
             vars_to_plot = self.analyzer.param_manager.dcb_vars if not gen else self.analyzer.param_manager.bw_vars
         
+        # # Filter out JPsi samples for parameter fit visualization
+        # plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
+        #                if "JPsiToEE" not in name and "Upsilon" not in name}
+
         # Filter out JPsi samples for parameter fit visualization
         plot_samples = {name: sample for name, sample in self.analyzer.samples.items() 
-                       if "JPsiToEE" not in name and "Upsilon" not in name}
-        
+                       if "JPsiToEE" not in name}
+
         self.param_plotter._plot_parametrization_comparison(plot_samples, self.analyzer.categories, 
                                                            vars_to_plot, gen)

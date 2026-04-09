@@ -142,9 +142,12 @@ class BackgroundPlotter:
         else:
             # Normal mode
             frame.SetMinimum(20)
-        
+         
         # if region0, set minimum to 1e-1
         if fit_region.name == "region2":
+            frame.SetMinimum(1)
+        
+        if fit_region.name == "region0":
             frame.SetMinimum(1)
 
         frame.SetMaximum(frame.GetMaximum() * 2)      
@@ -198,7 +201,7 @@ class BackgroundPlotter:
         # Plot total model (always named "full_bkg_model" + category label)
         plot_name = "full_bkg_model"
         self.fitter.combined_model.plotOn(frame, 
-                                        ROOT.RooFit.LineColor(ROOT.kP8Gray),
+                                        ROOT.RooFit.LineColor(ROOT.kGray),
                                         ROOT.RooFit.LineWidth(2),
                                         ROOT.RooFit.Name(plot_name),
                                         ROOT.RooFit.NormRange(norm_range))

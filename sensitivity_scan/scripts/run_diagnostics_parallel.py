@@ -48,10 +48,20 @@ def get_all_category_ids(category_type):
 
 
 def get_mass_range(region):
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
+    #     "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
+    # }
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 6.0, "max_limit": 5.6},
+    #     "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
+    # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
-        "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
+        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
     }
     return ranges.get(region, {})
 
@@ -177,7 +187,7 @@ def mass_is_selected(mass, selector):
 # ============================================================================
 
 
-def run_single_diagnostics_job(job):
+def run_fitdiag_draw_job(job):
     workdir = str(Path(job["workdir"]).resolve())
     txt_file = job["txt_file"]
     root_file = job["root_file"]
@@ -199,6 +209,7 @@ def run_single_diagnostics_job(job):
     job_log_name = f"diagnostics_job_{cat_name}{fit_tag_label}_{era}.log"
     job_log_path = os.path.join(workdir, job_log_name)
     job_log_sections = []
+    dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / f"M{mass}"
 
     def capture_and_buffer(cmd, *, cwd=None):
         proc = subprocess.run(
@@ -222,7 +233,6 @@ def run_single_diagnostics_job(job):
         write_log_with_head_tail(job_log_path, "".join(job_log_sections))
 
     def copy_job_log_to_output():
-        dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / f"M{mass}"
         dest_mass_dir.mkdir(parents=True, exist_ok=True)
         if os.path.exists(job_log_path):
             shutil.copy2(job_log_path, str(dest_mass_dir))
@@ -258,6 +268,7 @@ def run_single_diagnostics_job(job):
         if caching and os.path.exists(fitdiag_out):
             job_log_sections.append(f"SKIP: cached FitDiagnostics output exists: {fitdiag_out}\n")
         else:
+            job_log_sections.append(f"Output file {fitdiag_out} not found. Running FitDiagnostics.")
             try:
                 with open(fitdiag_log, "w") as f:
                     subprocess.run(fitdiag_cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
@@ -269,60 +280,12 @@ def run_single_diagnostics_job(job):
                 return (False, f"FitDiagnostics failed for {cat_name} M{mass} ({era}, {region})")
 
         combine_logger = os.path.join(workdir, "combine_logger.out")
-        dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / f"M{mass}"
         dest_mass_dir.mkdir(parents=True, exist_ok=True)
         if os.path.exists(combine_logger):
             shutil.copy2(
                 combine_logger,
                 str(dest_mass_dir / f"combine_logger_fitDiagnostics_{cat_name}{fit_tag_label}.out"),
             )
-
-        multidim_log = os.path.join(workdir, f"fitMultiDimFit_Bonly_{cat_name}{fit_tag_label}_{era}.log")
-        multidim_cmd = [
-            "combine",
-            "-M", "MultiDimFit",
-            root_file,
-            "--saveWorkspace",
-            "--setParameters", "r=0",
-            "--freezeParameters", "r",
-            "--setParameterRanges", f"mass={min_mass},{max_mass}",
-            "-n", f"_{cat_name}{fit_tag_label}_{era}_Bonly",
-            "-v", "1", #3
-        ]
-        # "--freezeParameters", "r,mean_nuisance_electronScaleVariation",
-
-        multidim_out = os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}_Bonly.MultiDimFit.mH120.root")
-        if caching and os.path.exists(multidim_out):
-            job_log_sections.append(f"SKIP: cached B-only MultiDimFit output exists: {multidim_out}\n")
-        else:
-            try:
-                with open(multidim_log, "w") as f:
-                    subprocess.run(multidim_cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
-                trim_file_to_head_tail(multidim_log)
-            except subprocess.CalledProcessError:
-                trim_file_to_head_tail(multidim_log)
-                flush_job_log()
-                copy_job_log_to_output()
-                return (False, f"MultiDimFit (B-only) failed for {cat_name} M{mass} ({era}, {region})")
-
-        if os.path.exists(combine_logger):
-            shutil.copy2(
-                combine_logger,
-                str(dest_mass_dir / f"combine_logger_MultiDimFit_Bonly_{cat_name}{fit_tag_label}.out"),
-            )
-
-        files_to_copy = [
-            os.path.join(workdir, f"fitDiagnostics_{cat_name}{fit_tag_label}_{era}.log"),
-            os.path.join(workdir, txt_file),
-            os.path.join(workdir, f"fitDiagnostics_{cat_name}{fit_tag_label}_{era}.root"),
-            os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}.FitDiagnostics.mH120.root"),
-            os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}_Bonly.MultiDimFit.mH120.root"),
-            os.path.join(workdir, f"fitMultiDimFit_Bonly_{cat_name}{fit_tag_label}_{era}.log"),
-        ]
-
-        for src in files_to_copy:
-            if os.path.exists(src):
-                shutil.copy2(src, str(dest_mass_dir))
 
     draw_cmd = [
         "python3",
@@ -347,10 +310,100 @@ def run_single_diagnostics_job(job):
         copy_job_log_to_output()
         return (False, f"draw_mu0_fit failed for {cat_name} M{mass} ({era}, {region}); see {job_log_path}")
 
+    if not plot_only:
+        files_to_copy = [
+            os.path.join(workdir, f"fitDiagnostics_{cat_name}{fit_tag_label}_{era}.log"),
+            os.path.join(workdir, txt_file),
+            os.path.join(workdir, f"fitDiagnostics_{cat_name}{fit_tag_label}_{era}.root"),
+            os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}.FitDiagnostics.mH120.root"),
+        ]
+
+        for src in files_to_copy:
+            if os.path.exists(src):
+                shutil.copy2(src, str(dest_mass_dir))
+
     flush_job_log()
     copy_job_log_to_output()
 
     return (True, f"OK: {cat_name} M{mass} ({era}, {region})")
+
+
+def run_single_multidim_job(task):
+    job = task["job"]
+    mode = task["mode"]
+
+    workdir = str(Path(job["workdir"]).resolve())
+    root_file = job["root_file"]
+    cat_name = job["cat_name"]
+    era = job["era"]
+    region = job["region"]
+    mass = job["mass"]
+    min_mass = job["min_mass"]
+    max_mass = job["max_mass"]
+    fit_tag_label = job["fit_tag_label"]
+    outfolder = job["outfolder"]
+    caching = job.get("caching", True)
+
+    dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / f"M{mass}"
+    dest_mass_dir.mkdir(parents=True, exist_ok=True)
+
+    if mode == "Bonly":
+        log_file = os.path.join(workdir, f"fitMultiDimFit_Bonly_{cat_name}{fit_tag_label}_{era}.log")
+        output_file = os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}_Bonly.MultiDimFit.mH120.root")
+        cmd = [
+            "combine",
+            "-M", "MultiDimFit",
+            root_file,
+            "--saveWorkspace",
+            "--setParameters", "r=0",
+            "--freezeParameters", "r",
+            "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
+            "--cminDefaultMinimizerStrategy", "0",
+            "--keepFailures",
+            "-n", f"_{cat_name}{fit_tag_label}_{era}_Bonly",
+            "-v", "1", #3
+        ]
+        combine_logger_name = f"combine_logger_MultiDimFit_Bonly_{cat_name}{fit_tag_label}.out"
+    else:
+        log_file = os.path.join(workdir, f"fitMultiDimFit_SB_{cat_name}{fit_tag_label}_{era}.log")
+        output_file = os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}_SB.MultiDimFit.mH120.root")
+        cmd = [
+            "combine",
+            "-M", "MultiDimFit",
+            root_file,
+            "--saveWorkspace",
+            "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
+            "--cminDefaultMinimizerStrategy", "0",
+            "--keepFailures",
+            "-n", f"_{cat_name}{fit_tag_label}_{era}_SB",
+            "-v", "1", #3
+        ]
+        combine_logger_name = f"combine_logger_MultiDimFit_SB_{cat_name}{fit_tag_label}.out"
+
+    if caching and os.path.exists(output_file):
+        status = "cached"
+    else:
+        try:
+            with open(log_file, "w") as f:
+                subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
+            trim_file_to_head_tail(log_file)
+            status = "computed"
+        except subprocess.CalledProcessError:
+            trim_file_to_head_tail(log_file)
+            return (False, f"MultiDimFit ({mode}) failed for {cat_name} M{mass} ({era}, {region})")
+
+    combine_logger = os.path.join(workdir, "combine_logger.out")
+    if os.path.exists(combine_logger):
+        shutil.copy2(combine_logger, str(dest_mass_dir / combine_logger_name))
+
+    if os.path.exists(output_file):
+        shutil.copy2(output_file, str(dest_mass_dir / Path(output_file).name))
+    if os.path.exists(log_file):
+        shutil.copy2(log_file, str(dest_mass_dir / Path(log_file).name))
+
+    return (True, f"OK: MultiDimFit {mode} {status} for {cat_name} M{mass} ({era}, {region})")
 
 
 # ============================================================================
@@ -385,8 +438,13 @@ def main():
         help="One or more eras to process",
     )
     parser.add_argument("--era", dest="eras", action="append", help="Deprecated: use --eras instead")
-    parser.add_argument("--jobs", type=int, default=8, help="Number of parallel jobs")
+    parser.add_argument("--jobs", type=int, default=-1, help="Number of parallel jobs")
     parser.add_argument("--no_caching", action="store_false", dest="caching", help="Disable caching")
+    parser.add_argument(
+        "--multidim_only",
+        action="store_true",
+        help="Run only MultiDimFit phase, skipping FitDiagnostics/draw and summary plotting",
+    )
     parser.add_argument(
         "--mass_selector",
         default="",
@@ -399,6 +457,10 @@ def main():
     args = parser.parse_args()
     run_start = time.perf_counter()
     phase_durations = {}
+
+    # if --jobs not provided, use nproc as #parallel workers
+    if args.jobs <= 0:
+        args.jobs = os.cpu_count() or 1
 
     try:
         mass_selector = parse_mass_selector(args.mass_selector)
@@ -436,6 +498,7 @@ def main():
     print(f"  Category type: {args.category}")
     print(f"  Categories: {get_all_category_ids(args.category)}")
     print(f"  Plot only: {args.plot_only}")
+    print(f"  MultiDimFit only: {args.multidim_only}")
     print(f"  Exclude resonant backgrounds: {args.no_res}")
     print(f"  Caching enabled: {args.caching}")
     if mass_selector:
@@ -569,74 +632,137 @@ def main():
         return 0
 
     # ========================================================================
-    # PHASE 2: Run diagnostics/draw jobs in parallel
+    # PHASE 2: Run FitDiagnostics + draw jobs in parallel
     # ========================================================================
-    print("\n" + "=" * 80)
-    print(f"PHASE 2: Running {len(all_jobs)} jobs on {args.jobs} workers")
-    print("=" * 80 + "\n")
-    phase2_start = time.perf_counter()
-
     completed = 0
     failed = 0
+    if args.multidim_only:
+        print("\n" + "=" * 80)
+        print("PHASE 2: Skipped (--multidim_only enabled)")
+        print("=" * 80 + "\n")
+        successful_jobs = list(all_jobs)
+        phase_durations["phase2_fitdiag_draw"] = 0.0
+    else:
+        print("\n" + "=" * 80)
+        print(f"PHASE 2: Running FitDiagnostics+draw for {len(all_jobs)} jobs on {args.jobs} workers")
+        print("=" * 80 + "\n")
+        phase2_start = time.perf_counter()
+        successful_jobs = []
 
-    with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-        futures = {executor.submit(run_single_diagnostics_job, job): job for job in all_jobs}
-        for future in as_completed(futures):
-            job = futures[future]
-            try:
-                success, msg = future.result()
-                if success:
-                    completed += 1
-                    if completed % 10 == 0:
-                        print(f"Progress: {completed} completed, {failed} failed (of {len(all_jobs)})")
-                else:
+        with ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            futures = {executor.submit(run_fitdiag_draw_job, job): job for job in all_jobs}
+            for future in as_completed(futures):
+                job = futures[future]
+                try:
+                    success, msg = future.result()
+                    if success:
+                        completed += 1
+                        successful_jobs.append(job)
+                        if completed % 10 == 0:
+                            print(f"Progress: {completed} completed, {failed} failed (of {len(all_jobs)})")
+                    else:
+                        failed += 1
+                        print(f"FAILED: {msg}")
+                except Exception as e:
                     failed += 1
-                    print(f"FAILED: {msg}")
-            except Exception as e:
-                failed += 1
-                print(
-                    f"EXCEPTION: {job['cat_name']} M{job['mass']} ({job['era']}, {job['region']}): {e}"
-                )
+                    print(
+                        f"EXCEPTION: {job['cat_name']} M{job['mass']} ({job['era']}, {job['region']}): {e}"
+                    )
 
-    print(f"\nDiagnostics complete: {completed} completed, {failed} failed")
-    phase_durations["phase2_diagnostics"] = time.perf_counter() - phase2_start
-    print(f"PHASE 2 elapsed: {format_duration(phase_durations['phase2_diagnostics'])}")
+        print(f"\nFitDiagnostics+draw complete: {completed} completed, {failed} failed")
+        phase_durations["phase2_fitdiag_draw"] = time.perf_counter() - phase2_start
+        print(f"PHASE 2 elapsed: {format_duration(phase_durations['phase2_fitdiag_draw'])}")
 
     # ========================================================================
-    # PHASE 3: Generate summary plots
+    # PHASE 3: Run MultiDimFit jobs in parallel (B-only and S+B)
     # ========================================================================
-    print("\n" + "=" * 80)
-    print("PHASE 3: Generating summary plots")
-    print("=" * 80 + "\n")
-    phase3_start = time.perf_counter()
+    multidim_failed = 0
+    multidim_completed = 0
+    if (args.multidim_only or not args.plot_only) and successful_jobs:
+        print("\n" + "=" * 80)
+        print("PHASE 3: Running MultiDimFit jobs (B-only + S+B)")
+        print("=" * 80 + "\n")
+        phase3_start = time.perf_counter()
 
-    for config_idx, config in enumerate(configs, 1):
-        era = config["era"]
-        region = config["region"]
-        outfolder = config["outfolder"]
+        multidim_tasks = []
+        for job in successful_jobs:
+            multidim_tasks.append({"job": job, "mode": "Bonly"})
+            multidim_tasks.append({"job": job, "mode": "SB"})
 
-        print(f"Generating summary plots for config {config_idx}/{len(configs)}: {era}, {region}")
-        for cat_id in get_all_category_ids(args.category):
-            cat_name = get_category_name(cat_id)
-            plot_cmd = [
-                "python3",
-                f"{basedir}/scripts/plot_diagnostics_result.py",
-                "-o",
-                f"{outfolder}/{cat_name}_{era}",
-                "-c",
-                cat_name,
-            ]
+        with ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            futures = {executor.submit(run_single_multidim_job, task): task for task in multidim_tasks}
+            for future in as_completed(futures):
+                task = futures[future]
+                job = task["job"]
+                mode = task["mode"]
+                try:
+                    success, msg = future.result()
+                    if success:
+                        multidim_completed += 1
+                        if multidim_completed % 20 == 0:
+                            print(
+                                f"Progress: {multidim_completed} completed, {multidim_failed} failed "
+                                f"(of {len(multidim_tasks)})"
+                            )
+                    else:
+                        multidim_failed += 1
+                        print(f"FAILED: {msg}")
+                except Exception as e:
+                    multidim_failed += 1
+                    print(
+                        f"EXCEPTION: MultiDimFit {mode} {job['cat_name']} M{job['mass']} "
+                        f"({job['era']}, {job['region']}): {e}"
+                    )
 
-            if args.tag:
-                plot_cmd.extend(["--tag", f"{region}_{args.fit_tag}"])
+        phase_durations["phase3_multidim"] = time.perf_counter() - phase3_start
+        print(
+            f"\nMultiDimFit complete: {multidim_completed} completed, {multidim_failed} failed"
+        )
+        print(f"PHASE 3 elapsed: {format_duration(phase_durations['phase3_multidim'])}")
+    else:
+        phase_durations["phase3_multidim"] = 0.0
 
-            log_path = f"{outfolder}/{cat_name}_{era}/diagnostics_summary_{region}{fit_tag_label}.log"
-            with open(log_path, "w") as f:
-                subprocess.run(plot_cmd, stdout=f, stderr=subprocess.STDOUT)
-            trim_file_to_head_tail(log_path)
+    # ========================================================================
+    # PHASE 4: Generate summary plots
+    # ========================================================================
+    if args.multidim_only:
+        print("\n" + "=" * 80)
+        print("PHASE 4: Skipped (--multidim_only enabled)")
+        print("=" * 80 + "\n")
+        phase_durations["phase4_summary_plots"] = 0.0
+    else:
+        print("\n" + "=" * 80)
+        print("PHASE 4: Generating summary plots")
+        print("=" * 80 + "\n")
+        phase4_start = time.perf_counter()
 
-    phase_durations["phase3_summary_plots"] = time.perf_counter() - phase3_start
-    print(f"PHASE 3 elapsed: {format_duration(phase_durations['phase3_summary_plots'])}")
+        for config_idx, config in enumerate(configs, 1):
+            era = config["era"]
+            region = config["region"]
+            outfolder = config["outfolder"]
+
+            print(f"Generating summary plots for config {config_idx}/{len(configs)}: {era}, {region}")
+            for cat_id in get_all_category_ids(args.category):
+                cat_name = get_category_name(cat_id)
+                plot_cmd = [
+                    "python3",
+                    f"{basedir}/scripts/plot_diagnostics_result.py",
+                    "-o",
+                    f"{outfolder}/{cat_name}_{era}",
+                    "-c",
+                    cat_name,
+                ]
+
+                if args.tag:
+                    plot_cmd.extend(["--tag", f"{region}_{args.fit_tag}"])
+
+                log_path = f"{outfolder}/{cat_name}_{era}/diagnostics_summary_{region}{fit_tag_label}.log"
+                with open(log_path, "w") as f:
+                    subprocess.run(plot_cmd, stdout=f, stderr=subprocess.STDOUT)
+                trim_file_to_head_tail(log_path)
+
+        phase_durations["phase4_summary_plots"] = time.perf_counter() - phase4_start
+        print(f"PHASE 4 elapsed: {format_duration(phase_durations['phase4_summary_plots'])}")
 
     total_elapsed = time.perf_counter() - run_start
     phase_durations["total"] = total_elapsed
@@ -645,16 +771,19 @@ def main():
     print("ALL PHASES COMPLETE")
     print(f"  Processed {len(configs)} (era, region) combinations")
     print(f"  Total jobs: {len(all_jobs)}")
-    print(f"  Failed jobs: {failed}")
+    print(f"  FitDiagnostics/draw failures: {failed}")
+    if not args.plot_only:
+        print(f"  MultiDimFit failures: {multidim_failed}")
     print("=" * 80)
     print("TIMING SUMMARY")
     print(f"  Phase 1 (collect):            {format_duration(phase_durations['phase1_collect'])}")
-    print(f"  Phase 2 (diagnostics + draw): {format_duration(phase_durations['phase2_diagnostics'])}")
-    print(f"  Phase 3 (summary plots):      {format_duration(phase_durations['phase3_summary_plots'])}")
+    print(f"  Phase 2 (fitdiag + draw):     {format_duration(phase_durations['phase2_fitdiag_draw'])}")
+    print(f"  Phase 3 (multidim):           {format_duration(phase_durations['phase3_multidim'])}")
+    print(f"  Phase 4 (summary plots):      {format_duration(phase_durations['phase4_summary_plots'])}")
     print(f"  Total runtime:                {format_duration(phase_durations['total'])}")
     print("=" * 80)
 
-    return 1 if failed > 0 else 0
+    return 1 if (failed > 0 or multidim_failed > 0) else 0
 
 
 if __name__ == "__main__":

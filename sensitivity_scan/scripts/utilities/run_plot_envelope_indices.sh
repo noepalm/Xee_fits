@@ -1,0 +1,3 @@
+python3 scripts/utilities/plot_envelope_indices.py \
+        -i "cards/260327/cards_{region}_data_envelope_withScaleSyst_withMeanNuisance_IDSF_triggerSF_finerBinning_tighterCuts_biasTests_bySubera_binned/ee" \
+        -o "/eos/home-n/npalmeri/www/DiElectron/sensitivity/260327/fitDiagnostics_grid_data_envelope_withScaleSyst_withMeanNuisance_IDSF_triggerSF_finerBinning_tighterCuts_biasTests_bySubera_binned/mu0/"

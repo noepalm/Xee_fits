@@ -78,7 +78,12 @@ class DatasetCreator:
                 # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected_scaleOnly_elenaSyst/zsnap/era2023/'
                 # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF/zsnap/era2023/'
                 # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
-                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/fw_output_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts/zsnap/era{era}/'
+                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{era}/'
+                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{era}/'
             else:
                 self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era{era}/'
 
@@ -86,14 +91,19 @@ class DatasetCreator:
         if corrected:
             if fit_region.name == "region0" and use_jpsi:
                 # self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
-                # self.filepath += "all_11_AllResonances/" #different flow for resonant bkg sample in region 0
-                self.filepath += "all_12_AllResonances/" #different flow for resonant bkg sample in region 0
+                self.filepath += "all_14_AllResonances/" #different flow for resonant bkg sample in region 0
+                # self.filepath += "all_12_AllResonances/" #different flow for resonant bkg sample in region 0
             elif fit_region.name in ["region1", "region2"] and use_jpsi:
-                self.filepath += "base_4_full/"
+                # self.filepath += "base_3_full/"
+                # self.filepath += "base_4_full/"
+                # self.filepath += "base_5_full/"
+                self.filepath += "base_6_full/"
             else:
                 # when running on data 
                 # self.filepath += "base_2_Final/"
-                self.filepath += "base_3_full/"                
+                # self.filepath += "base_3_full/"   
+                # self.filepath += "base_5_full/"
+                self.filepath += "base_6_full/"
         elif use_reweighting:
             if fit_region.name == "region0" and use_jpsi:
                 self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
@@ -117,7 +127,13 @@ class DatasetCreator:
         if signal_folder_tag:
             # Use new folder structure with signal_folder_tag and era
             # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
-            self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_6p5triggerOnly.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_noWeights.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
             print(f"DEBUG: Using signal workspace with folder tag: {self.signal_ws_file}", flush=True)
         elif self.with_systematics:
             print(f"DEBUG: Using signal workspace with systematics (legacy path)", flush=True)
@@ -129,7 +145,15 @@ class DatasetCreator:
             self.signal_ws_file = f'../signal_modelling/workspaces/signal_model_no_reweight{suffix}.root'
         
         # Luminosity and cross-section data
-        self.luminosity = 7.98 * 1e3  # pb-1
+        # self.luminosity = 7.98 * 1e3  # pb-1
+        # UPDATE BASED ON ERA
+        lumi_by_era = {
+            "2022" : 0.83,
+            "2022EE" : 1.93,
+            "2023" : 2.65,
+            "2023BPix" : 1.27
+        }
+        self.luminosity = lumi_by_era[era] * 1e3  # pb-1
         self.lumi_rescale = 58.9/7.98  # 22+23 lumi rescale wrt processed
         
         print(f"Dataset creator initialized:")
@@ -224,7 +248,7 @@ class DatasetCreator:
         """
         print("Creating datasets from files for all categories...")
         
-        mass_var.setBins(250)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
+        # mass_var.setBins(350)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
         bin_width = mass_var.getBinning().averageBinWidth()
 
         # Create datasets for each category (using signal modeling naming convention)
@@ -480,9 +504,10 @@ class DatasetCreator:
         print(f"DEBUG: Using signal_folder_tag = {signal_folder_tag} for efficiency/xsec retrieval", flush=True)
         
         # Get efficiency functions (nominal + all available variations) for this era
-        from utilities.get_signal_effs_xsecs import get_all_efficiency_functions, get_xsec_function
+        from utilities.get_signal_effs_xsecs import get_all_efficiency_functions, get_xsec_function, get_acceptance_function
         eff_results = get_all_efficiency_functions(use_old=False, era=self.era, folder_tag=signal_folder_tag)
         xsec_result = get_xsec_function(use_old=False, era=self.era, folder_tag=signal_folder_tag)
+        acceptance_result = get_acceptance_function(era=self.era, folder_tag=signal_folder_tag)
         
         # Dynamically determine available variations and create mapping
         # Map: variation_key -> (workspace_suffix, descriptive_name)
@@ -518,6 +543,8 @@ class DatasetCreator:
         
         xsec_func = xsec_result["fit_function"]
         xsec_params = xsec_result["fit_parameters"]
+        acceptance_func = acceptance_result["fit_function"]
+        acceptance_params = acceptance_result["fit_parameters"]
             
         # Calculate category fractions from inclusive dataset
         inclusive_events = datasets["inclusive"].sumEntries() if "inclusive" in datasets else 1.0
@@ -544,10 +571,18 @@ class DatasetCreator:
                 mass_val = float(mass_str)
                 
                 # Calculate cross-section (same for all variations)
+                ### NOTE: ALREADY INCLUDES ACCEPTANCE!
                 if len(xsec_params) > 0:
                     cross_section = xsec_func(mass_val, *xsec_params)
                 else:
                     cross_section = xsec_func(mass_val)
+
+                # Calculate acceptance (same for all variations)
+                ### NOT APPLIED, only stored for limits later
+                if len(acceptance_params) > 0:
+                    acceptance = acceptance_func(mass_val, *acceptance_params)
+                else:
+                    acceptance = acceptance_func(mass_val)
                 
                 # Calculate efficiencies and expected events for all variations
                 efficiencies = {}
@@ -560,6 +595,9 @@ class DatasetCreator:
                     else:
                         efficiencies[var_key] = eff_funcs[var_key](mass_val)
                     
+                    # # clip efficiency to 1e-8 to avoid zero efficiency points
+                    # efficiencies[var_key] = max(efficiencies[var_key], 1e-8)
+                    
                     # Calculate expected events
                     n_expected_total = self.luminosity * efficiencies[var_key] * cross_section
                     n_expected_values[var_key] = n_expected_total * category_fractions[category_name]
@@ -567,7 +605,7 @@ class DatasetCreator:
                 # Print debug info
                 eff_str = ", ".join([f"eff_{variation_mapping[k][1]}={efficiencies[k]:.4f}" for k in variation_mapping.keys()])
                 n_exp_str = ", ".join([f"N_exp_{variation_mapping[k][1]}={n_expected_values[k]:.1f}" for k in variation_mapping.keys()])
-                print(f"  {category_name} M={mass_val} GeV: {eff_str}, xsec={cross_section:.3f} pb, frac={category_fractions[category_name]:.4f}", flush=True)
+                print(f"  {category_name} M={mass_val} GeV: {eff_str}, xsec={cross_section:.3f} pb (with acceptance = {acceptance*100:.1f}%), frac={category_fractions[category_name]:.4f}", flush=True)
                 print(f"    {n_exp_str}", flush=True)
                 
                 # Create RooRealVar for expected events - ALWAYS save nominal first (no suffix)
@@ -606,6 +644,10 @@ class DatasetCreator:
                 xsec_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_xsec_{self.era}', f'Zd{category_config.label}_M{mass_str}_xsec_{self.era}', cross_section)
                 xsec_var.setConstant(True)
                 self.workspace.Import(xsec_var, ROOT.RooCmdArg())
+
+                acceptance_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_acceptance_{self.era}', f'Zd{category_config.label}_M{mass_str}_acceptance_{self.era}', acceptance)
+                acceptance_var.setConstant(True)
+                self.workspace.Import(acceptance_var, ROOT.RooCmdArg())
                 
                 frac_var = ROOT.RooRealVar(f'Zd{category_config.label}_M{mass_str}_fraction_{self.era}', f'Zd{category_config.label}_M{mass_str}_fraction_{self.era}', category_fractions[category_name])
                 frac_var.setConstant(True)

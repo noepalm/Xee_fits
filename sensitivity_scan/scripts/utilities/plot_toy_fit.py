@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-
 import argparse
 from pathlib import Path
 
 import ROOT
-
 
 CMS_PALETTE = [
     "#5790fc",
@@ -199,7 +197,7 @@ def main():
             bkg_clone = bkg_hist.Clone(f"bkg_{fit_label}_{idx}")
             bkg_clone.SetDirectory(0)
             bkg_clone.SetLineColor(color)
-            bkg_clone.SetLineStyle(9)
+            bkg_clone.SetLineStyle(2)
             bkg_clone.SetLineWidth(2)
 
         plotted_labels.append((fit_label, total_hist, bkg_clone))
@@ -236,6 +234,7 @@ def main():
 
     y_max = max(*[h.GetMaximum() for _, h, _ in plotted_labels], data_graph.GetMaximum())
     y_min = max(*[h.GetMinimum() for _, h, _ in plotted_labels], data_graph.GetMinimum())
+    print("DEBUG: y_min =", y_min, "y_max =", y_max)
     axis_hist.SetMinimum(max(y_min * 0.8, 1e-3))
     axis_hist.SetMaximum(y_max * 1.2)
 
@@ -257,7 +256,7 @@ def main():
     legend_coordinates = {
         "region0" : (0.50, 0.2, 0.50 + x_width, 0.2 + y_width),
         "region1" : (0.50, 0.62, 0.50 + x_width, 0.62 + y_width),
-        "region2" : (0.20, 0.20, 0.20 + x_width, 0.62 + y_width),
+        "region2" : (0.20, 0.20, 0.20 + x_width, 0.2 + y_width),
     }
     legend = ROOT.TLegend(*legend_coordinates[args.region])
     legend.SetFillStyle(0)
@@ -323,9 +322,12 @@ def main():
     line0.SetLineColor(ROOT.kGray + 2)
     line0.Draw("same")
 
+    # Keep graph references alive so PyROOT does not garbage-collect earlier draws.
+    pull_graphs = []
     for idx, (_, total_hist, _) in enumerate(plotted_labels):
         color = ROOT.TColor.GetColor(CMS_PALETTE[idx])
         pull_graph = build_pull_graph(data_graph, total_hist, f"pull_{idx}", color)
+        pull_graphs.append(pull_graph)
         pull_graph.Draw("P same")
 
     extra = f"_{args.tag}" if args.tag else ""
@@ -334,6 +336,12 @@ def main():
         f"toy_fit_{args.category}_{args.region}_{args.era}_M{args.mass}"
         f"_truth{args.truth_label}_toy{args.toy_index}{run_suffix}{extra}"
     )
+
+    top_pad.SetGrid()
+    bottom_pad.SetGrid()
+    # update pads
+    top_pad.Update()
+    bottom_pad.Update()
 
     canvas.SaveAs(f"{out_base}.png")
     canvas.SaveAs(f"{out_base}.pdf")

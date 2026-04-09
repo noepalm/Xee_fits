@@ -51,42 +51,64 @@ def get_points_for_mass(mass, region):
         # if mass < 0.65:
         if mass < 0.75:
             return [0.01, 0.05, 0.08, 0.1, 0.2, 0.25, 0.3, 0.35, 0.37, 0.39, 0.4, 0.45, 0.5, 0.55, 0.57, 0.6, 0.7, 
-                    0.9, 1.0, 1.2, 1.5, 1.7, 2.0, 5.0, 10.0, 20.0, 30.0, 50.0]
+                    0.9, 1.0, 1.2, 1.5, 1.7, 2.0, 5.0, 10.0, 20.0, 30.0, 50.0, 80, 100, 150, 200, 400, 600, 800, 1200]
         elif mass < 0.9:
-            return [0.0005, 0.001, 0.002, 0.0025, 0.003, 0.0035, 0.005, 0.007, 0.009, 0.01, 0.015, 
-                    0.025, 0.05, 0.06, 0.08, 0.1, 0.2, 0.3, 0.5, 0.6, 0.9, 1.0, 2.0, 3.5, 5.0, 10, 20]
+            # return [0.0005, 0.001, 0.002, 0.0025, 0.003, 0.0035, 0.005, 0.007, 0.009, 0.01, 0.015, 
+            #         0.025, 0.05, 0.06, 0.08, 0.1, 0.2, 0.3, 0.5, 0.6, 0.9, 1.0, 2.0, 3.5, 5.0, 10, 20, 40, 60, 80, 100, 150, 200, 250, 300]
+            return [0.2, 0.3, 0.5, 0.6, 0.9, 1.0, 2.0, 3.5, 5.0, 10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500, 800, 1000, 1500]
         elif 0.95 <= mass <= 1.1:
             return [0.01, 0.05, 0.07, 0.1, 0.15, 0.2, 0.3, 0.37, 0.45, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 5.0, 10.0, 
-                    12.5, 15.0, 17.5, 20.0, 30.0]
+                    12.5, 15.0, 17.5, 20.0, 30.0, 50, 80, 100, 150, 200, 250, 300, 400, 600, 800, 1000, 1200, 1500]
         else:
             return [0.007, 0.015, 0.02, 0.025, 0.04, 0.06, 0.075, 0.09, 0.1, 0.15, 0.2, 0.3, 0.37, 
-                    0.45, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 5.0, 10.0, 15.0, 20.0]
+                    0.45, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 5.0, 10.0, 15.0, 20.0, 30, 40, 50, 70, 80, 100, 150, 200, 300, 500, 700, 1000, 1300]
     
     elif region == "region1":
         if 3.05 <= mass <= 3.15:
-            return [0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0, 1.5, 2.0, 2.5, 3.5, 4.0, 
-                    4.2, 4.3, 4.6, 4.7, 5.1, 5.4, 6.0, 7.0, 10.0, 20.0, 50.0, 70.0, 100.0]
+            # return [0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0, 1.5, 2.0, 2.5, 3.5, 4.0, 
+            #         4.2, 4.3, 4.6, 4.7, 5.1, 5.4, 6.0, 7.0, 10.0, 20.0, 50.0, 70.0, 100.0, 200, 300]
+            return [1.0, 1.5, 2.0, 2.5, 3.5, 4.0, 4.2, 4.3, 4.6, 4.7, 5.1, 5.4, 6.0, 7.0, 10.0, 20.0, 50.0, 70.0, 100.0, 200, 250, 300, 320, 350, 400, 500, 600, 750]
         elif 3.67 <= mass <= 3.73:
             return [0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.27, 0.3, 0.35, 0.4, 0.5, 0.9, 1.0, 3, 5,
-                    10.0]
+                    10.0, 20, 30, 40, 50]
         else:
             return [0.001, 0.005, 0.01, 0.0207, 0.0336, 0.0546, 0.0886, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 
                     0.7, 1.0, 2.5, 5.0, 10.0, 20.0, 40.0, 50.0, 70.0, 100.0]
 
+    # if region == "region0":
+    #     # if mass < 0.65:
+    #     if mass < 0.75:
+    #         return [10, 20, 50.0, 100, 200, 300, 400, 700, 800, 900, 1200, 1500, 1700, 2000, 2500, 3000, 3500]
+    #     elif mass < 0.9:
+    #         return [10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500, 600, 800, 900, 1200, 1500, 1700, 2000, 2500, 3000, 3500]
+    #     elif 0.95 <= mass <= 1.1:
+    #         return [10, 20, 50, 80, 100, 150, 200, 250, 500, 800, 900, 1200, 1500, 1700, 2000, 2500, 3000, 3500]
+    #     else:
+    #         return [10, 20, 50, 100, 200, 300, 400, 700, 800, 900, 1000, 1500, 2000, 2500, 3000, 3500]
+    
+    # elif region == "region1":
+    #     if 3.05 <= mass <= 3.15:
+    #         return [50.0, 70.0, 100.0, 200, 300, 400, 500, 800, 1000, 1500, 2000, 2500, 3000, 3500]
+    #     elif 3.67 <= mass <= 3.73:
+    #         return [0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.27, 0.3, 0.35, 0.4, 0.5, 0.9, 1.0, 3, 5,
+    #                 10.0]
+    #     else:
+    #         return [10, 30, 50, 70, 100.0, 200, 300, 400, 600, 700, 800, 900, 1200, 1500, 2000, 3000, 3500]
+
     elif region == "region2":
         if 7 <= mass < 7.5:
-            return [0.01, 0.0162, 0.0264, 0.0379, 0.0546, 0.0695, 0.0886, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 
+            return [0.001, 0.005, 0.007, 0.01, 0.0162, 0.0264, 0.0379, 0.0546, 0.0695, 0.0886, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 
                     2.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 50.0, 60.0]
         elif 7.5 <= mass < 9.8:
-            return [0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
+            return [0.001, 0.005, 0.007, 0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
                     0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 10.0, 12.0, 15.0, 17.0, 20.0, 25.0, 30.0, 35.0, 
-                    40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0]
+                    40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0, 350, 400, 500]
         elif 9.8 <= mass < 10:
             return [0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
-                    0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 4.5, 4.7, 4.9, 5.0, 5.5, 6.0, 7.0, 10.0]
+                    0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 4.5, 4.7, 4.9, 5.0, 5.5, 6.0, 7.0, 10.0, 20, 30, 40, 50, 60, 75, 90, 130, 150, 200, 250, 300, 400]
         elif 10 <= mass <= 12:
             return [0.5, 0.7, 0.9, 1.0, 2.0, 3.0, 3.2, 3.5, 3.7, 3.9, 4.0, 5.0, 5.5, 6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 10.0, 
-                    15.0, 20.0, 25.0, 35.0, 50.0, 60.0, 70.0, 85.0, 100.0, 115.0, 130.0, 150.0, 180.0, 
+                    15.0, 20.0, 25.0, 35.0, 50.0, 60.0, 70.0, 85.0, 95, 115.0, 130.0, 150.0, 180.0, 
                     220.0, 250.0, 350.0, 500.0, 650.0, 800.0]
         else:
             return [0.001, 0.005, 0.007, 0.009, 0.01, 0.0144, 0.0207, 0.0298, 0.0483, 0.0616, 0.0695, 
@@ -109,7 +131,10 @@ def get_rmin_rmax(mass, era):
         "2023": {0: (0, 100), 1: (0,10), 9.0: (0, 20), 9.5: (0, 35), 10.0: (0, 70)},
         "2023BPix": {0: (0, 100), 1: (0,10), 9.0: (0, 40), 9.5: (0, 70), 10.0: (0, 135)},
         # "allYears": {0: (0, 100), 1: (0,10), 9.0: (0, 15), 9.5: (0, 25), 10.0: (0, 50)}
-        "allYears": {0: (0, 100), 1: (0,10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
+        # "allYears": {0: (0, 100), 1.25: (0,10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
+        # "allYears": {1.25: (0,300), 2.0 : (0, 10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
+        "allYears": {0 : (0, 3000), 1.25: (0,500), 2.0 : (0, 100), 3.0 : (0, 1000), 3.2 : (0, 100), 4.0 : (0, 10), 7.5: (0, 100)}
+        # "allYears": {0: (0, 7000), 3.5: (0, 5000), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)} #for 6p5 trigger test only
     }
     
     if era in era_settings:
@@ -122,10 +147,20 @@ def get_rmin_rmax(mass, era):
 
 def get_mass_range(region):
     """Get mass range limits for a given region."""
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
+    #     "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8}
+    # }
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 6.0, "max_limit": 5.6},
+    #     "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
+    # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
-        "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8}
+        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
     }
     return ranges.get(region, {})
 
@@ -268,6 +303,8 @@ def run_single_grid_point(args_dict):
     fit_tag_label = args_dict['fit_tag_label']
     rmin = args_dict['rmin']
     rmax = args_dict['rmax']
+    cl_value = args_dict.get('cl')
+    set_params = args_dict['set_params']
     freeze_params = args_dict['freeze_params']
     mass = args_dict['mass']
     era = args_dict['era']
@@ -289,19 +326,29 @@ def run_single_grid_point(args_dict):
         "-n", f"_{label}{fit_tag_label}_point_{point}",
         "--cminDefaultMinimizerStrategy", "0"
     ]
+
+    # cmd.extend(["--freezeParameters", "lumi_scale"])
     
     # # Add parameter settings for year combination or multi-era handling
     # if era == "allYears":
     #     cmd.extend([
-    #         "--setParameters", "pdf_index_2022EE=0,pdf_index_2023=0,pdf_index_2023BPix=0",
-    #         "--freezeParameters", "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix",
-    #         # "--setParameters", "pdf_index_2022EE=0,pdf_index_2023=0,pdf_index_2023BPix=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0",
-    #         # "--freezeParameters", "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope"
+    #         # "--setParameters", "pdf_index_2022EE=0,pdf_index_2023=0,pdf_index_2023BPix=0",
+    #         # "--freezeParameters", "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix",
+    #         "--setParameters", "pdf_index_2022EE=0,pdf_index_2023=0,pdf_index_2023BPix=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0",
+    #         "--freezeParameters", "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope"
     #     ])
     
-    # Add snapshot and freeze parameters if provided
+    # Forward user-provided parameter settings directly to combine.
+    if set_params:
+        cmd.extend(["--setParameters", set_params])
+
+    # Forward user-provided freeze list directly to combine.
     if freeze_params:
-        cmd.extend(["--snapshotName", "MultiDimFit", "--freezeParameters", freeze_params])
+        cmd.extend(["--freezeParameters", freeze_params])
+
+    # Forward user-provided confidence level directly to combine.
+    if cl_value is not None:
+        cmd.extend(["--cl", str(cl_value)])
     
     cmd.extend(["-v", "1"]) #3
     
@@ -322,7 +369,7 @@ def run_single_grid_point(args_dict):
 # Harvesting (requires all grid points)
 # ============================================================================
 
-def harvest_limits(workdir, label, fit_tag_label, points, input_root, rmin, rmax, outfolder, mass):
+def harvest_limits(workdir, label, fit_tag_label, points, input_root, rmin, rmax, outfolder, mass, cl=None):
     """
     Harvest grid results: merge grid files, compute final limit, copy outputs.
     
@@ -373,6 +420,9 @@ def harvest_limits(workdir, label, fit_tag_label, points, input_root, rmin, rmax
         "-n", f"_{label}{fit_tag_label}",
         "-v", "1" #3
     ]
+
+    if cl is not None:
+        combine_cmd.extend(["--cl", str(cl)])
     
     try:
         with open(os.path.join(workdir, final_log), 'w') as f:
@@ -552,14 +602,11 @@ def process_mass_directory(args):
             print(f"WARNING: Input file not found: {root_file}")
             continue
         
-        # Determine freeze parameters
-        freeze_params = ""
+        # Determine parameter passthrough for single-point combine calls.
+        set_params = config.get('set_parameters', "")
+        freeze_params = config.get('freeze_parameters', "")
         # Use just the filename since we'll chdir to workdir
         input_root = os.path.basename(root_file)
-        
-        if config['freeze_jpsi']:
-            # Simplified - would need to build snapshot first
-            pass
         
         # Create grid jobs for all points
         for point in points:
@@ -571,6 +618,8 @@ def process_mass_directory(args):
                 'fit_tag_label': config['fit_tag_label'],
                 'rmin': rmin,
                 'rmax': rmax,
+                'cl': config.get('cl'),
+                'set_params': set_params,
                 'freeze_params': freeze_params,
                 'mass': mass,
                 'caching': config['caching'],
@@ -588,7 +637,8 @@ def process_mass_directory(args):
             'rmin': rmin,
             'rmax': rmax,
             'outfolder': config['outfolder'],
-            'mass': mass
+            'mass': mass,
+            'cl': config.get('cl')
         }
         result['harvest_params'].append(harvest_params)
     
@@ -612,8 +662,30 @@ def main():
     parser.add_argument('--no_reweight', action='store_true', help='Do not use reweighting')
     parser.add_argument('--plot_only', action='store_true', help='Only generate plots')
     parser.add_argument('--data', action='store_true', help='Run on data instead of MC')
-    parser.add_argument('--freeze_jpsi', action='store_true', help='Freeze J/psi scale parameter')
-    parser.add_argument('--use_sb_snapshot', action='store_true', help='Use S+B MultiDimFit snapshot')
+    parser.add_argument(
+        '--setParameters',
+        default='',
+        help=(
+            "Comma-separated parameter assignments to pass to combine "
+            "(forwarded as --setParameters to single-point AsymptoticLimits jobs)."
+        ),
+    )
+    parser.add_argument(
+        '--freezeParameters',
+        default='',
+        help=(
+            "Comma-separated nuisance parameter names to freeze in combine (forwarded as "
+            "--freezeParameters to single-point AsymptoticLimits jobs)."
+        ),
+    )
+    parser.add_argument(
+        '--cl',
+        type=float,
+        default=None,
+        help=(
+            "Confidence level for combine AsymptoticLimits."
+        ),
+    )
     parser.add_argument('--combination', action='store_true', help='Run category combination')
     parser.add_argument('--no_caching', action='store_false', dest='caching', help='Disable caching')
     parser.add_argument('--eras', nargs='+', default=[],
@@ -677,6 +749,9 @@ def main():
     print(f"  Plot only: {args.plot_only}")
     print(f"  Run combination: {args.combination}")
     print(f"  Caching grid points: {args.caching}")
+    print(f"  Set parameters: {args.setParameters if args.setParameters else '(none)'}")
+    print(f"  Freeze parameters: {args.freezeParameters if args.freezeParameters else '(none)'}")
+    print(f"  CL: {args.cl if args.cl is not None else '(combine default)'}")
     print(f"  Parallel jobs: {args.jobs}")
     print(f"  Preprocessing jobs: {args.prep_jobs if args.prep_jobs > 0 else 'auto'}")
     if mass_selector:
@@ -728,8 +803,9 @@ def main():
                 'tag_label': tag_label,
                 'fit_tag_label': fit_tag_label,
                 'caching': args.caching,
-                'freeze_jpsi': args.freeze_jpsi,
-                'use_sb_snapshot': args.use_sb_snapshot,
+                'cl': args.cl,
+                'set_parameters': args.setParameters.strip(),
+                'freeze_parameters': args.freezeParameters.strip(),
                 'run_combination': args.combination,
                 'run_year_combination': run_year_combination,
                 'use_data': args.data,

@@ -12,9 +12,17 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 region_mass_ranges = {
+    # "region0": {"min": 0.3, "max": 2.4},
+    # "region1": {"min": 1.6, "max": 4.6},
+    # "region2": {"min": 3.8, "max": 11.0},
+    #
+    # "region0": {"min": 0.3, "max": 2.4},
+    # "region1": {"min": 1.6, "max": 6},
+    # "region2": {"min": 4.9, "max": 10.5},
+    #
     "region0": {"min": 0.3, "max": 2.4},
-    "region1": {"min": 1.6, "max": 4.6},
-    "region2": {"min": 3.8, "max": 11.0},
+    "region1": {"min": 1.6, "max": 5.3},
+    "region2": {"min": 4.5, "max": 10.5},
 }
 
 def is_mass_in_region(mass, region):
@@ -84,7 +92,7 @@ data_suffix = "_data" if args.data else ""
 envelope_suffix = "_envelope" if args.envelope else ""
 
 dataset_name = f"dataset{sample_suffix}_{args.region}{binned_suffix}{bkg_scale_suffix}{reweight_suffix}{data_suffix}{input_tag_suffix}_{args.era}{envelope_suffix}_full.root"
-print(">> Using dataset:", dataset_name, flush = True)
+print(">> Using dataset:", input_dir + dataset_name, flush = True)
 
 # dataset_name = "dataset_minbias_reweight_full.root" if not args.no_reweight else "dataset_minbias_noReweight_full.root"
 # if args.no_reweight and args.bkg_x2:
@@ -255,11 +263,31 @@ if args.withSyst:
     # NOTE: can't get param only to get added, so doing that manually using AddDatacardLineAtEnd
     cb.AddDatacardLineAtEnd("mean_nuisance_electronScaleVariation      param 0 1")
 
+# Signal modelling shape uncertainty
+if args.withSyst:
+    for par in ["sigma", "alphaL", "alphaR", "nL", "nR"]:
+        cb.AddDatacardLineAtEnd(f"{par}_nuisance_stat_{args.era}      param 0 1")
+
 # # Discrete nuisance parameter for discrete profiling ("pdf_index")
 # cb.cp().backgrounds().AddSyst(cb, 'bkg_func_choice', 'discrete', ch.SystMap()(1))
 
-# # Luminosity uncertainty (flat 1%)
-# cb.cp().AddSyst(cb, 'lumi_2023', 'lnN', ch.SystMap()(1.01))
+# Luminosity uncertainty
+lumi1_uncertainties_by_era = {
+    "2022" : 1.0138,
+    "2022EE" : 1.0138,
+    "2023" : 1.0117,
+    "2023BPix" : 1.0117,
+}
+lumi2_uncertainties_by_era = {
+    "2023" : 1.0127,
+    "2023BPix" : 1.0127,
+}
+
+cb.cp().signals().AddSyst(cb, 'lumi_1', 'lnN', ch.SystMap()(lumi1_uncertainties_by_era[args.era]))
+if args.era in lumi2_uncertainties_by_era:
+    cb.cp().signals().AddSyst(cb, 'lumi_2', 'lnN', ch.SystMap()(lumi2_uncertainties_by_era[args.era]))
+
+
 
 # Add a rateParam for each background process (let the yield freely float)
 # FOR OLD RATE APPROACH: use these inits
@@ -274,6 +302,10 @@ if args.withSyst:
 for bkg in bkg_procs['ee']:
     for bins_tuple in cats[f'ee_{era}']:
         cb.AddDatacardLineAtEnd(f"scale_{bkg}_{bins_tuple[1]}_{era} rateParam *       {bkg}       1 [0,10]")
+
+
+# # TEST: add rateParam to project limits to x10 luminosity (unblinded target)
+# cb.AddDatacardLineAtEnd(f"lumi_scale rateParam * * 10")
 
 print('>> Extracting shapes...')
 # Update with actual root file and object naming convention
@@ -305,7 +337,7 @@ cb.ForEachProc(lambda p: p.set_rate(-1))
 #     w.var(f'Zd_M{p.mass()}_cat_{p.bin()}_expected').getValV() * lumi.getValV()/7.98
 # ))
 
-signal_yield_scaling = 1 if args.data else lumi.getValV()/7.98 * args.signal_multiplier 
+signal_yield_scaling = 1 * args.signal_multiplier if args.data else lumi.getValV()/7.98 * args.signal_multiplier 
 cb.cp().signals().ForEachProc(lambda p: p.set_rate(
     w.var(f'Zd_cat_{p.bin()}_M{p.mass()}_expected_{p.era()}').getValV() * signal_yield_scaling if args.cat != "inclusive" else
     w.var(f'Zd_M{p.mass()}_expected_{p.era()}').getValV() * signal_yield_scaling 

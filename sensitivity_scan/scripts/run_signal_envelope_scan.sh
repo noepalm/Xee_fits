@@ -1,0 +1,10 @@
+# full envelope
+combine -M MultiDimFit Xee_ee_4_allYears.root --algo grid --setParameterRanges r=-3,3 --points 30 --setParameters pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0 --freezeParameters pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope --cminDefaultMinimizerStrategy 0 --saveNLL -n .nll_scan_signalEnvelope --X-rtd REMOVE_CONSTANT_ZERO_POINT=1 -v 0
+
+# gaussian only
+combine -M MultiDimFit Xee_ee_4_allYears.root --algo grid --setParameterRanges r=-3,3 --points 30 --cminDefaultMinimizerStrategy 0 --saveNLL -n .nll_scan_signalEnvelope_gaussianOnly --X-rtd REMOVE_CONSTANT_ZERO_POINT=1 -v 0 --setParameters signal_model_index_2023=1,signal_model_index_2022=1,signal_model_index_2022EE=1,signal_model_index_2023BPix=1,pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0 --freezeParameters signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix,pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope
+
+# dCB only
+combine -M MultiDimFit Xee_ee_4_allYears.root --algo grid --setParameterRanges r=-3,3 --points 30 --cminDefaultMinimizerStrategy 0 --saveNLL -n .nll_scan_signalEnvelope_dCBOnly --X-rtd REMOVE_CONSTANT_ZERO_POINT=1 -v 0 --setParameters signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0,pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0 --freezeParameters signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix,pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope
+
+python3 /eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/sensitivity_scan/scripts/utilities/plot_nll_scan.py --signal

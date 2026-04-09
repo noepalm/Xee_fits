@@ -82,28 +82,75 @@ else:
 outfolder = args.output_folder
 os.makedirs(outfolder, exist_ok=True)
 
-fig, ax = plt.subplots(figsize=(15 if len(regions) > 1 else 10, 10))
-
-for fit_tag, folder, label, region in zip(fit_tags, input_folders, labels, regions_expanded):
-    fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
-    with open(os.path.join(base_folder, folder, f'limits_results_{region}{fit_tag_label}.pkl'), 'rb') as f:
-        r_values = pickle.load(f)
-    
-    masses = np.array(sorted([float(mass) for mass in r_values.keys()]))
-    branch = "expected_50_indep_accept" if not args.mu else "expected_50"
-    expected_50 = np.array([float(r_values[mass][branch]) for mass in sorted(r_values.keys(), key=float)])
-
-    plt.plot(masses, expected_50, label=label, marker='o')
-
-plt.yscale('log')
-plt.xlabel('M(X) [GeV]')
-plt.ylabel(r"$\sigma(pp \to X) \cdot \text{BR}(X \to ee) \cdot A $ [pb]" if not args.mu else "$\mu$")
-hep.cms.label("Preliminary", loc=0, ax=ax, com = 13.6, data = np.any(["data" in folder for folder in input_folders]), lumi = "6.68")
-
-plt.legend()
-
 # Create output filename based on regions
 region_suffix = "_".join(args.region) if len(args.region) > 1 else args.region[0]
 overlap_suffix = "_overlap" if args.overlap else ""
-for ext in ['png', 'pdf']:
-    plt.savefig(os.path.join(outfolder, f'limits_comparison_{region_suffix}{overlap_suffix}{tag}.{ext}'))
+
+branch_specs = [
+    (
+        "expected_50_indep_accept",
+        r"$\sigma(pp \to X) \cdot \mathrm{BR}(X \to ee) \cdot A \cdot \epsilon$ [pb]",
+        "indep_accept",
+    ),
+    (
+        "expected_50_indep",
+        r"$\sigma(pp \to X) \cdot \mathrm{BR}(X \to ee) \cdot A$ [pb]",
+        "indep",
+    ),
+    (
+        "expected_50",
+        r"$\mu$",
+        "mu",
+    ),
+]
+
+for branch, y_label, branch_suffix in branch_specs:
+    fig, ax = plt.subplots(figsize=(15 if len(regions) > 1 else 10, 10))
+
+    # Build 68% expected band keys matching the current branch variant.
+    branch_low = branch.replace("expected_50", "expected_16", 1)
+    branch_high = branch.replace("expected_50", "expected_84", 1)
+
+    for fit_tag, folder, label, region in zip(fit_tags, input_folders, labels, regions_expanded):
+        fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
+        with open(os.path.join(base_folder, folder, f'limits_results_{region}{fit_tag_label}.pkl'), 'rb') as f:
+            r_values = pickle.load(f)
+
+        sorted_keys = sorted(r_values.keys(), key=float)
+        # # only plot in range 1.3 - 10
+        sorted_keys = [mass for mass in sorted_keys if 0.6 <= float(mass) <= 10]
+        # # also take only every other point to avoid overcrowding the plot
+        # sorted_keys = sorted_keys[::2]
+        # # finally, exclude 4.1 and 4.2
+        # sorted_keys = [mass for mass in sorted_keys if float(mass) != 4.1 and float(mass) != 4.3 and float(mass) != 8.5]
+        masses = np.array([float(mass) for mass in sorted_keys])
+        expected_50 = np.array([float(r_values[mass][branch]) for mass in sorted_keys])
+        expected_16 = np.array([float(r_values[mass][branch_low]) for mass in sorted_keys])
+        expected_84 = np.array([float(r_values[mass][branch_high]) for mass in sorted_keys])
+
+        (line,) = ax.plot(masses, expected_50, label=label, marker='o')
+        ax.fill_between(
+            masses,
+            expected_16,
+            expected_84,
+            alpha=0.22,
+            color=line.get_color(),
+            linewidth=0,
+        )
+
+    ax.set_yscale('log')
+    ax.set_xlabel('M(X) [GeV]')
+    ax.set_ylabel(y_label)
+    hep.cms.label(
+        "Preliminary",
+        loc=0,
+        ax=ax,
+        com=13.6,
+        data=np.any(["data" in folder for folder in input_folders]),
+        lumi="6.68",
+    )
+    ax.legend()
+
+    for ext in ['png', 'pdf']:
+        plt.savefig(os.path.join(outfolder, f'limits_comparison_{branch_suffix}_{region_suffix}{overlap_suffix}{tag}.{ext}'))
+    plt.close(fig)

@@ -74,10 +74,17 @@ class BackgroundAnalysis:
         # signal_ws_file = f'../signal_modelling/workspaces/{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
         if signal_folder_tag:
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
-            signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_6p5triggerOnly.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight.root'
+            signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_noWeights.root'
         else:
             print("WARNING: No signal folder tag specified, using default path for signal workspace.")
-            signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
+            signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
         
         if not os.path.exists(signal_ws_file):
             print(f"❌ Signal workspace not found: {signal_ws_file}")
@@ -123,7 +130,7 @@ class BackgroundAnalysis:
                 print(f"⚠️  Warning: Fit region '{fit_region_name}' not found, using full mass range from signal workspace")
         else:
             print(f"⚠️  Warning: No fit region specified, using full mass range from signal workspace")
-        m.setBins(300)
+        m.setBins(350)
         self.output_workspace.Import(m, ROOT.RooCmdArg())
         
         signal_file.Close()
@@ -557,12 +564,12 @@ class BackgroundAnalysis:
         try:
             # For main region, fit combined background model
             if fit_region_name == "region1" or True: #FIXME
-                # First fit non-resonant background to sidebands within this region
-                sideband_results = self.fitter.fit_background_to_sidebands(fit_region)
+                # # First fit non-resonant background to sidebands within this region
+                # sideband_results = self.fitter.fit_background_to_sidebands(fit_region)
                 
-                if self.config.freeze_bkg_sidebands:
-                    # Freeze background parameters if requested
-                    self.fitter.freeze_background_parameters()
+                # if self.config.freeze_bkg_sidebands:
+                #     # Freeze background parameters if requested
+                #     self.fitter.freeze_background_parameters()
                 
                 print("DEBUG: creating combined model", flush=True)
                 # Create combined model
@@ -733,10 +740,10 @@ class BackgroundAnalysis:
                     success = False
             
             # Step 3: Fit backgrounds to sidebands (or entire region for sideband regions)
-            print("DEBUG: fitting sidebands", flush=True)
-            if not self.fit_sidebands(fit_region_name, tag):
-                print("Failed to fit sidebands")
-                success = False
+            # print("DEBUG: fitting sidebands", flush=True)
+            # if not self.fit_sidebands(fit_region_name, tag):
+            #     print("Failed to fit sidebands")
+            #     success = False
                 
             # Step 4: Create combined model and optionally fit it
             # When --no_res is set, combined model is just the background function (no fitting needed)
@@ -744,8 +751,8 @@ class BackgroundAnalysis:
             if success:
                 if self.config.no_res:
                     print("Creating combined model from sideband fit (--no_res set)")
-                    # Fit background to sidebands
-                    self.background_results = self.fitter.fit_background_to_sidebands(self.config.chosen_fit_region)
+                    # # Fit background to sidebands
+                    # self.background_results = self.fitter.fit_background_to_sidebands(self.config.chosen_fit_region)
                     
                     # Create combined model (just wraps the background function)
                     self.fitter.create_combined_model(self.config.chosen_fit_region)
@@ -872,7 +879,7 @@ def create_argument_parser():
     parser.add_argument("--fit_region", default="region1", 
                        choices=["region1", "region0", "region2", "full"],
                        help="Pick fit region")
-    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
                        help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; 4: Chebyshev, 5: Bernstein + exp, 6: modified BW. -1 for all)")
     parser.add_argument("--input_workspaces", nargs='+', default=[],
                        help="Input workspace files for envelope (only works with bkg_function=-1)")

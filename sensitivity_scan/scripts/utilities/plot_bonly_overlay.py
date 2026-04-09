@@ -18,12 +18,21 @@ BKG_FUNCTIONS = [
     ("polyexp", "PolyExp", cms_palette[2]),
 ]
 
+# REGION_BOUNDS = {
+#     "region0": (0.5, 2.2),
+#     "region1": (1.8, 4.4),
+#     "region2": (4.0, 10.8),
+# }
+# REGION_BOUNDS = {
+#     "region0": (0.5, 2.2),
+#     "region1": (1.8, 6.0),
+#     "region2": (4.9, 10.5),
+# }   
 REGION_BOUNDS = {
     "region0": (0.5, 2.2),
-    "region1": (1.8, 4.4),
-    "region2": (4.0, 10.8),
+    "region1": (1.8, 5.3),
+    "region2": (4.5, 10.5),
 }
-
 
 def open_workspace(path):
     tf = ROOT.TFile.Open(str(path), "READ")
@@ -91,10 +100,11 @@ def main():
         return 1
 
     x_min, x_max = mass.getMin(), mass.getMax()
-    frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(300))
+    frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(350))
     frame.SetTitle("")
     frame.GetXaxis().SetTitle("m(ee) [GeV]")
     frame.GetYaxis().SetTitle("Events")
+    frame.GetXaxis().SetLabelSize(0)
 
     dataset.plotOn(
         frame,
@@ -127,13 +137,13 @@ def main():
             tf.Close()
         return 1
 
-    canvas = ROOT.TCanvas("c", "c", 900, 800)
+    canvas = ROOT.TCanvas("c", "c", 900, 900)
     canvas.Divide(1, 2)
-    canvas.cd(1)
-    ROOT.gPad.SetPad(0, 0.3, 1, 1)
-    ROOT.gPad.SetBottomMargin(0.02)
-    ROOT.gPad.SetGrid()
-    ROOT.gPad.SetLogy()
+    top_pad = canvas.cd(1)
+    top_pad.SetPad(0, 0.3, 1, 1)
+    top_pad.SetBottomMargin(0.02)
+    top_pad.SetGrid()
+    top_pad.SetLogy()
     frame.Draw()
 
     x_width = 0.38
@@ -141,7 +151,7 @@ def main():
     legend_coordinates = {
         "region0" : (0.50, 0.2, 0.50 + x_width, 0.2 + y_width),
         "region1" : (0.50, 0.62, 0.50 + x_width, 0.62 + y_width),
-        "region2" : (0.20, 0.20, 0.20 + x_width, 0.62 + y_width),
+        "region2" : (0.20, 0.1, 0.20 + x_width, 0.1 + y_width),
     }
     legend = ROOT.TLegend(*legend_coordinates[args.region])
     # legend = ROOT.TLegend(0.58, 0.68, 0.88, 0.88)
@@ -190,17 +200,19 @@ def main():
     frame.SetMinimum(max(y_min, 0.1))  # avoid going to zero
 
     # Bottom pad: pull distributions for each model.
-    canvas.cd(2)
-    ROOT.gPad.SetPad(0, 0, 1, 0.3)
-    ROOT.gPad.SetTopMargin(0.03)
-    ROOT.gPad.SetBottomMargin(0.30)
-    ROOT.gPad.SetGrid()
+    bottom_pad = canvas.cd(2)
+    bottom_pad.SetPad(0, 0, 1, 0.3)
+    bottom_pad.SetTopMargin(0.03)
+    bottom_pad.SetBottomMargin(0.30)
+    bottom_pad.SetGrid()
 
-    pull_frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(300))
+    pull_frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(350))        
     pull_frame.SetTitle("")
     pull_frame.GetXaxis().SetTitle("m(ee) [GeV]")
-    # pull_frame.GetXaxis().SetLabelSize(0.10)
-    # pull_frame.GetYaxis().SetLabelSize(0.09)
+    pull_frame.GetXaxis().SetLabelSize(0.2)
+    pull_frame.GetXaxis().SetTitleSize(0.22)
+    pull_frame.GetYaxis().SetLabelSize(0.2)
+    pull_frame.GetYaxis().SetTitleSize(0.22)
     pull_frame.GetYaxis().SetNdivisions(505)
     pull_frame.SetMinimum(-5.0)
     pull_frame.SetMaximum(5.0)
@@ -215,6 +227,17 @@ def main():
         pull_hist.SetLineColor(root_color)
         pull_hist.SetMarkerStyle(20)
         pull_hist.SetMarkerSize(0.7)
+
+        pull_hist.SetTitle("")
+        pull_hist.GetXaxis().SetTitle("m(ee) [GeV]")
+        pull_hist.GetYaxis().SetTitle("Pull")
+        pull_hist.GetXaxis().SetLabelSize(0.10)
+        pull_hist.GetXaxis().SetTitleSize(0.11)
+        pull_hist.GetXaxis().SetTitleOffset(1.0)
+        pull_hist.GetYaxis().SetLabelSize(0.09)
+        pull_hist.GetYaxis().SetTitleSize(0.10)
+        pull_hist.GetYaxis().SetTitleOffset(0.45)
+
         draw_opt = "AP" if idx == 0 else "P"
         pull_frame.addPlotable(pull_hist, draw_opt)
 

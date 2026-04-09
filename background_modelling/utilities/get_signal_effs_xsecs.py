@@ -3,6 +3,7 @@ import mplhep as hep
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d, PchipInterpolator
+from matplotlib.lines import Line2D
 import os
 import csv
 import unicodedata
@@ -67,11 +68,31 @@ def get_input_folders(era="2023", folder_tag="260226"):
         Tuple of (input_folder, input_folder_snap) paths
     """
     # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal"
     # input_folder = f"{base_path}/ztables/era{era}/base_11_full/csv"
-    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_11_full"
-    base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/signal_model_withScaleSyst_IDSF_triggerSF_isoCut"
-    input_folder = f"{base_path}/ztables/era{era}/base_12_full/csv"
-    input_folder_snap = f"{base_path}/zsnap/era{era}/base_12_full"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_11_full"    
+    # # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/signal_model_withScaleSyst_IDSF_triggerSF_isoCut"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/signal_model_withScaleSyst_IDSF_triggerSF_6p5triggerOnly"
+    # # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/signal_model_withScaleSyst_IDSF_triggerSF_allTriggers"
+    # input_folder = f"{base_path}/ztables/era{era}/base_12_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_12_full"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts__updatedSignal"
+    # input_folder = f"{base_path}/ztables/era{era}/base_13_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_13_full"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly__updatedSignal"
+    # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts"
+    # input_folder = f"{base_path}/ztables/era{era}/base_13_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_13_full"    
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly"
+    # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+    base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight"
+    input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
+    input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+
+
     return input_folder, input_folder_snap
 
 # Default folders (for backward compatibility and standalone usage)
@@ -261,19 +282,20 @@ def retrieve_producer_efficiencies(input_py):
 
     efficiencies = {}
     for sample_name, sample_info in file_dict.items():
-        path = sample_info["groups"][0]["samples"][sample_name]["path"]
-        path = path.format(name=sample_name, era="2023")
-        # retrieve efficiency value from path string
-        full_path = base_path / Path(path)
-        f = ROOT.TFile.Open(str(full_path))
-        # see if it contains "Events" tree
-        t = f.Get("Events")
-        if not t:
-            print(f"Warning: 'Events' tree not found in file {full_path}")
-            continue
-        nentries = t.GetEntries()
-        total_evts = 38062 if sample_name == "HAHM_13p6TeV_M6" else 50000
-        efficiencies[sample_name] = nentries / total_evts
+        efficiencies[sample_name] = 1
+        # path = sample_info["groups"][0]["samples"][sample_name]["path"]
+        # path = path.format(name=sample_name, era="2023")
+        # # retrieve efficiency value from path string
+        # full_path = base_path / Path(path)
+        # f = ROOT.TFile.Open(str(full_path))
+        # # see if it contains "Events" tree
+        # t = f.Get("Events")
+        # if not t:
+        #     print(f"Warning: 'Events' tree not found in file {full_path}")
+        #     continue
+        # nentries = t.GetEntries()
+        # total_evts = 38062 if sample_name == "HAHM_13p6TeV_M6" else 50000
+        # efficiencies[sample_name] = nentries / total_evts
 
     return efficiencies
 
@@ -285,19 +307,40 @@ def retrieve_producer_efficiencies(input_py):
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass_nanov15_withSyst"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass_nanov15_withScaleSyst_IDSF"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260226/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF"
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260312/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_isoCut"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260226/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_newSignal"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260312/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_isoCut"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260320/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_6p5triggerOnly"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260329/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope"
 
 # -- Interpolate xsec, selection efficiency
+# samples = [
+#     "HAHM_13p6TeV_M1",
+#     "HAHM_13p6TeV_M3p1",
+#     "HAHM_13p6TeV_M5",
+#     "HAHM_13p6TeV_M5p5",
+#     "HAHM_13p6TeV_M6",
+#     "HAHM_13p6TeV_M6p5",
+#     "HAHM_13p6TeV_M8",
+#     "HAHM_13p6TeV_M10",
+# ]
+
 samples = [
+    "HAHM_13p6TeV_M0p5",
     "HAHM_13p6TeV_M1",
+    "HAHM_13p6TeV_M2",
     "HAHM_13p6TeV_M3p1",
-    "HAHM_13p6TeV_M5",
-    "HAHM_13p6TeV_M5p5",
+    "HAHM_13p6TeV_M4",
     "HAHM_13p6TeV_M6",
-    "HAHM_13p6TeV_M6p5",
     "HAHM_13p6TeV_M8",
     "HAHM_13p6TeV_M10",
+    "HAHM_13p6TeV_M12",
 ]
+
 
 # Helper function to load efficiency data for a specific era and folder_tag
 def _load_efficiency_data(era="2023", folder_tag="260226"):
@@ -316,7 +359,8 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     
     # Load producer efficiencies (currently era-independent, using default path)
     # TODO: Update this if producer efficiencies become era-dependent
-    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15.py"
+    # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15.py"
+    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts.py"
     producer_efficiencies = retrieve_producer_efficiencies(producer_eff_path)
     
     # Load efficiencies from snap r
@@ -409,8 +453,9 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
 
 # Initialize with default era and folder_tag (for backward compatibility and standalone usage)
 # This will populate all the global variables (efficiencies, effs_dict, etc.)
-masses = np.array([1, 3.1, 5, 5.5, 6, 6.5, 8, 10])
-x = np.linspace(0, 11, 1000)  # for plotting; was 1, 7
+# masses = np.array([1, 3.1, 5, 5.5, 6, 6.5, 8, 10])
+masses = np.array([0.5, 1, 2, 3.1, 4, 6, 8, 10, 12])
+x = np.linspace(0, 12, 1000)  # for plotting; was 1, 7
 
 _load_efficiency_data(era="2023", folder_tag="260226")
 
@@ -418,8 +463,13 @@ print(f"\nUsing naming scheme: {'new (electronID/trigger)' if has_trigger_variat
 
 # effs = np.array([1.562, 14.010, 19.821, 20.552, 18.541, 11.550]) # %
 # effs_err = np.array([0.055, 0.155, 0.179, 0.181, 0.2, 0.143])
-xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07, 8.273, 6.458]) # pb
-xsecs_err = xsecs * 0.0015 # oom for available points
+# xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07, 8.273, 6.458]) # pb
+# xsecs_err = xsecs * 0.0015 # oom for available points
+acceptances = np.array([0.294, 0.31, 0.322, 0.33, 0.32, 0.26, 0.798, 0.8, 0.758])
+xsecs = np.array([123.7, 127.1, 69.58, 49.08, 35.83, 27.67, 84.28, 59.49, 43.81]) * acceptances # pb
+xsecs_err = np.array([0.21, 0.14, 0.096, 0.066, 0.04, 0.046, 0.078, 0.057, 0.041]) * acceptances # pb
+# xsecs = np.array([123.7 * 0.294, 127.1*0.31, 69.58*0.322, 49.08*0.33, 35.83*0.32, 27.67*0.26, 84.28*0.798, 59.49*0.8, 43.81*0.758]) # pb
+# xsecs_err = np.array([0.21*0.294, 0.14*0.31, 0.096*0.322, 0.066*0.33, 0.04*0.32, 0.046*0.26, 0.078*0.798, 0.057*0.8, 0.041*0.758])
 
 # TODO: update with new mass points
 # xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07]) # pb
@@ -513,6 +563,12 @@ def pchip_effs(use_old = False, use_crystalball=False, variation=None):
     # Add anchor points at low and high mass to control extrapolation
     mass_extended = np.concatenate([[0.0], mass, [13.0]])
     y_extended = np.concatenate([[0.0], y, [0.0]])
+
+    # if there's an intermediate point at 0 efficiency, skip it
+    if np.any((y < 1e-9) & (mass > 0) & (mass < 13)):
+        mask = ~((y < 1e-9) & (mass > 0) & (mass < 13))
+        mass_extended = np.concatenate([[0.0], mass[mask], [13.0]])
+        y_extended = np.concatenate([[0.0], y[mask], [0.0]])
     
     pchip_func = PchipInterpolator(mass_extended, y_extended, extrapolate=True)
     # Wrap in lambda to match the interface expected by plotting
@@ -575,7 +631,7 @@ def get_all_efficiency_functions(use_old=False, era="2023", folder_tag="260226")
     
     return result
 
-def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, plot_both = False, outfolder_arg=None):
+def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, plot_both = False, outfolder_arg=None, use_log=False, era="2023"):
     fig, ax = plt.subplots(figsize=(9, 8))
     hep.style.use(hep.style.CMS)
     palette = [
@@ -592,6 +648,26 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
     ]
     ax.set_prop_cycle(color=palette)
 
+    def _series_info(label):
+        label_lower = label.lower()
+        if "electronid" in label_lower and "up" in label_lower:
+            return palette[1], "^", "Electron ID SF up"
+        if "electronid" in label_lower and "down" in label_lower:
+            return palette[2], "v", "Electron ID SF down"
+        if "trigger" in label_lower and "up" in label_lower:
+            return palette[3], ">", "Trigger SF up"
+        if "trigger" in label_lower and "down" in label_lower:
+            return palette[4], "<", "Trigger SF down"
+        if "nominal" in label_lower:
+            return palette[0], "o", "Nominal"
+        if "up" in label_lower and "down" not in label_lower:
+            return palette[1], "^", "Up variation"
+        if "down" in label_lower:
+            return palette[2], "v", "Down variation"
+        return palette[0], "o", label
+
+    legend_handles = []
+
     mass = masses_dict["ext"] if use_crystalball else masses_dict["base"]
     extension_flag = "ext" if use_crystalball else "base"
     old_flag = "old" if use_old else "new"
@@ -599,15 +675,23 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
 
     if plot_both:
         y_old, y_err_old = effs_dict[extension_flag]["old"]
+        old_color = palette[5]
         ax.errorbar(
-            mass, y_old * 100, yerr=y_err_old * 100, fmt='o', label='No reweight',
+            mass, y_old * 100, yerr=y_err_old * 100, fmt='o', color=old_color, label='_nolegend_',
             markersize=8, capsize=7, elinewidth=2
+        )
+        legend_handles.append(
+            Line2D([], [], color=old_color, marker='o', linestyle='None', markersize=8, label='No reweight')
         )
 
     # Plot nominal efficiency points
+    nominal_color = palette[0]
     ax.errorbar(
-        mass, y * 100, yerr=y_err * 100, fmt='o', label='Nominal',
+        mass, y * 100, yerr=y_err * 100, fmt='o', color=nominal_color, label='_nolegend_',
         markersize=8, capsize=7, elinewidth=2
+    )
+    legend_handles.append(
+        Line2D([], [], color=nominal_color, marker='o', linestyle='--', markersize=8, label='Nominal')
     )
     
     # Plot up/down variation points if available (not for old efficiencies)
@@ -624,81 +708,63 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
             y_electronID_down, y_err_electronID_down = effs_dict[extension_flag]["new_electronID_down"]
             
             ax.errorbar(
-                mass, y_electronID_up * 100, yerr=y_err_electronID_up * 100, fmt='^', label='Electron ID SF up',
-                markersize=7, capsize=5, elinewidth=1.5, color=color_electronID_up
+                mass, y_electronID_up * 100, yerr=y_err_electronID_up * 100, fmt='^', label='_nolegend_',
+                markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
             )
             ax.errorbar(
-                mass, y_electronID_down * 100, yerr=y_err_electronID_down * 100, fmt='v', label='Electron ID SF down',
-                markersize=7, capsize=5, elinewidth=1.5, color=color_electronID_down
+                mass, y_electronID_down * 100, yerr=y_err_electronID_down * 100, fmt='v', label='_nolegend_',
+                markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
             )
+            legend_handles.extend([
+                Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Electron ID SF up'),
+                Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Electron ID SF down'),
+            ])
             
             if "new_trigger_up" in effs_dict[extension_flag]:
                 y_trigger_up, y_err_trigger_up = effs_dict[extension_flag]["new_trigger_up"]
                 y_trigger_down, y_err_trigger_down = effs_dict[extension_flag]["new_trigger_down"]
                 
                 ax.errorbar(
-                    mass, y_trigger_up * 100, yerr=y_err_trigger_up * 100, fmt='>', label='Trigger SF up',
-                    markersize=7, capsize=5, elinewidth=1.5, color=color_trigger_up
+                    mass, y_trigger_up * 100, yerr=y_err_trigger_up * 100, fmt='>', label='_nolegend_',
+                    markersize=7, capsize=5, elinewidth=1.5, color=palette[3]
                 )
                 ax.errorbar(
-                    mass, y_trigger_down * 100, yerr=y_err_trigger_down * 100, fmt='<', label='Trigger SF down',
-                    markersize=7, capsize=5, elinewidth=1.5, color=color_trigger_down
+                    mass, y_trigger_down * 100, yerr=y_err_trigger_down * 100, fmt='<', label='_nolegend_',
+                    markersize=7, capsize=5, elinewidth=1.5, color=palette[4]
                 )
+                legend_handles.extend([
+                    Line2D([], [], color=palette[3], marker='>', linestyle='--', markersize=7, label='Trigger SF up'),
+                    Line2D([], [], color=palette[4], marker='<', linestyle='--', markersize=7, label='Trigger SF down'),
+                ])
         elif "new_up" in effs_dict[extension_flag]:
             # Old naming scheme (backward compatibility) - just ID variations as up/down
-            color_up = '#4292c6'  # Light blue for up
-            color_down = '#08519c'  # Dark blue for down
-            
             y_up, y_err_up = effs_dict[extension_flag]["new_up"]
             y_down, y_err_down = effs_dict[extension_flag]["new_down"]
             
             ax.errorbar(
-                mass, y_up * 100, yerr=y_err_up * 100, fmt='^', label='Up variation',
-                markersize=7, capsize=5, elinewidth=1.5, color=color_up
+                mass, y_up * 100, yerr=y_err_up * 100, fmt='^', label='_nolegend_',
+                markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
             )
             ax.errorbar(
-                mass, y_down * 100, yerr=y_err_down * 100, fmt='v', label='Down variation',
-                markersize=7, capsize=5, elinewidth=1.5, color=color_down
+                mass, y_down * 100, yerr=y_err_down * 100, fmt='v', label='_nolegend_',
+                markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
             )
+            legend_handles.extend([
+                Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Up variation'),
+                Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Down variation'),
+            ])
 
     for label, fit_info in funcs_to_draw.items():
         fit_func = fit_info["fit_function"]
         fit_params = fit_info["fit_parameters"]
+        line_color, _, _ = _series_info(label)
 
         if len(fit_params) > 0:  # parametric fit with parameters
             y_fit = fit_func(x, *fit_params)
         else:  # interpolation function with no parameters
             y_fit = fit_func(x)
-        
-        # Assign matching colors for up/down variations
-        plot_kwargs = {'linewidth': 2, 'linestyle': '--'}
-        
-        # Handle both old and new naming schemes
-        label_lower = label.lower()
-        if "new_electronID_up" in effs_dict[extension_flag]:
-            # New naming scheme
-            if 'electronid' in label_lower and 'up' in label_lower:
-                plot_kwargs['color'] = '#4292c6'
-                plot_kwargs['alpha'] = 0.7
-            elif 'electronid' in label_lower and 'down' in label_lower:
-                plot_kwargs['color'] = '#08519c'
-                plot_kwargs['alpha'] = 0.7
-            elif 'trigger' in label_lower and 'up' in label_lower:
-                plot_kwargs['color'] = '#fd8d3c'
-                plot_kwargs['alpha'] = 0.7
-            elif 'trigger' in label_lower and 'down' in label_lower:
-                plot_kwargs['color'] = '#d94801'
-                plot_kwargs['alpha'] = 0.7
-        elif "new_up" in effs_dict[extension_flag]:
-            # Old naming scheme (backward compatibility)
-            if 'up' in label_lower and 'down' not in label_lower:
-                plot_kwargs['color'] = '#4292c6'
-                plot_kwargs['alpha'] = 0.7
-            elif 'down' in label_lower:
-                plot_kwargs['color'] = '#08519c'
-                plot_kwargs['alpha'] = 0.7
-        
-        ax.plot(x, y_fit * 100, label=f'{label}', **plot_kwargs) 
+
+        ax.plot(x, y_fit * 100, linewidth=2, linestyle='--', color=line_color, alpha=0.8, label='_nolegend_')
 
     ax.set_xlabel("M($Z_D$) [GeV]", fontsize=24)
     ax.set_ylabel("Efficiency [%]", fontsize=24)
@@ -707,12 +773,15 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
     # if maximum is larger than ymax, take max * 1.1
     max_y = max([max(effs_dict[extension_flag][key][0]) for key in effs_dict[extension_flag].keys()]) * 1.1 * 100
     ymin = -0.1 if not plot_both and len(funcs_to_draw) < 5 else 0
+    if use_log:
+        ymin = 1e-6
+        ax.set_yscale('log')
     ax.set_ylim(ymin, max_y)
     ax.tick_params(axis='both', which='major', labelsize=20, length=10)
     ax.grid()
-    ax.legend(fontsize=15)
+    ax.legend(handles=legend_handles, fontsize=15)
     # add cms label with reduced font size
-    hep.cms.label(label="Preliminary", ax=ax, data=False, year=2023, com=13.6, fontsize=18)
+    hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
     
     folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
     os.makedirs(folder_to_use, exist_ok=True)
@@ -773,6 +842,54 @@ def pchip_xsecs(use_old=False):
     
     return {"fit_function" : fit_func, "fit_parameters" : []}
 
+def pchip_acceptances():
+    """PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) interpolation for acceptances."""
+    pchip_func = PchipInterpolator(masses, acceptances, extrapolate=True)
+    fit_func = lambda x: pchip_func(x)
+    return {"fit_function" : fit_func, "fit_parameters" : []}
+
+# Default acceptance function for module usage
+def get_acceptance_function(era="2023", folder_tag="260226"):
+    """Returns the default (PCHIP interpolation) acceptance function.
+    
+    Args:
+        era: Data-taking era (default: "2023") - currently unused but kept for API consistency
+        folder_tag: Folder tag (default: "260226") - currently unused but kept for API consistency
+    """
+    # Note: Acceptances are currently era-independent, but we keep the parameters
+    # for API consistency and potential future use
+    return pchip_acceptances()
+
+def plot_acceptances(funcs_to_draw, outname = "acceptance_vs_mass", outfolder_arg=None, era="2023"):
+    # Acceptance values
+    fig, ax = plt.subplots(figsize=(9, 8))
+
+    ax.plot(masses, acceptances, 'o', markersize=8, label="Acceptance")
+
+    for label, fit_info in funcs_to_draw.items():
+        fit_func = fit_info["fit_function"]
+        fit_params = fit_info["fit_parameters"]
+
+        if len(fit_params) > 0:  # parametric fit with parameters
+            y = fit_func(x, *fit_params)
+        else:  # interpolation function with no parameters
+            y = fit_func(x)
+        ax.plot(x, y, label=label, linewidth=2, linestyle="--")
+
+    ax.set_xlabel("M($Z_D$) [GeV]")
+    ax.set_ylabel("Acceptance")
+    ax.set_ylim(0, 1)
+    ax.grid()
+    ax.legend()
+
+    # add cms label with reduced font size
+    hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
+
+    folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
+    os.makedirs(folder_to_use, exist_ok=True)
+    for ext in [".png", ".pdf"]:
+        plt.savefig(os.path.join(folder_to_use, outname + ext))
+
 # Default xsec function for module usage
 def get_xsec_function(use_old=False, era="2023", folder_tag="260226"):
     """Returns the default (PCHIP interpolation) cross-section function.
@@ -786,7 +903,7 @@ def get_xsec_function(use_old=False, era="2023", folder_tag="260226"):
     # for API consistency and potential future use
     return pchip_xsecs(use_old=use_old)
 
-def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfolder_arg=None):
+def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfolder_arg=None, era="2023"):
     # Xsec values
     fig, ax = plt.subplots(figsize=(9, 8))
 
@@ -816,12 +933,17 @@ def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfold
 
     ax.set_xlabel("M($Z_D$) [GeV]")
     ax.set_ylabel("$\sigma$ [pb]")
-    ax.set_ylim(0, 5 if use_old else 45)
+    y_max = 45
+    if use_old:
+        y_max = 5
+    if max(xsecs_to_use) > 45:
+        y_max = 80
+    ax.set_ylim(0, y_max)
     ax.grid()
     ax.legend()
 
     # add cms label with reduced font size
-    hep.cms.label(label="Preliminary", ax=ax, data=False, year=2023, com=13.6, fontsize=18)
+    hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
 
     folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
     os.makedirs(folder_to_use, exist_ok=True)
@@ -830,8 +952,8 @@ def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfold
 
 if __name__ == "__main__":
     # Process all eras
-    all_eras = ["2022", "2022EE", "2023", "2023BPix"]
     # all_eras = ["2022"]
+    all_eras = ["2022","2023","2022EE","2023BPix"]
     
     for era in all_eras:
         print(f"\n{'='*80}")
@@ -853,11 +975,11 @@ if __name__ == "__main__":
             print(f"{sample}: {effs_nominal[i]*100:.3f} +- {effs_err[i]*100:.3f} % (new) [relative error = {effs_err[i]/effs_nominal[i]*100:.2f} %]")
 
         # post-reweight efficiencies, plot and fit (also plotting old for comparison)
-        fit_result = fit_effs(use_crystalball=True)
-        fit_result_poly = fit_effs(use_crystalball=False)
-        fit_result_poly_exp = fit_effs(use_poly_exp=True)
-        fit_result_lognormal = fit_effs(use_lognormal=True)
-        fit_result_novosibirsk = fit_effs(use_novosibirsk=True)
+        # fit_result = fit_effs(use_crystalball=True)
+        # fit_result_poly = fit_effs(use_crystalball=False)
+        # fit_result_poly_exp = fit_effs(use_poly_exp=True)
+        # fit_result_lognormal = fit_effs(use_lognormal=True)
+        # fit_result_novosibirsk = fit_effs(use_novosibirsk=True)
         interp_result = interp_effs(use_old=False, use_crystalball=False)
         pchip_result = pchip_effs(use_old=False, use_crystalball=False, variation=None)
         
@@ -873,20 +995,20 @@ if __name__ == "__main__":
             pchip_result_trigger_up = None
             pchip_result_trigger_down = None
         
-        print("FIT RESULTS dCB: ", fit_result["fit_parameters"])
-        print("FIT RESULTS poly: ", fit_result_poly["fit_parameters"])
-        print("FIT RESULTS poly*exp: ", fit_result_poly_exp["fit_parameters"])
-        print("FIT RESULTS Novosibirsk: ", fit_result_novosibirsk["fit_parameters"])
+        # print("FIT RESULTS dCB: ", fit_result["fit_parameters"])
+        # print("FIT RESULTS poly: ", fit_result_poly["fit_parameters"])
+        # print("FIT RESULTS poly*exp: ", fit_result_poly_exp["fit_parameters"])
+        # print("FIT RESULTS Novosibirsk: ", fit_result_novosibirsk["fit_parameters"])
         
-        plot_effs(use_old=False, use_crystalball=True,
-                  funcs_to_draw = {"dCB fit" : fit_result,
-                                  "Polynomial (4th deg.) fit" : fit_result_poly_exp,
-                                  "Novosibirsk fit" : fit_result_novosibirsk,
-                                  "Log-normal fit" : fit_result_lognormal,
-                                  "Linear interpolation" : interp_result,
-                                  "PCHIP interpolation" : pchip_result,
-                                  },
-                  outname="efficiency_vs_mass", plot_both=True, outfolder_arg=era_outfolder)
+        # plot_effs(use_old=False, use_crystalball=True,
+        #           funcs_to_draw = {"dCB fit" : fit_result,
+        #                           "Polynomial (4th deg.) fit" : fit_result_poly_exp,
+        #                           "Novosibirsk fit" : fit_result_novosibirsk,
+        #                           "Log-normal fit" : fit_result_lognormal,
+        #                           "Linear interpolation" : interp_result,
+        #                           "PCHIP interpolation" : pchip_result,
+        #                           },
+        #           outname="efficiency_vs_mass", plot_both=True, outfolder_arg=era_outfolder)
 
         # updated xsec values, plot and fit
         fit_result_xsec = fit_xsecs()
@@ -896,7 +1018,12 @@ if __name__ == "__main__":
         plot_xsecs(funcs_to_draw={"Exponential fit" : fit_result_xsec,
                                   "Linear interpolation" : interp_result_xsec,
                                   "PCHIP interpolation" : pchip_result_xsec},
-                   outname="xsec_vs_mass", outfolder_arg=era_outfolder)
+                   outname="xsec_vs_mass", outfolder_arg=era_outfolder, era=era)
+
+        # acceptance values, PCHIP interpolation only
+        pchip_result_acceptance = pchip_acceptances()
+        # plot_acceptances(funcs_to_draw={"PCHIP interpolation" : pchip_result_acceptance},
+        #          outname="acceptance_vs_mass", outfolder_arg=era_outfolder)
         
         # Clean plots with just final PCHIP interpolation and variations
         if has_trigger_variations:
@@ -906,16 +1033,26 @@ if __name__ == "__main__":
                                       "PCHIP electronID down" : pchip_result_electronID_down,
                                       "PCHIP trigger up" : pchip_result_trigger_up,
                                       "PCHIP trigger down" : pchip_result_trigger_down},
-                      outname="efficiency_vs_mass_final", plot_both=False, outfolder_arg=era_outfolder)
+                      outname="efficiency_vs_mass_final", plot_both=False, outfolder_arg=era_outfolder, era=era)
+            plot_effs(use_old=False, use_crystalball=False,
+                      funcs_to_draw = {"PCHIP nominal" : pchip_result,
+                                      "PCHIP electronID up" : pchip_result_electronID_up,
+                                      "PCHIP electronID down" : pchip_result_electronID_down,
+                                      "PCHIP trigger up" : pchip_result_trigger_up,
+                                      "PCHIP trigger down" : pchip_result_trigger_down},
+                      outname="efficiency_vs_mass_final_log", plot_both=False, outfolder_arg=era_outfolder, era=era,
+                      use_log=True)
         else:
             plot_effs(use_old=False, use_crystalball=False,
                       funcs_to_draw = {"PCHIP nominal" : pchip_result,
                                       "PCHIP up" : pchip_result_electronID_up,
                                       "PCHIP down" : pchip_result_electronID_down},
-                      outname="efficiency_vs_mass_final", plot_both=False, outfolder_arg=era_outfolder)
+                      outname="efficiency_vs_mass_final", plot_both=False, outfolder_arg=era_outfolder, era=era)
         
         plot_xsecs(funcs_to_draw={"PCHIP interpolation" : pchip_result_xsec},
-                   outname="xsec_vs_mass_final", outfolder_arg=era_outfolder)
+                   outname="xsec_vs_mass_final", outfolder_arg=era_outfolder, era=era)
+        plot_acceptances(funcs_to_draw={"PCHIP interpolation" : pchip_result_acceptance},
+                 outname="acceptance_vs_mass_final", outfolder_arg=era_outfolder, era=era)
         
         print(f"\nCompleted processing for era {era}. Plots saved to: {era_outfolder}\n")
 

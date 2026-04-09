@@ -28,8 +28,15 @@ class AnalysisConfig:
         # self.eos_folder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass"
         # self.base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/signal_model_withScaleSyst_IDSF/zsnap/era2023/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/"
-        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/signal_model_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/signal_model_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/signal_model_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts__updatedSignal/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly__updatedSignal/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zsnap/era{era}/"
+        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight/zsnap/era{era}/"
         self.base_eos_folder = Path("/eos/home-n/npalmeri/www/DiElectron/signal_model")
         self.eos_folder = str(self.base_eos_folder)
         
@@ -43,7 +50,14 @@ class AnalysisConfig:
         # Analysis parameters
         self.vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
         self.parametrized_vars = ["mean", "sigma", "alphaL", "alphaR", "nL", "nR"]
-        self.nuisanced_vars = {} #e.g. format: {"sigma": ["electronSmear", "electronScale"]}
+        self.single_cb = False
+        self.double_gaussian = False
+        self.gaussian_signal = False
+        self.envelope = False
+        self.nuisanced_vars = {} # merged shape+weight, e.g. {"sigma": ["electronSmear", "triggerSF"]}
+        self.shape_nuisanced_vars = {}
+        self.weight_nuisanced_vars = {}
+        self.nuisanced_vars_stat = []
         
         # Sample configurations
         self.samples = self._create_sample_configs()
@@ -53,89 +67,35 @@ class AnalysisConfig:
         
         # Common parameter ranges
         self._apply_common_ranges()
+
+    def enable_single_cb(self):
+        """Switch to single-sided Crystal Ball parameterization."""
+        self.single_cb = True
+        self.double_gaussian = False
+        self.gaussian_signal = False
+        self.envelope = False
+        self.vars = ["mean", "sigma", "alphaL", "nL"]
+        self.parametrized_vars = ["mean", "sigma", "alphaL", "nL"]
+
+    def enable_double_gaussian(self):
+        """Switch to double-Gaussian parameterization."""
+        self.double_gaussian = True
+        self.single_cb = False
+        self.gaussian_signal = False
+        self.envelope = False
+        self.vars = ["mean1", "sigma1", "mean2", "sigma2", "sig1frac"]
+        self.parametrized_vars = ["mean1", "sigma1", "mean2", "sigma2", "sig1frac"]
+
+    def enable_envelope(self):
+        """Enable the signal-model envelope mode."""
+        self.single_cb = False
+        self.double_gaussian = False
+        self.gaussian_signal = False
+        self.envelope = True
     
     def _create_sample_configs(self) -> Dict[str, SampleConfig]:
         """Create sample configurations"""
         samples_data = {
-            "Zd_M1": {
-                "filename": "HAHM_13p6TeV_M1.root",
-                "nominal_mass": 1,
-                "nominal_width": 0.02,
-                "mass_range": [1, 0.4, 1.4],
-                "mass_GEN_range": [1, 0.8, 1.2],
-                "mean_BW_range": [1, 0.7, 1.2],
-            },
-            "Zd_M3p1": {
-                "filename": "HAHM_13p6TeV_M3p1.root",
-                "nominal_mass": 3.1,
-                "nominal_width": 0.02,
-                "mass_range": [3.1, 2, 3.6],
-                "mass_GEN_range": [3.1, 2.9, 3.3],
-                "mean_BW_range": [3.1, 2.9, 3.2],
-            },
-            "Zd_M5": {
-                "filename": "HAHM_13p6TeV_M5.root",
-                "nominal_mass": 5,
-                "nominal_width": 0.02,
-                "mass_range": [5, 3.5, 6],
-                "mass_GEN_range": [5, 4.75, 5.25],
-                "mean_BW_range": [5, 4, 6],
-            },
-            "Zd_M5p5": {
-                "filename": "HAHM_13p6TeV_M5p5.root",
-                "nominal_mass": 5.5,
-                "nominal_width": 0.02,
-                "mass_range": [5.5, 4, 6.5],
-                "mass_GEN_range": [5.5, 5.25, 5.75],
-                "mean_BW_range": [5.5, 4.5, 6.5],
-            },
-            "Zd_M6": {
-                "filename": "HAHM_13p6TeV_M6.root",
-                "nominal_mass": 6,
-                "nominal_width": 0.02,
-                "mass_range": [6, 4.5, 7],
-                "mass_GEN_range": [6, 5.75, 6.25],
-                "mean_BW_range": [6, 5, 7],
-            },
-            "Zd_M6p5": {
-                "filename": "HAHM_13p6TeV_M6p5.root",
-                "nominal_mass": 6.5,
-                "nominal_width": 0.02,
-                "mass_range": [6.5, 5, 7.5],
-                "mass_GEN_range": [6.5, 6.25, 6.75],
-                "mean_BW_range": [6.5, 5.5, 7.5],
-            },
-            "Zd_M8": {
-                "filename": "HAHM_13p6TeV_M8.root",
-                "nominal_mass": 8,
-                "nominal_width": 0.02,
-                "mass_range": [8, 7, 9],
-                "mass_GEN_range": [8, 7.75, 8.25],
-                "mean_BW_range": [8, 7, 9],
-            },
-            "Zd_M10": {
-                "filename": "HAHM_13p6TeV_M10.root",
-                "nominal_mass": 10,
-                "nominal_width": 0.02,
-                "mass_range": [10, 8, 11],
-                "mass_GEN_range": [10, 8, 12],
-                "mean_BW_range": [10, 8, 11],
-                #custom ranges
-                "response_mean_range" : [0, -2, 0.5],
-                # "response_nL_range" : [5, 0, 20],
-                # "response_alphaL_range" : [1, 0.1, 20],
-                # "response_nR_range" : [5, 0.1, 10],
-                # "response_alphaR_range" : [1, 0.1, 20],
-            },
-            
-            # "Zd_M0p5": {
-            #     "filename": "HAHM_13p6TeV_M0p5.root",
-            #     "nominal_mass": 0.5,
-            #     "nominal_width": 0.02,
-            #     "mass_range": [0.5, 0.1, 0.9],
-            #     "mass_GEN_range": [0.5, 0.1, 0.9],
-            #     "mean_BW_range": [0.5, 0.1, 0.9],
-            # },
             # "Zd_M1": {
             #     "filename": "HAHM_13p6TeV_M1.root",
             #     "nominal_mass": 1,
@@ -143,14 +103,6 @@ class AnalysisConfig:
             #     "mass_range": [1, 0.4, 1.4],
             #     "mass_GEN_range": [1, 0.8, 1.2],
             #     "mean_BW_range": [1, 0.7, 1.2],
-            # },
-            # "Zd_M2": {
-            #     "filename": "HAHM_13p6TeV_M2.root",
-            #     "nominal_mass": 2,
-            #     "nominal_width": 0.02,
-            #     "mass_range": [2, 1.4, 2.7],
-            #     "mass_GEN_range": [2, 1.4, 2.7],
-            #     "mean_BW_range": [2, 1.4, 2.7],
             # },
             # "Zd_M3p1": {
             #     "filename": "HAHM_13p6TeV_M3p1.root",
@@ -160,13 +112,21 @@ class AnalysisConfig:
             #     "mass_GEN_range": [3.1, 2.9, 3.3],
             #     "mean_BW_range": [3.1, 2.9, 3.2],
             # },
-            # "Zd_M4": {
-            #     "filename": "HAHM_13p6TeV_M4.root",
-            #     "nominal_mass": 4,
+            # "Zd_M5": {
+            #     "filename": "HAHM_13p6TeV_M5.root",
+            #     "nominal_mass": 5,
             #     "nominal_width": 0.02,
-            #     "mass_range": [4, 3.0, 5.0],
-            #     "mass_GEN_range": [4, 3.0, 5.0],
-            #     "mean_BW_range": [4, 3.0, 5.0],
+            #     "mass_range": [5, 3.5, 6],
+            #     "mass_GEN_range": [5, 4.75, 5.25],
+            #     "mean_BW_range": [5, 4, 6],
+            # },
+            # "Zd_M5p5": {
+            #     "filename": "HAHM_13p6TeV_M5p5.root",
+            #     "nominal_mass": 5.5,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [5.5, 4, 6.5],
+            #     "mass_GEN_range": [5.5, 5.25, 5.75],
+            #     "mean_BW_range": [5.5, 4.5, 6.5],
             # },
             # "Zd_M6": {
             #     "filename": "HAHM_13p6TeV_M6.root",
@@ -176,6 +136,14 @@ class AnalysisConfig:
             #     "mass_GEN_range": [6, 5.75, 6.25],
             #     "mean_BW_range": [6, 5, 7],
             # },
+            # "Zd_M6p5": {
+            #     "filename": "HAHM_13p6TeV_M6p5.root",
+            #     "nominal_mass": 6.5,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [6.5, 5, 7.5],
+            #     "mass_GEN_range": [6.5, 6.25, 6.75],
+            #     "mean_BW_range": [6.5, 5.5, 7.5],
+            # },
             # "Zd_M8": {
             #     "filename": "HAHM_13p6TeV_M8.root",
             #     "nominal_mass": 8,
@@ -184,6 +152,88 @@ class AnalysisConfig:
             #     "mass_GEN_range": [8, 7.75, 8.25],
             #     "mean_BW_range": [8, 7, 9],
             # },
+            # "Zd_M10": {
+            #     "filename": "HAHM_13p6TeV_M10.root",
+            #     "nominal_mass": 10,
+            #     "nominal_width": 0.02,
+            #     "mass_range": [10, 8, 11],
+            #     "mass_GEN_range": [10, 8, 12],
+            #     "mean_BW_range": [10, 8, 11],
+            #     #custom ranges
+            #     "response_mean_range" : [0, -2, 0.5],
+            #     # "response_nL_range" : [5, 0, 20],
+            #     # "response_alphaL_range" : [1, 0.1, 20],
+            #     # "response_nR_range" : [5, 0.1, 10],
+            #     # "response_alphaR_range" : [1, 0.1, 20],
+            # },
+            "Zd_M0p5": {
+                "filename": "HAHM_13p6TeV_M0p5.root",
+                "nominal_mass": 0.5,
+                "nominal_width": 0.02,
+                "mass_range": [0.5, 0.1, 0.9],
+                "mass_GEN_range": [0.5, 0.1, 0.9],
+                "mean_BW_range": [0.5, 0.1, 0.9],
+                "response_nR_range" : [1.5, 0, 5],
+                "response_nL_range" : [1.5, 0, 5],
+                "response_alphaL_range" : [0.7, 0.1, 5],                
+                "response_alphaR_range" : [1, 0.1, 5],
+            },
+            "Zd_M1": {
+                "filename": "HAHM_13p6TeV_M1.root",
+                "nominal_mass": 1,
+                "nominal_width": 0.02,
+                "mass_range": [1, 0.6, 1.2],
+                "mass_GEN_range": [1, 0.8, 1.2],
+                "mean_BW_range": [1, 0.7, 1.2],
+                "response_nR_range" : [1.5, 0, 5],
+                "response_nL_range" : [1.5, 0, 5],
+                "response_alphaL_range" : [0.7, 0.1, 5],                
+                "response_alphaR_range" : [1.5, 0.1, 5],
+            },
+            "Zd_M2": {
+                "filename": "HAHM_13p6TeV_M2.root",
+                "nominal_mass": 2,
+                "nominal_width": 0.02,
+                "mass_range": [2, 1.4, 2.3],
+                "mass_GEN_range": [2, 1.4, 2.7],
+                "mean_BW_range": [2, 1.4, 2.7],
+                "response_nR_range" : [1.5, 0, 5],
+                "response_nL_range" : [1.5, 0, 5],
+                "response_alphaL_range" : [0.7, 0.1, 5],                
+                "response_alphaR_range" : [1.5, 0.1, 5],
+            },
+            "Zd_M3p1": {
+                "filename": "HAHM_13p6TeV_M3p1.root",
+                "nominal_mass": 3.1,
+                "nominal_width": 0.02,
+                "mass_range": [3.1, 2.4, 3.6],
+                "mass_GEN_range": [3.1, 2.9, 3.3],
+                "mean_BW_range": [3.1, 2.9, 3.2],
+            },
+            "Zd_M4": {
+                "filename": "HAHM_13p6TeV_M4.root",
+                "nominal_mass": 4,
+                "nominal_width": 0.02,
+                "mass_range": [4, 3.0, 4.5],
+                "mass_GEN_range": [4, 3.0, 5.0],
+                "mean_BW_range": [4, 3.0, 5.0],
+            },
+            "Zd_M6": {
+                "filename": "HAHM_13p6TeV_M6.root",
+                "nominal_mass": 6,
+                "nominal_width": 0.02,
+                "mass_range": [6, 4, 7.5],
+                "mass_GEN_range": [6, 5.75, 6.25],
+                "mean_BW_range": [6, 5, 7],
+            },
+            "Zd_M8": {
+                "filename": "HAHM_13p6TeV_M8.root",
+                "nominal_mass": 8,
+                "nominal_width": 0.02,
+                "mass_range": [8, 6, 9],
+                "mass_GEN_range": [8, 7.75, 8.25],
+                "mean_BW_range": [8, 7, 9],
+            },
             # "Zd_M10": {
             #     "filename": "HAHM_13p6TeV_M10.root",
             #     "nominal_mass": 10,
@@ -212,7 +262,6 @@ class AnalysisConfig:
             #     # "response_nR_range" : [5, 0.1, 10],
             #     # "response_alphaR_range" : [1, 0.1, 20],
             # },
-
             "UpsilonToEE": {
                 "filename": "UpsilonToEE.root",
                 "nominal_mass": 9.460,
@@ -225,7 +274,7 @@ class AnalysisConfig:
                 "filename": "JPsiToEE.root",
                 "nominal_mass": 3.097,
                 "nominal_width": 0.02,
-                "mass_range": [3.1, 2, 3.6],
+                "mass_range": [3.1, 2.3, 3.6],
                 "mass_GEN_range": [3.1, 2.9, 3.3],
                 "mean_BW_range": [3.1, 2.9, 3.2],
             },
@@ -241,8 +290,12 @@ class AnalysisConfig:
             # samples[name].file_GEN = os.path.join(self.base_path, "base_10_Final", data["filename"])
             # samples[name].file = os.path.join(self.base_path, "base_11_full", data["filename"])
             # samples[name].file_GEN = os.path.join(self.base_path, "base_11_full", data["filename"])
-            samples[name].file = os.path.join(self.base_path, "base_12_full", data["filename"])
-            samples[name].file_GEN = os.path.join(self.base_path, "base_12_full", data["filename"])
+            # samples[name].file = os.path.join(self.base_path, "base_12_full", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_12_full", data["filename"])
+            # samples[name].file = os.path.join(self.base_path, "base_13_full", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_13_full", data["filename"])
+            samples[name].file = os.path.join(self.base_path, "base_14_full", data["filename"])
+            samples[name].file_GEN = os.path.join(self.base_path, "base_14_full", data["filename"])
         
         return samples
     
@@ -293,12 +346,19 @@ class AnalysisConfig:
             "reduced_mass_range": [0, -0.6, 0.6],
             "response_mean_range": [0, -1, 1],
             # "response_mean_range": [0, -0.2, 0.2],
-            "response_sigma_range": [0.02, 0, 1],
+            "response_sigma_range": [0.01, 0, 1],
             "response_alphaL_range": [0.4, 0.1, 10],
             "response_alphaR_range": [5, 0.1, 10],
             "response_nL_range": [1, 0, 10],
             "response_nR_range": [1, 0, 10],
             "response_nsgn_range": [100, 0, 1000],
+
+            # Double-Gaussian response parameters
+            "response_mean1_range": [0, -1, 1],
+            "response_sigma1_range": [0.01, 0, 1],
+            "response_mean2_range": [0, -1, 1],
+            "response_sigma2_range": [0.02, 0, 2],
+            "response_sig1frac_range": [0.7, 0, 1],
 
             # "reduced_mass_range" : [0, -0.6, 0.6],
             # "response_mean_range" : [0, -0.2, 0.2],
@@ -311,13 +371,20 @@ class AnalysisConfig:
 
             # Signal model parameters
             "mean_range": [0, -0.6, 0.6],
-            "sigma_range": [0.1, 0, 1],
+            "sigma_range": [0.05, 0.01, 1],
             "alphaL_range": [1, 0.2, 10],
-            "alphaR_range": [5, 0.2, 10],
-            "nL_range": [1, 0, 10],
+            "alphaR_range": [1, 0.2, 10],
+            "nL_range": [1, 0, 20],
             "nR_range": [1, 0, 10],
             "width_BW_range": [0.001, 0, 0.1],
             "nsgn_range": [100, 0, 1000],
+
+            # Double-Gaussian signal parameters
+            "mean1_range": [0, -0.6, 0.6],
+            "sigma1_range": [0.05, 0.01, 1],
+            "mean2_range": [0, -0.6, 0.6],
+            "sigma2_range": [0.1, 0.02, 2],
+            "sig1frac_range": [0.7, 0, 1],
         }
         
         for name, sample in self.samples.items():
@@ -330,13 +397,15 @@ class AnalysisConfig:
         for name, sample in self.samples.items():
             # Update mean ranges by adding nominal mass
             for attr_name in dir(sample):
-                if "mean_range" in attr_name:
+                # if "mean_range" in attr_name:
+                if "mean" in attr_name:
                     current_range = getattr(sample, attr_name)
                     updated_range = [val + sample.nominal_mass for val in current_range]
                     setattr(sample, attr_name, updated_range)
                 
                 # Update sigma ranges by multiplying by nominal mass
-                if "sigma_range" in attr_name:
+                # if "sigma_range" in attr_name:
+                if "sigma" in attr_name:
                     current_range = getattr(sample, attr_name)
                     updated_range = [val * sample.nominal_mass for val in current_range]
                     setattr(sample, attr_name, updated_range)
@@ -401,6 +470,13 @@ class AnalysisRunner:
             wsfile_path,
             self.config.parametrized_vars,
             self.config.nuisanced_vars,
+            shape_nuisanced_vars=self.config.shape_nuisanced_vars,
+            weight_nuisanced_vars=self.config.weight_nuisanced_vars,
+            nuisanced_vars_stat=self.config.nuisanced_vars_stat,
+            single_cb=self.config.single_cb,
+            double_gaussian=self.config.double_gaussian,
+            gaussian_signal=self.config.gaussian_signal,
+            envelope=self.config.envelope,
             eos_folder=self.config.eos_folder,
             use_reweighting=use_reweighting,
             use_syst=use_syst,
@@ -517,12 +593,28 @@ def create_argument_parser():
     
     # Analysis options
     parser.add_argument("--full", help="Run all steps", action="store_true", default=False)
-    parser.add_argument("--parametrized_vars", help="Parametrized variables", nargs="+", 
-                       default=["mean", "sigma", "alphaL", "alphaR", "nL", "nR"])
+    parser.add_argument("--single_cb", help="Use single-sided Crystal Ball (mean, sigma, alphaL, nL)",
+                       action="store_true", default=False)
+    parser.add_argument("--double_gaussian", help="Use sum of two Gaussians (mean1, sigma1, mean2, sigma2, sig1frac)",
+                       action="store_true", default=False)
+    parser.add_argument("--gaussian_signal", help="Use Gaussian core for signal model only (response fits remain Crystal Ball)",
+                       action="store_true", default=False)
+    parser.add_argument("--envelope", help="Build a RooMultiPdf envelope from the dCB and Gaussian signal models",
+                       action="store_true", default=False)
+    parser.add_argument("--parametrized_vars", help="Parametrized variables (default depends on --single_cb)", nargs="+", 
+                       default=None)
     parser.add_argument("--nuisanced_vars", 
                        help="Parametrized variables with their systematic variations. Format: var:syst1,syst2 (e.g., sigma:electronSmear or sigma:electronSmear,electronScale). Can specify multiple variables.", 
                        nargs="+", 
-                       default=["sigma:electronSmearing,electronScaleVariations"])
+                       default=None)
+    parser.add_argument("--weight_nuisanced_vars",
+                       help="Parametrized variables with weight-only systematic variations. Format: var:wSyst1,wSyst2 (e.g., sigma:triggerSF,puWeight). Can specify multiple variables.",
+                       nargs="+",
+                       default=[])
+    parser.add_argument("--nuisanced_vars_stat",
+                       help="Parametrized variables with statistical nuisance treatment from linear-fit uncertainties. Format: var1 var2 ...",
+                       nargs="+",
+                       default=[])
     parser.add_argument("--use_reco_mass", help="Derive signal model from reco mass rather than reduced", 
                        action="store_true", default=False)
     parser.add_argument("--no_reweighting", help="Disable reweighting (set all weights to 1)", 
@@ -560,6 +652,34 @@ def create_argument_parser():
     return parser
 
 
+def parse_nuisance_specs(specs: List[str]) -> Dict[str, List[str]]:
+    """Parse specs in the format var:syst1,syst2 into a dictionary."""
+    parsed = {}
+    for spec in specs:
+        if ':' in spec:
+            var, systs = spec.split(':', 1)
+            values = [s.strip() for s in systs.split(',') if s.strip()]
+            parsed[var] = values
+        else:
+            parsed[spec] = []
+    return parsed
+
+
+def merge_nuisance_dicts(shape_nuisanced_vars: Dict[str, List[str]],
+                         weight_nuisanced_vars: Dict[str, List[str]],
+                         stat_nuisanced_vars: Dict[str, List[str]] = None) -> Dict[str, List[str]]:
+    """Merge nuisance maps per parameter, keeping order and uniqueness."""
+    merged = {}
+    all_vars = set(shape_nuisanced_vars.keys()) | set(weight_nuisanced_vars.keys())
+    for var in all_vars:
+        ordered = []
+        for value in shape_nuisanced_vars.get(var, []) + weight_nuisanced_vars.get(var, []):
+            if value not in ordered:
+                ordered.append(value)
+        merged[var] = ordered
+    return merged
+
+
 def main():
     """Main function"""
     # Parse arguments
@@ -581,32 +701,65 @@ def main():
     
     if args.use_reco_mass:
         config.update_for_reco_mass()
+
+    if args.single_cb and args.double_gaussian:
+        raise ValueError("--single_cb and --double_gaussian are mutually exclusive")
+
+    if args.gaussian_signal and (args.single_cb or args.double_gaussian or args.envelope):
+        raise ValueError("--gaussian_signal is only compatible with the default double-sided Crystal Ball mode")
+
+    if args.envelope and (args.single_cb or args.double_gaussian or args.gaussian_signal):
+        raise ValueError("--envelope is only compatible with the default double-sided Crystal Ball mode")
+
+    if args.single_cb:
+        config.enable_single_cb()
+    if args.double_gaussian:
+        config.enable_double_gaussian()
+    if args.gaussian_signal:
+        config.gaussian_signal = True
+    if args.envelope:
+        config.enable_envelope()
     
     # Validate parametrized variables
-    if not set(args.parametrized_vars).issubset(set(config.vars)):
-        raise ValueError(f"parametrized_vars must be a subset of vars ({config.vars}), got {args.parametrized_vars}")
-    config.parametrized_vars = args.parametrized_vars
+    if args.parametrized_vars is None:
+        config.parametrized_vars = config.vars.copy()
+    else:
+        if not set(args.parametrized_vars).issubset(set(config.vars)):
+            raise ValueError(f"parametrized_vars must be a subset of vars ({config.vars}), got {args.parametrized_vars}")
+        config.parametrized_vars = args.parametrized_vars
 
-    # Parse nuisanced variables from format "var:syst1,syst2" to dict
-    nuisanced_vars = {}
-    for spec in args.nuisanced_vars:
-        if ':' in spec:
-            var, systs = spec.split(':', 1)
-            nuisanced_vars[var] = [s.strip() for s in systs.split(',')]
-        else:
-            # If no colon, assume all systematics (or handle as you prefer)
-            nuisanced_vars[spec] = []
-    
-    # Validate nuisanced variables are subset of parametrized variables
-    if not set(nuisanced_vars.keys()).issubset(set(config.parametrized_vars)):
-        raise ValueError(f"nuisanced_vars must be a subset of parametrized_vars ({config.parametrized_vars}), got {list(nuisanced_vars.keys())}")
-    
-    # Store the parsed nuisanced variables (you can add this to config or pass to analyzer)
-    config.nuisanced_vars = nuisanced_vars
+    # Parse shape and weight nuisanced variables from format "var:syst1,syst2"
+    default_shape_specs = ["sigma1:electronSmearing,electronScaleVariations"] if config.double_gaussian else ["sigma:electronSmearing,electronScaleVariations"]
+    shape_nuisance_specs = args.nuisanced_vars if args.nuisanced_vars is not None else default_shape_specs
+
+    shape_nuisanced_vars = parse_nuisance_specs(shape_nuisance_specs)
+    weight_nuisanced_vars = parse_nuisance_specs(args.weight_nuisanced_vars)
+    stat_nuisanced_vars = [v.strip() for v in args.nuisanced_vars_stat if v.strip()]
+
+    # Validate keys are subsets of parametrized variables
+    if not set(shape_nuisanced_vars.keys()).issubset(set(config.parametrized_vars)):
+        raise ValueError(
+            f"nuisanced_vars must be a subset of parametrized_vars ({config.parametrized_vars}), got {list(shape_nuisanced_vars.keys())}"
+        )
+    if not set(weight_nuisanced_vars.keys()).issubset(set(config.parametrized_vars)):
+        raise ValueError(
+            f"weight_nuisanced_vars must be a subset of parametrized_vars ({config.parametrized_vars}), got {list(weight_nuisanced_vars.keys())}"
+        )
+    if not set(stat_nuisanced_vars).issubset(set(config.parametrized_vars)):
+        raise ValueError(
+            f"nuisanced_vars_stat must be a subset of parametrized_vars ({config.parametrized_vars}), got {stat_nuisanced_vars}"
+        )
+
+    # Keep separate maps for dataset handling, and merged map for fit/parametrization logic
+    config.shape_nuisanced_vars = shape_nuisanced_vars
+    config.weight_nuisanced_vars = weight_nuisanced_vars
+    config.nuisanced_vars_stat = stat_nuisanced_vars
+    config.nuisanced_vars = merge_nuisance_dicts(shape_nuisanced_vars, weight_nuisanced_vars)
     
     # Create and run analysis
     runner = AnalysisRunner(config)
-    runner.run_full_analysis(args, analysis_max_workers=4, plot_max_workers=1)
+    # runner.run_full_analysis(args, analysis_max_workers=4, plot_max_workers=1)
+    runner.run_full_analysis(args, analysis_max_workers=1, plot_max_workers=1)
 
 
 if __name__ == "__main__":

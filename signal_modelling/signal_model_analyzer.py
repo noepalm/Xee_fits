@@ -306,17 +306,52 @@ class WorkspaceManager:
 class DatasetLoader:
     """Handles loading and processing of ROOT datasets"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, use_reweighting: bool = True, use_syst: bool = False, variations: List[str] = None,  era: str = "2023"):
+    def __init__(self, workspace: ROOT.RooWorkspace, use_reweighting: bool = True,
+                 use_syst: bool = False, shape_variations: Optional[List[str]] = None,
+                 weight_variations: Optional[List[str]] = None, era: str = "2023"):
         self.workspace = workspace
         self.use_reweighting = use_reweighting
         self.use_syst = use_syst
         self.era = era
 
+        self.shape_variations = sorted(set(shape_variations or []))
+        self.weight_variations = sorted(set(weight_variations or []))
+        self.variations = sorted(set(self.shape_variations) | set(self.weight_variations))
+
         if self.use_syst:
-            # self.variations = ["electronSmearing", "electronScaleVariation"]
-            self.variations = variations
-            print(f"DEBUG: variations set to {self.variations}")
+            print(f"DEBUG: shape variations set to {self.shape_variations}")
+            print(f"DEBUG: weight variations set to {self.weight_variations}")
+            print(f"DEBUG: merged variations set to {self.variations}")
             self.directions = ["up", "down"]
+
+    def _get_weight_variation(self, tree: Any, variation: str, direction: str,
+                              event_weight: float, obj_index: int) -> float:
+        """Get varied event weight for a given variation/direction.
+
+        Supports a few branch naming conventions to make integration with existing ntuples easier.
+        """
+        candidate_branches = [
+            f"{variation}_{direction}",
+            f"weight_{variation}_{direction}",
+            f"weight__{variation}_{direction}",
+        ]
+
+        varied_weight = None
+        for branch_name in candidate_branches:
+            if hasattr(tree, branch_name):
+                varied_weight = getattr(tree, branch_name)
+                break
+
+        if varied_weight is None:
+            raise AttributeError(
+                f"Weight variation branch not found for '{variation}_{direction}'. "
+                f"Tried: {candidate_branches}"
+            )
+
+        if isinstance(varied_weight, (list, tuple, np.ndarray)):
+            return float(varied_weight[obj_index])
+
+        return float(varied_weight)
     
     def _check_category_conditions(self, category: CategoryConfig, cat_vars: Dict, j: int) -> bool:
         """Check if event passes category selection"""
@@ -378,7 +413,8 @@ class DatasetLoader:
                     data_vars[f"{variation}_{direction}"] = dataset
         
         # Determine branch to read and range to use
-        mass_var = "DiElectron_fitted_mass_corrected" if self.use_syst else "SelectedDiEle_fitted_mass"
+        # Use corrected mass only when shape variations are enabled.
+        mass_var = "DiElectron_fitted_mass_corrected" if (self.use_syst and self.shape_variations) else "SelectedDiEle_fitted_mass"
 
         if dataset_type == "response":
             range_key = "mass_range" if use_reco_mass else "reduced_mass_range"
@@ -421,23 +457,24 @@ class DatasetLoader:
                 if self.use_syst:
                     for variation in self.variations:
                         for direction in self.directions:
-                            # Get varied values
-                            syst_var_name = f"DiElectron_fitted_mass_corrected__{variation}_{direction}"
-                            syst_val = getattr(t, syst_var_name)[j]
+                            if variation in self.shape_variations:
+                                # Shape systematics: shifted mass branch, nominal event weight.
+                                syst_var_name = f"DiElectron_fitted_mass_corrected__{variation}_{direction}"
+                                syst_val = getattr(t, syst_var_name)[j]
 
-                            # if(syst_val < 0.1):
-                            #     print(f"WARNING: syst_val for {syst_var_name} is suspiciously low: {syst_val}")
-                            
-                            # if(syst_val < min_val):
-                            #     print(f"WARNING: nominal is within range but variation {variation}_{direction} is out of range low: {syst_val} < {min_val} (vs. nominal {fill_value})")
-                            
-                            if normalize_by_gen:
-                                syst_fill_value = syst_val/gen_mass - 1
+                                if normalize_by_gen:
+                                    syst_fill_value = syst_val/gen_mass - 1
+                                else:
+                                    syst_fill_value = syst_val
+
+                                syst_weight = weight
                             else:
-                                syst_fill_value = syst_val
-                            
+                                # Weight systematics: nominal mass value, shifted event weight.
+                                syst_fill_value = fill_value
+                                syst_weight = self._get_weight_variation(t, variation, direction, weight, j)
+
                             obs_var.setVal(syst_fill_value)
-                            data_vars[f"{variation}_{direction}"].add(ROOT.RooArgSet(obs_var), weight)
+                            data_vars[f"{variation}_{direction}"].add(ROOT.RooArgSet(obs_var), syst_weight)
         
         f.Close()
         self.workspace.Import(data)
@@ -485,15 +522,24 @@ class DatasetLoader:
 class ParameterManager:
     """Manages fit parameters and their ranges"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, nuisanced_vars: Dict[str, List[str]] = None, era: str = "2023"):
+    def __init__(self, workspace: ROOT.RooWorkspace, nuisanced_vars: Dict[str, List[str]] = None,
+                 era: str = "2023", single_cb: bool = False, double_gaussian: bool = False):
         self.workspace = workspace
         self.nuisanced_vars = nuisanced_vars if nuisanced_vars else {}
         self.era = era
+        self.single_cb = single_cb
+        self.double_gaussian = double_gaussian
         
         # Define parameter configurations
-        self.response_vars = ["response_mean", "response_sigma", "response_alphaL", 
-                            "response_nL", "response_alphaR", "response_nR"]
-        self.dcb_vars = ["mean", "sigma", "alphaL", "nL", "alphaR", "nR"]
+        if self.double_gaussian:
+            self.response_vars = ["response_mean1", "response_sigma1", "response_mean2", "response_sigma2", "response_sig1frac"]
+            self.dcb_vars = ["mean1", "sigma1", "mean2", "sigma2", "sig1frac"]
+        else:
+            self.response_vars = ["response_mean", "response_sigma", "response_alphaL", "response_nL"]
+            self.dcb_vars = ["mean", "sigma", "alphaL", "nL"]
+            if not self.single_cb:
+                self.response_vars.extend(["response_alphaR", "response_nR"])
+                self.dcb_vars.extend(["alphaR", "nR"])
         self.bw_vars = ["mean_BW", "width_BW"]
         
     def create_variables(self, sample: SampleConfig, category: CategoryConfig, 
@@ -571,10 +617,14 @@ class ParameterManager:
 class ModelBuilder:
     """Builds and manages physics models"""
     
-    def __init__(self, workspace: ROOT.RooWorkspace, param_manager: ParameterManager, era: str = "2023"):
+    def __init__(self, workspace: ROOT.RooWorkspace, param_manager: ParameterManager,
+                 era: str = "2023", gaussian_signal: bool = False,
+                 envelope: bool = False):
         self.workspace = workspace
         self.param_manager = param_manager
         self.era = era
+        self.gaussian_signal = gaussian_signal
+        self.envelope = envelope
     
     def build_response_function(self, sample: SampleConfig, category: CategoryConfig, 
                               observable_name: str, variation_tag: str = "") -> ROOT.RooAbsPdf:
@@ -588,6 +638,21 @@ class ModelBuilder:
         """
         
         model_name = f"response_function_{sample.label}{category.label}{variation_tag}_{self.era}"
+
+        if self.param_manager.double_gaussian:
+            mean1 = f"response_mean1_{sample.label}{category.label}{variation_tag}_{self.era}"
+            sigma1 = f"response_sigma1_{sample.label}{category.label}{variation_tag}_{self.era}"
+            mean2 = f"response_mean2_{sample.label}{category.label}{variation_tag}_{self.era}"
+            sigma2 = f"response_sigma2_{sample.label}{category.label}{variation_tag}_{self.era}"
+            frac = f"response_sig1frac_{sample.label}{category.label}{variation_tag}_{self.era}"
+
+            g1_name = f"response_gauss1_{sample.label}{category.label}{variation_tag}_{self.era}"
+            g2_name = f"response_gauss2_{sample.label}{category.label}{variation_tag}_{self.era}"
+
+            self.workspace.factory(f"Gaussian::{g1_name}({observable_name},{mean1},{sigma1})")
+            self.workspace.factory(f"Gaussian::{g2_name}({observable_name},{mean2},{sigma2})")
+            self.workspace.factory(f"SUM::{model_name}({frac}*{g1_name},{g2_name})")
+            return self.workspace.pdf(model_name)
         
         # Build variable list for Crystal Ball (all parameters have era suffix)
         var_names = [observable_name]
@@ -597,6 +662,43 @@ class ModelBuilder:
         
         self.workspace.factory(f"CrystalBall::{model_name}({var_string})")
         return self.workspace.pdf(model_name)
+
+    def _get_signal_model_index(self) -> ROOT.RooCategory:
+        """Get or create the era-specific signal-model index used by RooMultiPdf."""
+        index_name = f"signal_model_index_{self.era}"
+        index = self.workspace.cat(index_name)
+        if index:
+            return index
+
+        index = ROOT.RooCategory(index_name, index_name)
+        index.defineType("dcb")
+        index.defineType("gaussian")
+        self.workspace.Import(index, ROOT.RooCmdArg())
+        stored_index = self.workspace.cat(index_name)
+        return stored_index if stored_index else index
+
+    def _build_signal_core_pdf(self, sample: SampleConfig, category: CategoryConfig,
+                               tag: str, use_shared_mass: bool, core_type: str) -> str:
+        """Build the signal-core PDF used by the full signal model."""
+        mass_obs = "mass" if use_shared_mass else f"mass_{sample.label}"
+
+        if core_type == "gaussian":
+            mean = f"mean_{tag}_{sample.label}{category.label}_{self.era}"
+            sigma = f"sigma_{tag}_{sample.label}{category.label}_{self.era}"
+            gauss_name = f"gaussian_{tag}_{sample.label}{category.label}_{self.era}"
+            self.workspace.factory(f"Gaussian::{gauss_name}({mass_obs},{mean},{sigma})")
+            return gauss_name
+
+        if core_type == "dcb":
+            dcb_vars = []
+            for dcb_var in self.param_manager.dcb_vars:
+                dcb_vars.append(f"{dcb_var}_{tag}_{sample.label}{category.label}_{self.era}")
+            dcb_var_string = f"{mass_obs}," + ",".join(dcb_vars)
+            dcb_name = f"crystalBall_{tag}_{sample.label}{category.label}_{self.era}"
+            self.workspace.factory(f"CrystalBall::{dcb_name}({dcb_var_string})")
+            return dcb_name
+
+        raise ValueError(f"Unsupported signal core type: {core_type}")
     
     def build_signal_model(self, sample: SampleConfig, category: CategoryConfig, 
                          parametrized_vars: List[str], tag: str = "param", 
@@ -614,26 +716,59 @@ class ModelBuilder:
             build_variations: Whether to build systematic variation models
         """
         
-        mass_string = f"mass," if use_shared_mass else f"mass_{sample.label},"
+        if self.envelope:
+            dcb_pdf_name = self._build_signal_core_pdf(sample, category, tag, use_shared_mass, "dcb")
+            gaussian_pdf_name = self._build_signal_core_pdf(sample, category, tag, use_shared_mass, "gaussian")
 
-        # Build dcb variable names (all parameters have era suffix)
-        dcb_vars = []
-        for dcb_var in self.param_manager.dcb_vars:
-            dcb_vars.append(f"{dcb_var}_{tag}_{sample.label}{category.label}_{self.era}")
-        dcb_var_string = mass_string + ",".join(dcb_vars)
-        dcb_name = f"crystalBall_{tag}_{sample.label}{category.label}_{self.era}"
-        self.workspace.factory(f"CrystalBall::{dcb_name}({dcb_var_string})")
+            if use_reco_mass:
+                dcb_model = self.workspace.pdf(dcb_pdf_name)
+                gaussian_model = self.workspace.pdf(gaussian_pdf_name)
+            else:
+                dcb_model = self._build_convolution_model(sample, category, tag, dcb_pdf_name, model_suffix="_dcb")
+                gaussian_model = self._build_convolution_model(sample, category, tag, gaussian_pdf_name, model_suffix="_gaussian")
+
+            envelope_name = f"model_{tag}_{sample.label}{category.label}_{self.era}"
+            pdf_index = self._get_signal_model_index()
+            envelope_pdf = ROOT.RooMultiPdf(
+                envelope_name,
+                envelope_name,
+                pdf_index,
+                ROOT.RooArgList(dcb_model, gaussian_model),
+            )
+            self.workspace.Import(envelope_pdf, ROOT.RooCmdArg())
+            return self.workspace.pdf(envelope_name)
+
+        if self.gaussian_signal:
+            core_pdf_name = self._build_signal_core_pdf(sample, category, tag, use_shared_mass, "gaussian")
+        elif self.param_manager.double_gaussian:
+            mean1 = f"mean1_{tag}_{sample.label}{category.label}_{self.era}"
+            sigma1 = f"sigma1_{tag}_{sample.label}{category.label}_{self.era}"
+            mean2 = f"mean2_{tag}_{sample.label}{category.label}_{self.era}"
+            sigma2 = f"sigma2_{tag}_{sample.label}{category.label}_{self.era}"
+            frac = f"sig1frac_{tag}_{sample.label}{category.label}_{self.era}"
+
+            g1_name = f"gauss1_{tag}_{sample.label}{category.label}_{self.era}"
+            g2_name = f"gauss2_{tag}_{sample.label}{category.label}_{self.era}"
+            core_name = f"doubleGauss_{tag}_{sample.label}{category.label}_{self.era}"
+
+            mass_obs = "mass" if use_shared_mass else f"mass_{sample.label}"
+            self.workspace.factory(f"Gaussian::{g1_name}({mass_obs},{mean1},{sigma1})")
+            self.workspace.factory(f"Gaussian::{g2_name}({mass_obs},{mean2},{sigma2})")
+            self.workspace.factory(f"SUM::{core_name}({frac}*{g1_name},{g2_name})")
+            core_pdf_name = core_name
+        else:
+            core_pdf_name = self._build_signal_core_pdf(sample, category, tag, use_shared_mass, "dcb")
             
         if use_reco_mass:
-            model = self.workspace.pdf(dcb_name).Clone(f"model_{tag}_{sample.label}{category.label}_{self.era}")
+            model = self.workspace.pdf(core_pdf_name).Clone(f"model_{tag}_{sample.label}{category.label}_{self.era}")
             self.workspace.Import(model, ROOT.RooCmdArg())
         else:
-            model = self._build_convolution_model(sample, category, f"{tag}", dcb_name)
+            model = self._build_convolution_model(sample, category, f"{tag}", core_pdf_name)
         
         return model
     
     def _build_convolution_model(self, sample: SampleConfig, category: CategoryConfig, 
-                               tag: str, dcb_name: str) -> ROOT.RooAbsPdf:
+                               tag: str, dcb_name: str, model_suffix: str = "") -> ROOT.RooAbsPdf:
         """Build convolution of Crystal Ball and Breit-Wigner"""
         
         # Build Breit-Wigner
@@ -647,7 +782,7 @@ class ModelBuilder:
                         "((@0**2 - @1**2)*(@0**2 - @1**2) + @1**2 * @2**2) / "
                         "(sqrt(@1**2 + @1*sqrt(@2**2 + @1**2)))")
         
-        relBW_name = f"relBW_{tag}_{sample.label}{category.label}_{self.era}"
+        relBW_name = f"relBW_{tag}_{sample.label}{category.label}{model_suffix}_{self.era}"
         relBW = ROOT.RooGenericPdf(relBW_name, relBW_formula, bw_vars)
         self.workspace.Import(relBW)
         
@@ -657,7 +792,7 @@ class ModelBuilder:
         mass_var.setMax("cache", 20)
         
         # Build convolution
-        conv_name = f"model_{tag}_{sample.label}{category.label}_{self.era}"
+        conv_name = f"model_{tag}_{sample.label}{category.label}{model_suffix}_{self.era}"
         self.workspace.factory(f"FFTConvPdf::{conv_name}(mass_{sample.label}, {dcb_name}, {relBW_name})")
         
         return self.workspace.pdf(conv_name)
@@ -671,7 +806,7 @@ class FitManager:
         self.logger = logger
         self.era = era
     
-    def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet) -> Optional[float]:
+    def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet, ndof: None) -> Optional[float]:
         """Compute Chi2/NDF for model-dataset comparison"""
         try:
             # Get the observable
@@ -691,7 +826,11 @@ class FitManager:
             nparams = 0
             for param in params:
                 if hasattr(param, 'isConstant') and not param.isConstant():
-                    nparams += 1
+                    if "model_index" not in param.GetName():
+                        nparams += 1
+
+            if ndof is not None:
+                nparams = ndof # override if specified
             
             # Compute chi2
             chi2_ndf = frame.chiSquare(nparams)
@@ -709,8 +848,11 @@ class FitManager:
         default_options = {
             'Save': True,
             'NumCPU': 8,
-            'SumW2Error': False,
-            # 'Minimizer': "Minuit2",
+            'Hesse' : True,
+            'Minos' : True,
+            # 'SumW2Error': True,
+            # 'AsymptoticError': True,
+            'Minimizer': "Minuit2",
         }
         default_options.update(fit_options)
         
@@ -761,13 +903,14 @@ class FitManager:
             min_entries: Minimum number of entries required to include a point
             entry_counts: Dictionary with keys like 'sample_name_category_label' containing entry counts
         """
-        # # Filter out JPsi samples for parameter fitting
-        # fit_samples = {name: sample for name, sample in samples.items() 
-        #               if "JPsi" not in name}
-        # Filter out JPsi and Upsilon samples for parameter fitting
+        # Filter out JPsi samples for parameter fitting
         fit_samples = {name: sample for name, sample in samples.items() 
-                      if "JPsi" not in name and "Upsilon" not in name}
-                      # FIXME: excluding M10 bc of bad fit
+                      if "JPsi" not in name}
+        # # Filter out JPsi and Upsilon samples for parameter fitting
+        # fit_samples = {name: sample for name, sample in samples.items() 
+        #               if "JPsi" not in name and "Upsilon" not in name}
+        # # Include all samples
+        # fit_samples = {name: sample for name, sample in samples.items()}
         print(f"DEBUG: fit_samples = {fit_samples.keys()}", flush = True)
                 
         # Create graphs for each variable (nominal + variations)
@@ -850,19 +993,41 @@ class FitManager:
                 fit_result = graphs[var].Fit(fit_func, "S")
                 fit_result.Print()
                 fits[var] = fit_func
-                
+
+                # Extract covariance matrix to retrieve parameter error and correlation
+                cov_mat = fit_result.GetCovarianceMatrix()
+
                 # Save nominal fit parameters to workspace
                 for i in range(2):
+                    par_err = np.sqrt(cov_mat(i, i))
                     param_name = f"{var}{category.label}_fit_par{i}_{self.era}"
                     param_obj = ROOT.RooRealVar(param_name, param_name, fit_func.GetParameter(i))
-                    param_obj.setError(fit_func.GetParError(i))
+                    param_obj.setError(par_err)
                     param_obj.setConstant()
                     self.workspace.Import(param_obj, True)
 
                     param_err_name = f"{var}{category.label}_fit_par{i}_err_{self.era}"
-                    param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, fit_func.GetParError(i))
+                    param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, par_err)
                     param_err_obj.setConstant()
                     self.workspace.Import(param_err_obj, True)
+
+                # Save covariance between linear fit parameters par0 and par1
+                cov_name = f"{var}{category.label}_fit_par01_cov_{self.era}"
+                cov_obj = ROOT.RooRealVar(cov_name, cov_name, cov_mat(0, 1))
+                cov_obj.setConstant()
+                self.workspace.Import(cov_obj, True)
+                
+                # Save residual between fit and points
+                for i in range(graphs[var].GetN()):
+                    x = graphs[var].GetX()[i]
+                    y = graphs[var].GetY()[i]
+                    y_fit = fit_func.Eval(x)
+                    residual = y - y_fit
+                    print(f"DEBUG: variables {var} residual for point ", i, ": x = ", x, ", y = ", y, ", y_fit = ", y_fit, ", residual = ", residual)
+                    resid_name = f"{var}{category.label}_residual_point{i}_{self.era}"
+                    resid_obj = ROOT.RooRealVar(resid_name, resid_name, residual)
+                    resid_obj.setConstant()
+                    self.workspace.Import(resid_obj, True)
                 
                 # Log parametrization result
                 if logger:
@@ -893,19 +1058,27 @@ class FitManager:
                                 fit_result_var = variation_graph.Fit(fit_func_var, "S")
                                 fit_result_var.Print()
                                 fit_funcs[direction] = fit_func_var
-                                
+
+                                cov_mat_var = fit_result_var.GetCovarianceMatrix()
                                 # Save variation fit parameters to workspace
                                 for i in range(2):
+                                    par_err = np.sqrt(cov_mat_var(i, i))
                                     param_name = f"{var}{category.label}_fit_par{i}_{variation}_{direction}_{self.era}"
                                     param_obj = ROOT.RooRealVar(param_name, param_name, fit_func_var.GetParameter(i))
-                                    param_obj.setError(fit_func_var.GetParError(i))
+                                    param_obj.setError(par_err)
                                     param_obj.setConstant()
                                     self.workspace.Import(param_obj, True)
 
                                     param_err_name = f"{var}{category.label}_fit_par{i}_err_{variation}_{direction}_{self.era}"
-                                    param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, fit_func_var.GetParError(i))
+                                    param_err_obj = ROOT.RooRealVar(param_err_name, param_err_name, par_err)
                                     param_err_obj.setConstant()
                                     self.workspace.Import(param_err_obj, True)
+
+                                # Save covariance between par0/par1 for the variation fit
+                                cov_name_var = f"{var}{category.label}_fit_par01_cov_{variation}_{direction}_{self.era}"
+                                cov_obj_var = ROOT.RooRealVar(cov_name_var, cov_name_var, cov_mat_var(0, 1))
+                                cov_obj_var.setConstant()
+                                self.workspace.Import(cov_obj_var, True)
                                 
                                 # Log variation parametrization result
                                 if logger:
@@ -927,7 +1100,7 @@ class FitManager:
                                     diff_obj = ROOT.RooRealVar(diff_name, diff_name, avg_diff)
                                     diff_obj.setConstant()
                                     self.workspace.Import(diff_obj, True)
-                                    
+
                                     print(f"Stored average difference for {var} par{i} {variation}: {avg_diff:.6f} (nominal={nominal_val:.6f}, up={up_val:.6f}, down={down_val:.6f})")
         
         # Handle constant variables
@@ -962,14 +1135,34 @@ class SignalModelAnalyzer:
     
     def __init__(self, samples: Dict[str, SampleConfig], categories: Dict[str, CategoryConfig], 
                  wsfile: str, parametrized_vars: List[str], nuisanced_vars: Dict[str, List[str]], log_file: str = "signal_model_analysis.log",
+                 shape_nuisanced_vars: Optional[Dict[str, List[str]]] = None,
+                 weight_nuisanced_vars: Optional[Dict[str, List[str]]] = None,
+                 nuisanced_vars_stat: Optional[List[str]] = None,
+                 single_cb: bool = False,
+                 double_gaussian: bool = False,
+                 gaussian_signal: bool = False,
+                 envelope: bool = False,
                  eos_folder: Optional[str] = None, use_reweighting: bool = True, use_syst: bool = False, era: str = "2023"):
         self.samples = samples
         self.categories = categories
         self.parametrized_vars = parametrized_vars
         self.nuisanced_vars = nuisanced_vars
+        self.shape_nuisanced_vars = shape_nuisanced_vars if shape_nuisanced_vars is not None else nuisanced_vars
+        self.weight_nuisanced_vars = weight_nuisanced_vars if weight_nuisanced_vars is not None else {}
+        self.nuisanced_vars_stat = nuisanced_vars_stat if nuisanced_vars_stat is not None else []
+        self.single_cb = single_cb
+        self.double_gaussian = double_gaussian
+        self.gaussian_signal = gaussian_signal
+        self.envelope = envelope
         self.use_reweighting = use_reweighting
         self.use_syst = use_syst
         self.era = era
+
+        if self.gaussian_signal and (self.single_cb or self.double_gaussian or self.envelope):
+            raise ValueError("gaussian_signal is only supported with default double-sided Crystal Ball mode")
+
+        if self.envelope and (self.single_cb or self.double_gaussian or self.gaussian_signal):
+            raise ValueError("envelope is only supported with default double-sided Crystal Ball mode")
         
         # Initialize logger
         self.logger = FitLogger(log_file, eos_folder)
@@ -977,10 +1170,30 @@ class SignalModelAnalyzer:
         
         # Initialize managers
         self.workspace_manager = WorkspaceManager(wsfile)
-        variations = set(sum(nuisanced_vars.values(), [])) #concatenate all variation branches; remove duplicates
-        self.dataset_loader = DatasetLoader(self.workspace_manager.workspace, use_reweighting, use_syst, variations, era)
-        self.param_manager = ParameterManager(self.workspace_manager.workspace, nuisanced_vars, era)
-        self.model_builder = ModelBuilder(self.workspace_manager.workspace, self.param_manager, era)
+        shape_variations = set(sum(self.shape_nuisanced_vars.values(), []))
+        weight_variations = set(sum(self.weight_nuisanced_vars.values(), []))
+        self.dataset_loader = DatasetLoader(
+            self.workspace_manager.workspace,
+            use_reweighting,
+            use_syst,
+            shape_variations=list(shape_variations),
+            weight_variations=list(weight_variations),
+            era=era,
+        )
+        self.param_manager = ParameterManager(
+            self.workspace_manager.workspace,
+            nuisanced_vars,
+            era,
+            single_cb=single_cb,
+            double_gaussian=double_gaussian,
+        )
+        self.model_builder = ModelBuilder(
+            self.workspace_manager.workspace,
+            self.param_manager,
+            era,
+            gaussian_signal=gaussian_signal,
+            envelope=envelope,
+        )
         self.fit_manager = FitManager(self.workspace_manager.workspace, self.logger, era)
         
         # Analysis state
@@ -1150,9 +1363,11 @@ class SignalModelAnalyzer:
             )
             
             # Optionally fit model
-            if fit_models:
+            if fit_models and not self.model_builder.envelope:
                 self.fit_manager.fit_model(model, dataset, sample_name=sample.label,
                                          category_name=category.name, fit_type="signal")
+            elif fit_models and self.model_builder.envelope:
+                self.logger.log_warning("Skipping fit for envelope signal model; the RooMultiPdf is meant for downstream selection/plotting.")
     
     def build_signal_models(self, use_reco_mass: bool = False, fit_models: bool = False, max_workers: int = 4):
         """Build parametric signal models
@@ -1209,54 +1424,53 @@ class SignalModelAnalyzer:
             # All parameters have era suffix (nuisance parameters are shared separately)
             var_name = f"{var}{tag}_{label}{category.label}_{self.era}"
             variations = self.param_manager.nuisanced_vars.get(var, [])
+            use_stat_nuisance = var in self.nuisanced_vars_stat
                 
             if var in self.parametrized_vars:
-                if var in self.param_manager.nuisanced_vars:
-                    for variation in variations:
-                        # FIXME: this only makes sense for ONE variation.
+                # Base dependence is on mass for all DCB parameters in this model block.
+                formula = "@0 + @1 * @2"
+                dependencies = [
+                    f"{var}{category.label}_fit_par0_{self.era}",
+                    f"{var}{category.label}_fit_par1_{self.era}",
+                    str(mass),
+                ]
 
-                        # NOTE: doesn't work for non-reco mass
-                        # create nuisance parameter (no era suffix if electron scale mean - fully correlated)
-                        if var == "mean" and "electronScaleVariation" in variation:
-                            nuisance = f"{var}{category.label}_nuisance_{variation}"
-                        else:
-                            nuisance = f"{var}{category.label}_nuisance_{variation}_{self.era}"
-                        self.param_manager.create_variable(nuisance, [0, -5, 5])
-
-                        par0_diff = f"{var}{category.label}_fit_par0_{variation}_avgdiff_{self.era}"
-                        par1_diff = f"{var}{category.label}_fit_par1_{variation}_avgdiff_{self.era}"
-
-                        formula = "@0 + @1 * @2 + @5 * (@3 + @4 * @2)"
-                        # formula = "@0 + @1 * @2 + @5 * sqrt((@3)**2 + (@4 * @2)**2)"
-                        # @0 is linear fit constant term (@3 = avg diff to nominal)
-                        # @1 is linear fit slope term (@4 = avg diff to nominal)
-                        # @5 is nuisance parameter
-                        # @2 is mass
-
-                        dependencies = [f"{var}{category.label}_fit_par0_{self.era}", 
-                                        f"{var}{category.label}_fit_par1_{self.era}", 
-                                        str(mass),
-                                        par0_diff,
-                                        par1_diff,
-                                        nuisance]
-                        self.param_manager.create_parametric_variable(var_name, formula, dependencies)
-
-                else:
-                    # Create parametric variable
-                    formula = "@0 + @1 * @2"  # @2 is mass OR mean, depending on variable
-                    # Determine mass_var name (for variables that depend on mean, like sigma)
-                    if "mean" in var:
-                        mass_var = str(mass)
+                # Add systematic-shift nuisance terms built from average up/down differences.
+                for variation in variations:
+                    # Keep historical mean/electronScaleVariation naming for backward compatibility.
+                    if var == "mean" and "electronScaleVariation" in variation:
+                        nuisance = f"{var}{category.label}_nuisance_{variation}"
                     else:
-                        # Mean parameter always has era suffix
-                        mass_var = f"mean{tag}_{label}{category.label}_{self.era}"
-                    
-                    if var == "sigma" and not use_reco_mass:
-                        formula = "(@0 + @1 * @2) * @2"
-                    dependencies = [f"{var}{category.label}_fit_par0_{self.era}", 
-                                f"{var}{category.label}_fit_par1_{self.era}", 
-                                mass_var]
-                
+                        nuisance = f"{var}{category.label}_nuisance_{variation}_{self.era}"
+                    self.param_manager.create_variable(nuisance, [0, -5, 5])
+
+                    par0_diff = f"{var}{category.label}_fit_par0_{variation}_avgdiff_{self.era}"
+                    par1_diff = f"{var}{category.label}_fit_par1_{variation}_avgdiff_{self.era}"
+
+                    dependencies.extend([par0_diff, par1_diff, nuisance])
+                    idx = len(dependencies)
+                    # last three dependencies are [par0_diff, par1_diff, nuisance]
+                    formula += f" + @{idx-1} * (@{idx-3} + @{idx-2} * @2)"
+                    print(f"DEBUG: Adding nuisance for systematic uncertainty on var {var}, era {self.era}: formula = {formula}, dependencies = {dependencies}", flush=True)
+
+                # Add one statistical-band nuisance term using nominal linear-fit uncertainties.
+                if use_stat_nuisance:
+                    nuisance_stat = f"{var}{category.label}_nuisance_stat_{self.era}"
+                    self.param_manager.create_variable(nuisance_stat, [0, -5, 5])
+
+                    par0_err = f"{var}{category.label}_fit_par0_err_{self.era}"
+                    par1_err = f"{var}{category.label}_fit_par1_err_{self.era}"
+                    par01_cov = f"{var}{category.label}_fit_par01_cov_{self.era}"
+
+                    dependencies.extend([par0_err, par1_err, par01_cov, nuisance_stat])
+                    idx = len(dependencies)
+                    # last four dependencies are [par0_err, par1_err, par01_cov, nuisance_stat]
+                    formula += f" + @{idx-1} * sqrt((@{idx-4})**2 + (@{idx-3} * @2)**2 + 2 * @2 * @{idx-2})"
+                    print(f"DEBUG: Adding nuisance for stat uncertainty on var {var}, era {self.era}: formula = {formula}, dependencies = {dependencies}", flush=True)
+
+                if var in ["sigma", "sigma1", "sigma2"] and not use_reco_mass:
+                    formula = f"({formula}) * @2"
+
                 self.param_manager.create_parametric_variable(var_name, formula, dependencies)
                 
             elif var in const_vars:

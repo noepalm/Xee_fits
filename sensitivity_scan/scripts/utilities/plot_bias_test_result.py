@@ -16,10 +16,20 @@ cms_palette = [
 ]
 
 BKG_FUNCTION_LABELS = ["Chebyshev", "Bernstein", "PolyExp"]
+# REGION_BOUNDS = {
+#     "region0": (0.5, 2.2),
+#     "region1": (1.8, 4.4),
+#     "region2": (4.0, 10.8),
+# }
+# REGION_BOUNDS = {
+#     "region0": (0.5, 2.2),
+#     "region1": (1.8, 6.0),
+#     "region2": (4.9, 10.5),
+# }
 REGION_BOUNDS = {
     "region0": (0.5, 2.2),
-    "region1": (1.8, 4.4),
-    "region2": (4.0, 10.8),
+    "region1": (1.8, 5.3),
+    "region2": (4.5, 10.5),
 }
 
 def mass_in_selected_regions(mass, regions):
@@ -74,6 +84,19 @@ def read_toy_r_triplet(root_path):
         vals = vals[~failed_up_mask]
         r_down = r_down[~failed_up_mask]
         r_up = r_up[~failed_up_mask]
+
+        # also scrap those in which r_up/r_down have collapsed onto rmin/rmax (=-+10)
+        failed_boundary_up_mask = np.abs(r_up - 10) < 1e-3
+        failed_boundary_down_mask = np.abs(r_down + 10) < 1e-3
+        failed_boundary_mask = failed_boundary_up_mask | failed_boundary_down_mask
+        if np.any(failed_boundary_mask):
+            print(f"Warning: found {np.sum(failed_boundary_mask)} toys with r_up/r_down at boundary, skipping these")
+            print("  r values for failed toys:", vals[failed_boundary_mask])
+            print("  r_up values for failed toys:", r_up[failed_boundary_mask])
+            print("  r_down values for failed toys:", r_down[failed_boundary_mask])
+        vals = vals[~failed_boundary_mask]
+        r_up = r_up[~failed_boundary_mask]
+        r_down = r_down[~failed_boundary_mask]
 
         # Sanity checks: r_up should be >= r and r_down should be <= r (works for negative values)
         failed_r_mask = r_up < vals
@@ -310,7 +333,7 @@ def make_r_distribution_plots(output_dir, era, category, regions, truth_files, t
                     histtype="step",
                     linewidth=1.8,
                     color=color,
-                    label=f"Fit {fit_label}",
+                    label=f"Fit {fit_label} (entries = {len(r_vals)})",
                     range=(-5, 5),
                 )
                 ax_pull.hist(

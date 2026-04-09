@@ -49,10 +49,20 @@ def get_all_category_ids(category_type):
 
 
 def get_mass_range(region):
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
+    #     "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
+    # }
+    # ranges = {
+    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 6.0, "max_limit": 5.6},
+    #     "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
+    # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
-        "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
+        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
     }
     return ranges.get(region, {})
 
@@ -68,7 +78,10 @@ def get_run_mode_label(expect_signal):
     """Return run label used in output folders and filenames."""
     if abs(float(expect_signal)) <= 1e-12:
         return "no_signal"
-    return f"signal_injected_mu{float(expect_signal):.0f}"
+    if expect_signal < 1:
+        return f"signal_injected_mu{float(expect_signal):.2f}"
+    else:        
+        return f"signal_injected_mu{float(expect_signal):.0f}"
 
 
 LOG_MAX_BYTES = 800 * 1024
@@ -175,6 +188,30 @@ def make_mass_key(mass):
 # Background function index → name mapping (matches combine pdf_index parameter).
 BKG_FUNCTION_NAMES = {0: "chebyshev", 1: "bernstein", 2: "polyexp"}
 BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein", "polyexp": "PolyExp"}
+# BKG_FUNCTION_NAMES = {0: "chebyshev", 1: "bernstein"}
+# BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein"}
+
+
+def resolve_fit_specific_workspace(workdir, root_file, fit_name):
+        """Resolve fit-specific workspace path from sibling altbkg card folders.
+
+        Example mapping for a workdir under cards_*_envelope_.../ee/<mass>:
+            fit_name='bernstein' -> cards_*_altbkg_bernstein_.../ee/<mass>/<root_file>
+
+        Returns absolute path to the fit-specific root file, or None if not resolvable.
+        """
+        mass_dir = Path(workdir).resolve()
+        ee_dir = mass_dir.parent
+        cards_dir = ee_dir.parent
+        cards_name = cards_dir.name
+        token = "_envelope_"
+        if token not in cards_name:
+                return None
+
+        fit_cards_name = cards_name.replace(token, f"_altbkg_{fit_name}_")
+        fit_cards_dir = cards_dir.parent / fit_cards_name
+        fit_root = fit_cards_dir / "ee" / mass_dir.name / root_file
+        return str(fit_root.resolve())
 
 
 def is_sb_job_fully_cached(job):
@@ -200,7 +237,7 @@ def is_sb_job_fully_cached(job):
         truth_label = BKG_FUNCTION_LABELS[truth_name]
         for fit_idx, fit_name in BKG_FUNCTION_NAMES.items():
             fit_label = BKG_FUNCTION_LABELS[fit_name]
-            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}"
+            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
             combine_out = dest_mass_dir / f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
             fitdiag_out = dest_mass_dir / f"fitDiagnostics{n_label}.root"
             if not combine_out.exists() or not fitdiag_out.exists():
@@ -303,10 +340,14 @@ def run_bkg_fits_job(job):
             "--setParameters", f"r=0,{pdf_param}={pdf_idx}",
             "--freezeParameters", f"r,{pdf_param}",
             "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            "--rMin", "-10",
+            "--rMax", "10",
             "--cminDefaultMinimizerStrategy", "0",
+            "--robustFit", "1",
             "-n", n_suffix,
             "-v", "3",  # increase to 3 for debugging
         ]
+
         try:
             with open(fit_log, "w") as f:
                 subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
@@ -500,16 +541,40 @@ def run_sb_bias_fit_job(job):
 
         for fit_idx, fit_name in BKG_FUNCTION_NAMES.items():
             fit_label = BKG_FUNCTION_LABELS[fit_name]
+            fit_root_file = resolve_fit_specific_workspace(workdir, root_file, fit_name)
+            if fit_root_file is None:
+                write_log_with_tail(job_log, "".join(sections))
+                return (
+                    False,
+                    (
+                        f"Could not resolve fit-specific cards folder from workdir '{workdir}'. "
+                        "Expected folder name containing '_altbkg_envelope_'."
+                    ),
+                )
+            if not os.path.exists(fit_root_file):
+                write_log_with_tail(job_log, "".join(sections))
+                return (
+                    False,
+                    (
+                        f"Missing fit-specific workspace for fit {fit_label}: {fit_root_file}"
+                    ),
+                )
+
             # Keep requested base naming, and append cat/era for collision safety.
-            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}"
+            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
+            # r_min = -2 if run_mode_label == "no_signal" else -10
+            # r_max = 2 if run_mode_label == "no_signal" else 10
+            r_min = -10 if run_mode_label == "no_signal" else -10
+            r_max = 10 if run_mode_label == "no_signal" else 10
+
             cmd = [
                 "combine",
                 "-M", "FitDiagnostics",
-                root_file,
+                fit_root_file,
                 "--setParameters", f"{pdf_param}={fit_idx}",
                 "--freezeParameters", pdf_param,
-                "--rMin", "-10",
-                "--rMax", "10",
+                "--rMin", str(r_min),
+                "--rMax", str(r_max),
                 "--robustFit", "1",
                 "-t", str(fit_toys),
                 "-n", n_label,
@@ -517,8 +582,9 @@ def run_sb_bias_fit_job(job):
                 "--cminDefaultMinimizerStrategy", "0",
                 "--saveWorkspace",
                 "--skipBOnlyFit",
-                "-v", "0",
+                "-v", "1",
             ]
+
             out_name = f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
             out_path = os.path.join(workdir, out_name)
             out_dst = str(dest_mass_dir / out_name)
@@ -526,19 +592,20 @@ def run_sb_bias_fit_job(job):
             fitdiag_path = os.path.join(workdir, fitdiag_name)
             fitdiag_dst = str(dest_mass_dir / fitdiag_name)
 
-            n_label_toy = f".toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}"
+            n_label_toy = f".toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
             cmd_toy = [
                 "combine",
                 "-M", "FitDiagnostics",
-                root_file,
+                fit_root_file,
                 "--setParameters", f"{pdf_param}={fit_idx}",
                 "--freezeParameters", pdf_param,
-                "--rMin", "-10",
-                "--rMax", "10",
+                "--rMin", str(r_min),
+                "--rMax", str(r_max),
                 "-t", "1",
                 "-n", n_label_toy,
                 "--toysFile", toys_file,
                 "--cminDefaultMinimizerStrategy", "0",
+                "--robustFit", "1",
                 "--saveWorkspace",
                 "--saveShapes",
                 "--saveNormalizations",
@@ -668,7 +735,6 @@ def main():
         default=10,
         help="Number of toys per true background function",
     )
-    parser.add_argument("--fit_toys", type=int, default=100, help="Number of toys to fit per S+B combine call")
     parser.add_argument(
         "--mass_selector",
         default="",
@@ -723,7 +789,6 @@ def main():
     print(f"  Caching enabled: {args.caching}")
     print(f"  Injected signal strength: {args.expectSignal}")
     print(f"  Toys per true function: {args.n_toys}")
-    print(f"  Toys per S+B fit call: {args.fit_toys}")
     if mass_selector:
         if mass_selector["mode"] == "range":
             print(f"  Mass selection: range [{mass_selector['min']}, {mass_selector['max']}]")
@@ -852,7 +917,7 @@ def main():
                 with open(overlay_log, "w") as f:
                     subprocess.run(overlay_cmd, stdout=f, stderr=subprocess.STDOUT)
 
-        # Toy + S+B fit plots for representative masses (3 per region)
+        # Toy + S+B fit plots for representative masses
         for cfg in configs:
             era = cfg["era"]
             region = cfg["region"]
@@ -886,7 +951,7 @@ def main():
                     except ValueError:
                         continue
                 mass_pairs.sort(key=lambda x: x[0])
-                selected_masses = pick_representative_masses([m for m, _ in mass_pairs], n_points=3)
+                selected_masses = pick_representative_masses([m for m, _ in mass_pairs], n_points=7)
 
                 selected_txt = cat_out_path / f"toy_fit_selected_masses_{region}{fit_tag_label}.txt"
                 with open(selected_txt, "w") as sf:
@@ -914,19 +979,19 @@ def main():
                     mass_dir = Path(outfolder) / f"{cat_name}_{era}" / run_mode_label / f"M{mass_str}"
 
                     local_mass_dir = None
-                    if abs(args.expectSignal) > 1e-12:
-                        for d in ee_input_dir.iterdir():
-                            if not d.is_dir():
-                                continue
-                            try:
-                                d_mass = float(d.name)
-                            except ValueError:
-                                continue
-                            if abs(d_mass - sel_mass) < 1e-9:
-                                local_mass_dir = d
-                                break
-                        if local_mass_dir is None:
+                    for d in ee_input_dir.iterdir():
+                        if not d.is_dir():
                             continue
+                        try:
+                            d_mass = float(d.name)
+                        except ValueError:
+                            continue
+                        if abs(d_mass - sel_mass) < 1e-9:
+                            local_mass_dir = d
+                            break
+                    if local_mass_dir is None:
+                        print(f"WARNING: Could not find local mass directory for M{mass_str} in {ee_input_dir}; skipping toy+fit plots for this mass point.")
+                        continue
 
                     for truth_name in BKG_FUNCTION_NAMES.values():
                         truth_label = BKG_FUNCTION_LABELS[truth_name]
@@ -952,9 +1017,9 @@ def main():
                         for fit_name in BKG_FUNCTION_NAMES.values():
                             fit_label = BKG_FUNCTION_LABELS[fit_name]
                             sb_file = (
-                                mass_dir
+                                local_mass_dir
                                 / (
-                                    f"fitDiagnostics.toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}.root"
+                                    f"fitDiagnostics.toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt.root"
                                 )
                             )
                             if not sb_file.exists():
@@ -966,6 +1031,8 @@ def main():
 
                         if missing_inputs:
                             continue
+
+                        # print("DEBUG: for region", region, ", mass ", mass_str, ": toy files = ", toy_file, "SB files = ", sb_files)
 
                         toy_plot_cmd = [
                             "python3",
@@ -1357,7 +1424,7 @@ def main():
                         "region": region,
                         "mass": mass,
                         "fit_tag_label": fit_tag_label,
-                        "fit_toys": args.fit_toys,
+                        "fit_toys": args.n_toys,
                         "outfolder": outfolder,
                         "caching": args.caching,
                         "expect_signal": args.expectSignal,

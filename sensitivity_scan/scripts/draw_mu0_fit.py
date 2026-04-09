@@ -218,10 +218,17 @@ latex_prelim.DrawLatex(0.18, 0.92, "Preliminary")
 latex.SetTextAlign(31)  # Right align
 latex.DrawLatex(0.91, 0.92, f"{lumi:.2f}" + " fb^{-1} (13.6 TeV)")
 
+# if args.region == "region1":
+#     frame.SetMinimum(8e2)
+# elif args.region == "region2":
+#     frame.SetMinimum(10)
+# elif args.region == "region0":
+#     frame.SetMinimum(1)
+
 if args.region == "region1":
-    frame.SetMinimum(8e2)
-elif args.region == "region2":
     frame.SetMinimum(10)
+elif args.region == "region2":
+    frame.SetMinimum(1)
 elif args.region == "region0":
     frame.SetMinimum(1)
 
@@ -358,11 +365,19 @@ chi2 = all_distros["total"].Chi2Test(data_h, "UU CHI2")
 n_free_params = f1.Get("w").pdf("model_s").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
 reduced_chi2 = chi2 / (all_distros["total"].GetNbinsX() - 1 - n_free_params)
 
+# # change minimum to 0.1
+# if args.region == "region1":
+#     frame.SetMinimum(0.1)
+# elif args.region == "region2":
+#     frame.SetMinimum(10)
+# elif args.region == "region0":
+#     frame.SetMinimum(1)
+
 # change minimum to 0.1
 if args.region == "region1":
-    frame.SetMinimum(0.1)
-elif args.region == "region2":
     frame.SetMinimum(10)
+elif args.region == "region2":
+    frame.SetMinimum(1)
 elif args.region == "region0":
     frame.SetMinimum(1)
 

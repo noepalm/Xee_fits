@@ -155,7 +155,6 @@ class BackgroundFitter:
             print(f"Error: Required objects not found in workspace")
             print(f"  Looking for dataset: {dataset_name}")
             print(f"  Available datasets: {[obj.GetName() for obj in self.workspace.allData()]}")
-            root_file.Close()
             return False
             
         print(f"  Loaded dataset '{dataset_name}' with {self.data.numEntries()} entries")
@@ -166,21 +165,6 @@ class BackgroundFitter:
         #     self.data = self._convert_to_binned()
             
         return True
-        
-    def _convert_to_binned(self) -> ROOT.RooDataHist:
-        """Convert dataset to binned format"""
-        print("Converting to binned dataset...")
-        
-        self.mass_var.setBins(100)
-        data_binned = ROOT.RooDataHist("data_obs", "data_obs", ROOT.RooArgSet(self.mass_var))
-        
-        for i in range(self.data.numEntries()):
-            self.data.get(i)
-            weight = self.data.weight()
-            data_binned.add(ROOT.RooArgSet(self.mass_var), weight)
-            
-        self.workspace.Import(data_binned, True)
-        return data_binned
         
     def setup_mass_ranges(self, fit_region: FitRegion):
         """Setup mass ranges for fitting"""
@@ -211,6 +195,9 @@ class BackgroundFitter:
         print(f"Creating background functions for category {self.category.display_name}...")
 
         for func_config in self.config.background_functions:
+            # Skip if a specific function is chosen and this isn't it
+            if self.config.chosen_bkg_function >= 0 and func_config.name != self.config.get_chosen_background_function().name:
+                continue
             print(f"  Creating {func_config.display_name}...")
             
             if func_config.name == "bkg_f0":
@@ -238,8 +225,26 @@ class BackgroundFitter:
                 # 6th deg Chebyshev
                 self._create_chebyshev_function(func_config)
             elif func_config.name == "bkg_f8":
-                # 5th deg Chebyshev
+                # 4th deg Chebyshev
                 self._create_chebyshev_function(func_config)
+            elif func_config.name == "bkg_f9":
+                # 4th deg bernstein
+                self._create_bernstein_function(func_config)
+            elif func_config.name == "bkg_f10":
+                # 5th deg bernstein
+                self._create_bernstein_function(func_config)
+            elif func_config.name == "bkg_f11":
+                # 6th deg bernstein
+                self._create_bernstein_function(func_config)
+            elif func_config.name == "bkg_f12":
+                # Polynomial × Exponential, 4th deg
+                self._create_poly_exp_function(func_config)
+            elif func_config.name == "bkg_f13":
+                # Polynomial × Exponential, 6th deg
+                self._create_poly_exp_function(func_config)
+            elif func_config.name == "bkg_f14":
+                # Polynomial × Exponential, 7th deg
+                self._create_poly_exp_function(func_config)
                 
     def _create_bernstein_function(self, func_config: BackgroundFunction):
         """Create Bernstein polynomial function"""
@@ -251,6 +256,32 @@ class BackgroundFitter:
         
         self.background_functions[func_config.name] = func
         
+    def _create_bern_exp_function(self, func_config: BackgroundFunction):
+        """Create polynomial × exponential function"""
+        # Create parameters
+        params = self._create_vars(func_config)
+
+        # Create polynomial part
+        bern_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names[:-1]]
+        print("DEBUG: bernstein params in bern * exp", bern_params, flush=True)
+        bern_func = ROOT.RooBernstein(f"{func_config.name}{self.category.label}_{self.era}",
+                                 f"{func_config.name}{self.category.label}_{self.era}", self.mass_var, bern_params)
+
+        # Create exponential part
+        exp_param = self.workspace.obj(f"{func_config.param_names[-1]}{self.category.label}_{self.era}")
+        print(f"DEBUG: exp_param in bern * exp = {exp_param}", flush=True)
+        exp_func = ROOT.RooExponential(f"{func_config.name}_exp{self.category.label}_{self.era}", f"{func_config.name}_exp{self.category.label}_{self.era}", self.mass_var, exp_param)
+        
+        # store exp and poly funcs inside background_functions for ownership
+        self.background_functions[f"{func_config.name}_bern"] = bern_func
+        self.background_functions[f"{func_config.name}_exp"] = exp_func
+        
+        # Combine
+        func = ROOT.RooProdPdf(f"{func_config.name}{self.category.label}_{self.era}",
+                               f"{func_config.name}{self.category.label}_{self.era}", bern_func, exp_func)
+
+        self.background_functions[func_config.name] = func
+        
     def _create_poly_exp_function(self, func_config: BackgroundFunction):
         """Create polynomial × exponential function"""
         # Create parameters
@@ -259,14 +290,6 @@ class BackgroundFitter:
         # Create polynomial part
         poly_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names[:-1]]
         # poly_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names]
-
-        ## POLYNOMIAL X EXPONENTIAL ###
-
-        # # APPROACH 1 FOR POLYNOMIAL: regularize it (positive definite)
-        # # poly_params = [self.workspace.obj(name) for name in func_config.param_names[:-1]]
-        # poly_formula = "(1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 + @0**5 * @5) > 0 ? (1 + @0*@1 + @0**2 * @2 + @0**3 * @3 + @0**4 * @4 + @0**5 * @5) : 1e-6"
-        # poly_args = ROOT.RooArgList([self.mass_var] + poly_params)
-        # poly_func = ROOT.RooGenericPdf(f"{func_config.name}_poly{self.category.label}_{self.era}", poly_formula, poly_args)
 
         # APPROACH 2: Use built-in RooPolynomial
         poly_func = ROOT.RooPolynomial(f"{func_config.name}_poly{self.category.label}_{self.era}", f"{func_config.name}_poly{self.category.label}_{self.era}", self.mass_var, poly_params)
@@ -287,12 +310,8 @@ class BackgroundFitter:
         func = ROOT.RooProdPdf(f"{func_config.name}{self.category.label}_{self.era}",
                                f"{func_config.name}{self.category.label}_{self.era}", poly_func, exp_func)
 
-        # ### JUST POLYNOMIAL ###
-        # func = ROOT.RooPolynomial(f"{func_config.name}{self.category.label}_{self.era}", f"{func_config.name}{self.category.label}_{self.era}", 
-        #                               self.mass_var, poly_params)
-
         self.background_functions[func_config.name] = func
-        
+
     def _create_sum_exp_function(self, func_config: BackgroundFunction):
         """Create sum of exponentials function"""
         # Create parameters
@@ -926,7 +945,9 @@ class BackgroundFitter:
         # Import combined model
         if self.combined_model:
             model_name = f"full_bkg_model{category_label}_{self.era}"
-            self.output_workspace.Import(self.combined_model, ROOT.RooCmdArg()) #True)#ROOT.RooFit.RenameVariable(self.combined_model.GetName(), model_name))
+            # self.output_workspace.Import(self.combined_model, ROOT.RooCmdArg()) #True)#ROOT.RooFit.RenameVariable(self.combined_model.GetName(), model_name))
+            self.output_workspace.Import(self.combined_model, ROOT.RooFit.RecycleConflictNodes()) #True)#ROOT.RooFit.RenameVariable(self.combined_model.GetName(), model_name))
+
             print(f"  ✅ Added combined model: {model_name}")
             
         # Import category-specific dataset if available
