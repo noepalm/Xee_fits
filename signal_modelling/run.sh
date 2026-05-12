@@ -1,27 +1,51 @@
-### tighter cuts, new signal, PU reweight
-mkdir -p logs/260403
-# for era in 2022; do
-for era in 2022 2022EE 2023 2023BPix; do
-    # time python3 main_oo.py --full --delete_ws --use_reco_mass \
-    #                 --no_categories --syst \
-    #                 --no_plots \
-    #                 --era "$era" \
-    #                 --envelope \
-    #                 --nuisanced_vars mean:electronScaleVariation \
-    #                 --nuisanced_vars_stat sigma \
-    #                 --folder_tag "260403" \
-    #                 --copy_eos --tag="nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope" &> logs/260403/log_reco_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope_era${era}.log
+### per-year signal, all corrections (now also including reco SFs + new trigger SFs vs diele pt)
+mkdir -p logs/260430
+# for era in 2022 2022EE 2023 2023BPix; do
+for era in 2022EE; do
+    time python3 main_oo.py --full --delete_ws --use_reco_mass \
+                    --no_categories --syst \
+                    --no_plots \
+                    --era "$era" \
+                    --nuisanced_vars mean:electronScaleVariation \
+                    --nuisanced_vars_stat sigma \
+                    --folder_tag "260430" \
+                    --copy_eos --tag="allCorrections" &> logs/260430/log_reco_allCorrections_era${era}.log
     time python3 main_oo.py --plots --use_reco_mass \
                     --no_categories --syst \
                     --era "$era" \
-                    --envelope \
-                    --folder_tag "260403" \
+                    --folder_tag "260430" \
                     --nuisanced_vars mean:electronScaleVariation \
                     --nuisanced_vars_stat sigma \
-                    --copy_eos --tag="nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope" &> logs/260403/log_reco_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope_era${era}_plotting.log
+                    --copy_eos --tag="allCorrections" &> logs/260430/log_reco_allCorrections_era${era}_plotting.log
 done
                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
                     # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1DCorrection sigma:pileupReweight,electronID,triggerSF1DCorrection alphaL:pileupReweight,electronID,triggerSF1DCorrection alphaR:pileupReweight,electronID,triggerSF1DCorrection nR:pileupReweight,electronID,triggerSF1DCorrection nL:pileupReweight,electronID,triggerSF1DCorrection \
+
+
+# ### tighter cuts, new signal, PU reweight
+# mkdir -p logs/260403
+# # for era in 2022; do
+# for era in 2022 2022EE 2023 2023BPix; do
+#     # time python3 main_oo.py --full --delete_ws --use_reco_mass \
+#     #                 --no_categories --syst \
+#     #                 --no_plots \
+#     #                 --era "$era" \
+#     #                 --envelope \
+#     #                 --nuisanced_vars mean:electronScaleVariation \
+#     #                 --nuisanced_vars_stat sigma \
+#     #                 --folder_tag "260403" \
+#     #                 --copy_eos --tag="nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope" &> logs/260403/log_reco_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope_era${era}.log
+#     time python3 main_oo.py --plots --use_reco_mass \
+#                     --no_categories --syst \
+#                     --era "$era" \
+#                     --envelope \
+#                     --folder_tag "260403" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --copy_eos --tag="nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope" &> logs/260403/log_reco_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope_era${era}_plotting.log
+# done
+#                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
+#                     # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1DCorrection sigma:pileupReweight,electronID,triggerSF1DCorrection alphaL:pileupReweight,electronID,triggerSF1DCorrection alphaR:pileupReweight,electronID,triggerSF1DCorrection nR:pileupReweight,electronID,triggerSF1DCorrection nL:pileupReweight,electronID,triggerSF1DCorrection \
 
 # ### tighter cuts, 6p5 trigger only
 # for era in 2022 2022EE 2023 2023BPix; do

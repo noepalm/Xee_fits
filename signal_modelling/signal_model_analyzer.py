@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
 class FitLogger:
     """Manages comprehensive logging of fit results and analysis progress"""
     
@@ -447,10 +446,16 @@ class DatasetLoader:
                     fill_value = val
                 
                 # Apply range cut
-                if not (min_val <= fill_value <= max_val):
+                # if not (min_val <= fill_value <= max_val):
+                if not (min_val*1.01 < fill_value < max_val*0.99):
                     continue
                 
                 obs_var.setVal(fill_value)
+                if sample.label == "Zd_M1":
+                    print(f"DEBUG: filling dataset with fill_value = {fill_value:.3f}, weight = {weight:.3f}")
+                    if fill_value > 1.18:
+                        print(f"DEBUG WARNING: dangerous value being added (mass range = {sample.mass_range}, fill_value = {fill_value:.3f})")
+
                 data.add(ROOT.RooArgSet(obs_var), weight)
                 
                 # Fill systematic variations
@@ -473,6 +478,8 @@ class DatasetLoader:
                                 syst_fill_value = fill_value
                                 syst_weight = self._get_weight_variation(t, variation, direction, weight, j)
 
+                            if not (min_val <= syst_fill_value <= max_val):
+                                continue
                             obs_var.setVal(syst_fill_value)
                             data_vars[f"{variation}_{direction}"].add(ROOT.RooArgSet(obs_var), syst_weight)
         
@@ -806,7 +813,7 @@ class FitManager:
         self.logger = logger
         self.era = era
     
-    def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet, ndof: None) -> Optional[float]:
+    def compute_chi2(self, model: ROOT.RooAbsPdf, dataset: ROOT.RooDataSet, ndof = None) -> Optional[float]:
         """Compute Chi2/NDF for model-dataset comparison"""
         try:
             # Get the observable
@@ -850,7 +857,7 @@ class FitManager:
             'NumCPU': 8,
             'Hesse' : True,
             'Minos' : True,
-            # 'SumW2Error': True,
+            'SumW2Error': False,
             # 'AsymptoticError': True,
             'Minimizer': "Minuit2",
         }
@@ -862,6 +869,19 @@ class FitManager:
             if hasattr(ROOT.RooFit, key):
                 fit_args.append(getattr(ROOT.RooFit, key)(value))
         
+        # # TEMPORARY: adding external constraints on nL, nR (force them large)
+        # if fit_type == "response":
+        #     nr_constraint = ROOT.RooGaussian(f"nR_constraint_{sample_name}{category_name}_{self.era}",
+        #                                     f"nR_constraint_{sample_name}{category_name}_{self.era}",
+        #                                     self.workspace.var(f"response_nR_{sample_name}{category_name}_{self.era}"),
+        #                                     ROOT.RooFit.RooConst(10), ROOT.RooFit.RooConst(3))
+        #     nl_constraint = ROOT.RooGaussian(f"nL_constraint_{sample_name}{category_name}_{self.era}",
+        #                                     f"nL_constraint_{sample_name}{category_name}_{self.era}",
+        #                                     self.workspace.var(f"response_nL_{sample_name}{category_name}_{self.era}"),
+        #                                     ROOT.RooFit.RooConst(10), ROOT.RooFit.RooConst(3))
+
+        #     fit_args.append(ROOT.RooFit.ExternalConstraints(ROOT.RooArgSet(nr_constraint, nl_constraint)))
+
         result = model.fitTo(dataset, *fit_args)
 
         # import updated model to workspace
@@ -1056,6 +1076,7 @@ class FitManager:
                                 # Create and perform fit
                                 fit_func_var = ROOT.TF1(f"fit{tag}_{var}{category.label}_{variation}_{direction}", "[0] + [1]*x", 0, 12)
                                 fit_result_var = variation_graph.Fit(fit_func_var, "S")
+                                print("DEBUG: fit result = ", fit_result_var)
                                 fit_result_var.Print()
                                 fit_funcs[direction] = fit_func_var
 

@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from signal_model_analyzer import SignalModelAnalyzer, SampleConfig, CategoryConfig
 
+hep.style.use("CMS")  # Set CMS style for matplotlib
 
 class PlotManager:
     """Manages plotting configuration and output"""

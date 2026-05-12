@@ -36,7 +36,10 @@ class AnalysisConfig:
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{era}/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly__updatedSignal/zsnap/era{era}/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zsnap/era{era}/"
-        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight/zsnap/era{era}/"
+        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/signal_model_allCorrections/zsnap/era{era}/"
+        self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptJpsi_allCorrections/zsnap/era{era}/"
+        self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptUpsilon_allCorrections/zsnap/era{era}/"
         self.base_eos_folder = Path("/eos/home-n/npalmeri/www/DiElectron/signal_model")
         self.eos_folder = str(self.base_eos_folder)
         
@@ -173,8 +176,8 @@ class AnalysisConfig:
                 "mass_range": [0.5, 0.1, 0.9],
                 "mass_GEN_range": [0.5, 0.1, 0.9],
                 "mean_BW_range": [0.5, 0.1, 0.9],
-                "response_nR_range" : [1.5, 0, 5],
-                "response_nL_range" : [1.5, 0, 5],
+                "response_nR_range" : [1.5, 0.1, 5],
+                "response_nL_range" : [1.5, 0.1, 5],
                 "response_alphaL_range" : [0.7, 0.1, 5],                
                 "response_alphaR_range" : [1, 0.1, 5],
             },
@@ -183,12 +186,14 @@ class AnalysisConfig:
                 "nominal_mass": 1,
                 "nominal_width": 0.02,
                 "mass_range": [1, 0.6, 1.2],
-                "mass_GEN_range": [1, 0.8, 1.2],
-                "mean_BW_range": [1, 0.7, 1.2],
-                "response_nR_range" : [1.5, 0, 5],
-                "response_nL_range" : [1.5, 0, 5],
+                "mass_GEN_range": [1, 0.6, 1.2],
+                "mean_BW_range": [1, 0.6, 1.2],
+                "response_sigma_range" : [0.05, 0.01, 1],
+                "response_nR_range" : [1.5, 0.1, 5],
+                "response_nL_range" : [1.5, 0.1, 5],
                 "response_alphaL_range" : [0.7, 0.1, 5],                
                 "response_alphaR_range" : [1.5, 0.1, 5],
+                "response_alphaR_range" : [2.0, 0.1, 5],
             },
             "Zd_M2": {
                 "filename": "HAHM_13p6TeV_M2.root",
@@ -197,8 +202,8 @@ class AnalysisConfig:
                 "mass_range": [2, 1.4, 2.3],
                 "mass_GEN_range": [2, 1.4, 2.7],
                 "mean_BW_range": [2, 1.4, 2.7],
-                "response_nR_range" : [1.5, 0, 5],
-                "response_nL_range" : [1.5, 0, 5],
+                "response_nR_range" : [1.5, 0.1, 5],
+                "response_nL_range" : [1.5, 0.1, 5],
                 "response_alphaL_range" : [0.7, 0.1, 5],                
                 "response_alphaR_range" : [1.5, 0.1, 5],
             },
@@ -294,6 +299,14 @@ class AnalysisConfig:
             # samples[name].file_GEN = os.path.join(self.base_path, "base_12_full", data["filename"])
             # samples[name].file = os.path.join(self.base_path, "base_13_full", data["filename"])
             # samples[name].file_GEN = os.path.join(self.base_path, "base_13_full", data["filename"])
+            ### this sample is *not gen-matched* 
+            # if name == "JPsiToEE":
+            #     samples[name].file = os.path.join(self.base_path_jpsi, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
+            #     samples[name].file_GEN = os.path.join(self.base_path_jpsi, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
+            # if name == "UpsilonToEE":
+            #     samples[name].file = os.path.join(self.base_path_upsilon, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
+            #     samples[name].file_GEN = os.path.join(self.base_path_upsilon, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
+            # else:
             samples[name].file = os.path.join(self.base_path, "base_14_full", data["filename"])
             samples[name].file_GEN = os.path.join(self.base_path, "base_14_full", data["filename"])
         
@@ -346,7 +359,8 @@ class AnalysisConfig:
             "reduced_mass_range": [0, -0.6, 0.6],
             "response_mean_range": [0, -1, 1],
             # "response_mean_range": [0, -0.2, 0.2],
-            "response_sigma_range": [0.01, 0, 1],
+            "response_sigma_range": [0.01, 0.001, 1],
+            # "response_sigma_range": [0.2, 0.001, 0.7],
             "response_alphaL_range": [0.4, 0.1, 10],
             "response_alphaR_range": [5, 0.1, 10],
             "response_nL_range": [1, 0, 10],
