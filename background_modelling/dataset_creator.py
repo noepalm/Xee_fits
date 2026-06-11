@@ -1,6 +1,7 @@
 import ROOT
 import os
 import numpy as np
+import random
 from scipy.optimize import curve_fit
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -133,7 +134,8 @@ class DatasetCreator:
             # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
             # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight.root'
             # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_noWeights.root'
-            self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
+            # self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
+            self.signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_allCorrections.root'
             print(f"DEBUG: Using signal workspace with folder tag: {self.signal_ws_file}", flush=True)
         elif self.with_systematics:
             print(f"DEBUG: Using signal workspace with systematics (legacy path)", flush=True)
@@ -289,6 +291,7 @@ class DatasetCreator:
         n_files_minbias = 0
         category_events = {cat: 0 for cat in self.category_names}
         category_events_minbias = {cat: 0 for cat in self.category_names} if self.use_data else None
+        seen_mass_values = set()
         
         print("DEBUG: Starting to loop over files in directory:", self.filepath)
         for filename in os.listdir(self.filepath):
@@ -358,6 +361,10 @@ class DatasetCreator:
                         
                         # Add to appropriate datasets using shared mass variable
                         for category_name in event_categories:
+                            mass_key = (is_data_file, mass_val)
+                            if mass_key in seen_mass_values:
+                                continue
+                            seen_mass_values.add(mass_key)
                             mass_var.setVal(mass_val)
                             if self.fit_region:
                                 if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
@@ -532,6 +539,11 @@ class DatasetCreator:
                 variation_mapping['trigger_up'] = ('_trigger_up', 'trigger up')
             if 'trigger_down' in available_keys:
                 variation_mapping['trigger_down'] = ('_trigger_down', 'trigger down')
+            if 'reco_up' in available_keys:
+                variation_mapping['reco_up'] = ('_reco_up', 'reco up')
+            if 'reco_down' in available_keys:
+                variation_mapping['reco_down'] = ('_reco_down', 'reco down')
+
             print(f"Using explicit naming: {list(variation_mapping.keys())}")
         
         # Extract functions and parameters for each available variation

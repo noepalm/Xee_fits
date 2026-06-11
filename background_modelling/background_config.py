@@ -150,7 +150,8 @@ class BackgroundModelConfig:
                 # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_minBias_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{self.era}/",
                 # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/fw_output_minBias_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{self.era}/",
                 # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_minBias_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/",
-                background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_minBias_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/",
+                # background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_minBias_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/",
+                background_resonant_data = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/minbias_resonant_allCorrections/zsnap/era{self.era}/",
                 description="Low mass background region",
             ),
             "region1": FitRegion(
@@ -173,7 +174,8 @@ class BackgroundModelConfig:
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{self.era}/',
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{self.era}/',
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/',
-                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_Jpsi_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptJpsi_allCorrections/zsnap/era{self.era}/',
                 description="Main analysis region containing J/psi and psi(2S)",
             ),
             "region2": FitRegion(
@@ -194,9 +196,10 @@ class BackgroundModelConfig:
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{self.era}/',
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{self.era}/',
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{self.era}/',
-                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/',
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_Upsilon_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{self.era}/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptUpsilon_allCorrections/zsnap/era{self.era}/',
                 description="High mass background region"
-            ),
+            ),        
             "full": FitRegion(
                 name="full",
                 display_name="Full Range (0-12.0 GeV)",
@@ -248,6 +251,7 @@ class BackgroundModelConfig:
                 # "region1" : [0.55, 1.96, -0.31, 0.16, 0.08], # works for nanov15 W/ OVERLAP (1.6-4.6), MINBIAS
                 # "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075], # works for DATA
                 "region1" : [1.7, 1.9, -0.06610, 0.52400, 0.19075, -0.1, +0.1], # DATA, 7th order test
+                # "region1" : [0.55, 1.96, -0.31, 0.16, 0.08, -0.1, 0.1], # DATA, test for better jpsi tails
                 # "region2" : [1.9, 0.73, -0.015, 0.11, 0.013],
                 # "region2" : [1.7, 0.23, 0.13, -0.003, 0.00012],
                 # "region2" : [4.4, 0.78, 0.74, 0.44, 0.0045], #FOR NANOV15 AND DATA, ALSO works w/ overlap
@@ -359,9 +363,10 @@ class BackgroundModelConfig:
             "inclusive": {
                 "region0" : [1.06946, 0.00463, -0.14197, -0.00807, 0.02420, -0.01174],
                 "region1" : [-0.8, -0.115, 0.25, 0.02, -0.076, 0.1],
-                # "region2" : [-1.3, 0.5, -0.1, -0.001, -0.01, 0.05], #SWITCH TO -1.3, 0.5, -0.01, -0.001, -0.01, 0.05 FOR 2023BPIX
-                # "region2" : [-1.3, 0.5, -0.2, 0.1, -0.1, 0.05], #SWITCH TO -1.3, 0.5, -0.01, -0.001, -0.01, 0.05 FOR 2023BPIX
-                "region2" : [-1.4, 0.5, -0.05, -0.02, -0.02, 0.03], #for 2023 chebyshev r2
+                # "region2" : [-1.3, 0.5, -0.1, -0.001, -0.01, 0.05], #FOR 2023BPIX
+                # "region2" : [-1.3, 0.5, -0.2, 0.1, -0.1, 0.05], #FOR 2023BPIX
+                "region2" : [-1.4, 0.4, 0, -0.1, 0.05, 0], #FOR MOST, START FROM THIS 
+                # "region2" : [-1.4, 0.5, -0.05, -0.02, -0.02, 0.03], #for 2023 chebyshev r2
             },
             # Add category-specific overrides here as needed
         }
@@ -550,7 +555,7 @@ class BackgroundModelConfig:
             param_inits=chebyshev_inits,
             param_limits=[(-5, 5) for _ in range(6)],
             description="6th degree Chebyshev polynomial"
-        ))        
+        ))
 
         # 4th degree Chebyshev polynomial
         functions.append(BackgroundFunction(
@@ -574,7 +579,7 @@ class BackgroundModelConfig:
             param_inits=bernstein_inits[:4],
             param_limits=bernstein_limits[:4],
             description="4th degree Bernstein polynomial"
-        ))        
+        ))
 
         # 5th deg bernstein
         functions.append(BackgroundFunction(
@@ -610,7 +615,7 @@ class BackgroundModelConfig:
             param_inits=poly_inits[:4] + [poly_inits[-1]],  # Use first 4 polynomial params + exponential param
             param_limits=poly_limits[:4] + [poly_limits[-1]],  # Use corresponding limits
             description="4th degree polynomial times exponential"
-        ))        
+        ))
 
         # Polynomial × Exponential (6th degree polynomial)
         functions.append(BackgroundFunction(
@@ -634,12 +639,50 @@ class BackgroundModelConfig:
             param_inits=poly_inits[:7] + [poly_inits[-1]],  # Use first 4 polynomial params + exponential param
             param_limits=poly_limits[:7] + [poly_limits[-1]],  # Use corresponding limits
             description="6th degree polynomial times exponential"
-        ))                
+        ))
+
+        # exponential of polynomials
+        functions.append(BackgroundFunction(
+            name="bkg_f15",
+            display_name="exp poly",
+            formula="blabla",
+            n_params=4,
+            param_names=[f"ee{i}" for i in range(4)],
+            param_inits=[0.5, -2.5, 3.5, -1.3],  #laurent_inits
+            # param_limits=[[-1, 1], [-1, 1], [-1, 1], [-1, 1]],  #laurent_limits
+            param_limits=[[-50, 50], [-50, 50], [-50, 50], [-50, 50]],  #laurent_limits
+            description="4th degree Laurent series"
+        ))
+
+        # CMS Empirical Dijet
+        functions.append(BackgroundFunction(
+            name="bkg_f16",
+            display_name="CMS Dijet",
+            formula="x^(p1 + p2*log(x) + p3*log(x)^2)",
+            n_params=3,
+            param_names=[f"d{i}" for i in range(3)],
+            param_inits=[0, -3, 0.1], 
+            param_limits=[[-10, 20.0], [-20, 3], [-20, 3]], 
+            description="CMS empirical dijet function (power law with log-running index)"
+        ))
+
+        # 5th chebyshev * fermi function at 6
+        functions.append(BackgroundFunction(
+            name="bkg_f17",
+            display_name="Chebyshev Polynomial",
+            formula="Chebyshev polynomial of degree 5",
+            n_params=7,
+            param_names=[f"t{i}" for i in range(5)] + ["f0", "f1"],
+            param_inits = chebyshev_inits_5thdeg + [6, 0.1],
+            param_limits=[(-2,2) for _ in range(5)] + [(4, 7), (0, 1)],
+            description="5th degree Chebyshev polynomial"
+        ))
+
 
         # Validate all functions
         for func in functions:
             func.validate()
-            
+
         return functions
         
     def _define_resonant_models(self) -> Dict[str, Dict[str, Any]]:
@@ -690,18 +733,21 @@ class BackgroundModelConfig:
                 "resonant_bkg_template_name": "Zd_M3.1",
                 "mass_range": (3.05, 3.12),
                 "initial_params": {
-                    "mean": 3.1,
+                    "mean": 3.05,
                     "sigma": 0.045,
-                    "alphaL": 0.60,
-                    "nL": 3.1,
-                    "alphaR": 1.5,
-                    "nR": 2.9,
+                    "alphaL": 0.60, #0.6
+                    "nL": 2.6, #3.1
+                    "alphaR": 1.2, #1.5
+                    "nR": 9, #2.9
+                    "mean_core" : 3.1,
+                    "sigma_core" : 0.05,
+                    ### test ones
                     # "mean": 3.1,
-                    # "sigma": 0.045,
-                    # "alphaL": 0.7,
-                    # "nL": 2,
-                    # "alphaR": 1.5,
-                    # "nR": 2.9,
+                    # "sigma": 0.06,
+                    # "alphaL": 2.0,
+                    # "nL": 0.5,
+                    # "alphaR": 2.0,
+                    # "nR": 0.5,
                 },
                 # Optional: "param_limits_override": {},
                 "title": "J/#psi"
@@ -725,7 +771,7 @@ class BackgroundModelConfig:
                 "mass_range": (9.0, 10.0),
                 "initial_params": {
                     "mean": 9.46,
-                    "sigma": 0.15,
+                    "sigma": 0.15, #0.15
                     "alphaL": 0.5,
                     "nL": 5.5,
                     "alphaR": 1,
@@ -762,7 +808,7 @@ class BackgroundModelConfig:
                 # "nupsilon1s": {"init_param": 0.01, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background FOR NANOV15 ### FOR DATA
                 # "nupsilon1s": {"init_param": 0.001, "min_param": 1e-4, "max_param": 1e4}, # Upsilon(1S) background
                 # UPSILON: 0.005 worked for all regions all suberas except 2023BPix region 2 (0.001) and 2023 region 2 (0.0005)
-                "nupsilon1s": {"init_param": 0.0001, "min_param": 1e-5, "max_param": 1e4}, # Upsilon(1S) background
+                "nupsilon1s": {"init_param": 0.001, "min_param": 1e-5, "max_param": 1e4}, # Upsilon(1S) background
                 "ndy": {"init_param": 0.3, "min_param": 1e-4, "max_param": 1e4},     # Non-resonant background
             },
             "fractions": {

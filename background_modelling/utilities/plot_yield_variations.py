@@ -28,13 +28,33 @@ def compute_variation_fractions(workspace, era, nominal_tmpl, up_tmpl, down_tmpl
 
         print(
             f"M{mass:.1f}: {nominal_value:.4f} + {up_value - nominal_value:.4f} "
-            f"({up_value / nominal_value:.4f}%) - {nominal_value / down_value:.4f} "
-            f"({down_value / nominal_value:.4f}%)"
+            f"({up_value / nominal_value:.4f}) - {nominal_value / down_value:.4f} "
+            f"({down_value / nominal_value:.4f})"
         )
         fractions_up[mass] = up_value / nominal_value
         fractions_down[mass] = down_value / nominal_value
 
     return fractions_up, fractions_down
+
+
+def summarize_max_variations(up_values, down_values):
+    max_up_frac = float(np.max(up_values))
+    max_down_frac = float(np.min(down_values))
+
+    max_up_percent = (max_up_frac - 1.0) * 100.0
+    max_down_percent = (1.0 - max_down_frac) * 100.0
+
+    return max_up_frac, max_down_frac, max_up_percent, max_down_percent
+
+
+def summarize_min_variations(up_values, down_values):
+    min_up_frac = float(np.min(up_values))
+    min_down_frac = float(np.max(down_values))
+
+    min_up_percent = (min_up_frac - 1.0) * 100.0
+    min_down_percent = (1.0 - min_down_frac) * 100.0
+
+    return min_up_frac, min_down_frac, min_up_percent, min_down_percent
 
 
 def plot_variation(masses, up_values, down_values, up_label, down_label, ylabel, output_path):
@@ -56,8 +76,11 @@ def plot_variation(masses, up_values, down_values, up_label, down_label, ylabel,
 for era in ["2022", "2022EE", "2023", "2023BPix"]:
     # f = ROOT.TFile.Open("/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260130/dataset_data_region1_binned_data_altbkg_chebyshev_withScaleSyst_IDSF_full.root")
     # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass_nanov15_withScaleSyst_IDSF/"
-    f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260404/{era}/dataset_data_region1_binned_data_envelope_withScaleSyst_IDSF_triggerSF_finerBinning_tighterCuts_PUreweight_signalEnvelope_{era}_envelope_full.root")
-    outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope/era{era}"
+    # f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260404/{era}/dataset_data_region1_binned_data_envelope_withScaleSyst_IDSF_triggerSF_finerBinning_tighterCuts_PUreweight_signalEnvelope_{era}_envelope_full.root")
+    # outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope/era{era}"
+    f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260430/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+
+    outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections/era{era}"
     w = f.Get("w")
     Path(outfolder).mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +103,14 @@ for era in ["2022", "2022EE", "2023", "2023BPix"]:
             "down_tmpl": "Zd_M{mass:.1f}_expected_trigger_down_{era}",
             "output_base": "trigger_sf_yield_variation",
         },
+        {
+            "name": "Reco SF",
+            "up_label": "Reco SF Up",
+            "down_label": "Reco SF Down",
+            "up_tmpl": "Zd_M{mass:.1f}_expected_reco_up_{era}",
+            "down_tmpl": "Zd_M{mass:.1f}_expected_reco_down_{era}",
+            "output_base": "reco_sf_yield_variation",
+        },
     ]
 
     for variation in variations:
@@ -100,13 +131,31 @@ for era in ["2022", "2022EE", "2023", "2023BPix"]:
         up_values = np.array([fractions_up[mass] for mass in masses])
         down_values = np.array([fractions_down[mass] for mass in masses])
 
+        max_up_frac, max_down_frac, max_up_percent, max_down_percent = summarize_max_variations(
+            up_values, down_values
+        )
+        print(
+            f"Max variation for {variation['name']} in {era}: "
+            f"up {max_up_frac:.4f} ({max_up_percent:.1f}%), "
+            f"down {max_down_frac:.4f} ({max_down_percent:.1f}%)"
+        )
+
+        min_up_frac, min_down_frac, min_up_percent, min_down_percent = summarize_min_variations(
+            up_values, down_values
+        )
+        print(
+            f"Min variation for {variation['name']} in {era}: "
+            f"up {min_up_frac:.4f} ({min_up_percent:.1f}%), "
+            f"down {min_down_frac:.4f} ({min_down_percent:.1f}%)"
+        )
+
         plot_variation(
             masses,
             up_values,
             down_values,
             variation["up_label"],
             variation["down_label"],
-            "Nominal #signal/variation #signal",
+            "Varied/Nominal yield",
             Path(outfolder) / variation["output_base"],
         )
 
@@ -116,7 +165,7 @@ for era in ["2022", "2022EE", "2023", "2023BPix"]:
             np.abs(1 - down_values) * 100,
             variation["up_label"],
             variation["down_label"],
-            "Abs(1 - Nominal #signal/variation #signal) [%]",
+            "Abs(1 - variation/nominal yield) [%]",
             Path(outfolder) / f"{variation['output_base']}_minus1",
         )
 

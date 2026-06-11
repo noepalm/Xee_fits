@@ -73,7 +73,7 @@ def get_points_for_mass(mass, region):
                     10.0, 20, 30, 40, 50]
         else:
             return [0.001, 0.005, 0.01, 0.0207, 0.0336, 0.0546, 0.0886, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 
-                    0.7, 1.0, 2.5, 5.0, 10.0, 20.0, 40.0, 50.0, 70.0, 100.0]
+                    0.7, 1.0, 2.5, 5.0, 10.0, 20.0, 40.0, 50.0, 70.0, 85, 95, 100, 120, 150, 200, 250, 500]
 
     # if region == "region0":
     #     # if mass < 0.65:
@@ -99,13 +99,19 @@ def get_points_for_mass(mass, region):
         if 7 <= mass < 7.5:
             return [0.001, 0.005, 0.007, 0.01, 0.0162, 0.0264, 0.0379, 0.0546, 0.0695, 0.0886, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 
                     2.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 50.0, 60.0]
+        elif 9.4 <= mass <= 9.6:
+            return [0.001, 0.005, 0.007, 0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
+                    0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 10.0, 12.0, 15.0, 17.0, 20.0, 25.0, 30.0, 35.0, 
+                    40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0, 350, 400, 430, 450, 480, 500, 600, 700, 800, 900, 1200, 1400, 1700, 1800]
         elif 7.5 <= mass < 9.8:
             return [0.001, 0.005, 0.007, 0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
                     0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 10.0, 12.0, 15.0, 17.0, 20.0, 25.0, 30.0, 35.0, 
-                    40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0, 350, 400, 500]
+                    40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0, 350, 400, 430, 450, 480, 500]
+            # return [5.0, 6.0, 7.0, 10.0, 12.0, 15.0, 17.0, 20.0, 25.0, 30.0, 35.0, 
+            #         40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 160.0, 200.0, 210.0, 270.0, 300.0, 350, 400, 430, 480, 500, 700]
         elif 9.8 <= mass < 10:
             return [0.01, 0.02, 0.03, 0.05, 0.06, 0.0785, 0.0886, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 
-                    0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 4.5, 4.7, 4.9, 5.0, 5.5, 6.0, 7.0, 10.0, 20, 30, 40, 50, 60, 75, 90, 130, 150, 200, 250, 300, 400]
+                    0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 4.5, 4.7, 4.9, 5.0, 5.5, 6.0, 7.0, 10.0, 20, 30, 40, 50, 60, 75, 90, 130, 150, 200, 250, 300, 400, 500, 700, 800]
         elif 10 <= mass <= 12:
             return [0.5, 0.7, 0.9, 1.0, 2.0, 3.0, 3.2, 3.5, 3.7, 3.9, 4.0, 5.0, 5.5, 6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 10.0, 
                     15.0, 20.0, 25.0, 35.0, 50.0, 60.0, 70.0, 85.0, 95, 115.0, 130.0, 150.0, 180.0, 
@@ -133,7 +139,7 @@ def get_rmin_rmax(mass, era):
         # "allYears": {0: (0, 100), 1: (0,10), 9.0: (0, 15), 9.5: (0, 25), 10.0: (0, 50)}
         # "allYears": {0: (0, 100), 1.25: (0,10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
         # "allYears": {1.25: (0,300), 2.0 : (0, 10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
-        "allYears": {0 : (0, 3000), 1.25: (0,500), 2.0 : (0, 100), 3.0 : (0, 1000), 3.2 : (0, 100), 4.0 : (0, 10), 7.5: (0, 100)}
+        "allYears": {0 : (0, 3000), 1.25: (0,500), 2.0 : (0, 100), 3.0 : (0, 1000), 3.2 : (0, 100), 4.0 : (0, 10), 7.5: (0, 100), 9.3 : (0, 2000)}
         # "allYears": {0: (0, 7000), 3.5: (0, 5000), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)} #for 6p5 trigger test only
     }
     
@@ -323,6 +329,7 @@ def run_single_grid_point(args_dict):
         "combine", "-M", "AsymptoticLimits", input_root,
         "--rMin", str(rmin), "--rMax", str(rmax),
         "--singlePoint", str(point),
+        # "--run", "expected",
         "-n", f"_{label}{fit_tag_label}_point_{point}",
         "--cminDefaultMinimizerStrategy", "0"
     ]
@@ -364,6 +371,89 @@ def run_single_grid_point(args_dict):
         return (False, point, label, mass, log_file)
     except Exception as e:
         return (False, point, label, mass, str(e))
+
+
+def copy_direct_outputs(workdir, outfolder, label, fit_tag_label, mass):
+    dest_dir = Path(outfolder) / label / f"M{mass}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    files_to_copy = [
+        (os.path.join(workdir, f"fitAsymptotic_{label}{fit_tag_label}.log"),
+         f"fitAsymptotic_{label}{fit_tag_label}.log"),
+        (os.path.join(workdir, f"higgsCombine_{label}{fit_tag_label}.AsymptoticLimits.mH120.root"),
+         f"higgsCombine_{label}{fit_tag_label}.AsymptoticLimits.mH120.root"),
+    ]
+
+    combine_logger = os.path.join(workdir, "combine_logger.out")
+    if os.path.exists(combine_logger):
+        files_to_copy.append((combine_logger, f"combine_logger_{label}{fit_tag_label}.out"))
+
+    for src_file, dest_name in files_to_copy:
+        if os.path.exists(src_file):
+            subprocess.run(["cp", src_file, str(dest_dir / dest_name)])
+
+
+def run_single_limit(args_dict):
+    """
+    Run combine AsymptoticLimits directly (no grid).
+
+    Returns:
+        Tuple of (success, label, mass, log_path)
+    """
+    workdir = args_dict['workdir']
+    input_root = args_dict['input_root']
+    label = args_dict['label']
+    fit_tag_label = args_dict['fit_tag_label']
+    rmin = args_dict['rmin']
+    rmax = args_dict['rmax']
+    cl_value = args_dict.get('cl')
+    set_params = args_dict['set_params']
+    freeze_params = args_dict['freeze_params']
+    mass = args_dict['mass']
+    outfolder = args_dict['outfolder']
+
+    output_file = os.path.join(
+        workdir,
+        f"higgsCombine_{label}{fit_tag_label}.AsymptoticLimits.mH120.root",
+    )
+    log_file = os.path.join(workdir, f"fitAsymptotic_{label}{fit_tag_label}.log")
+
+    # Check if already computed (caching)
+    if os.path.exists(output_file) and args_dict.get('caching', True):
+        copy_direct_outputs(workdir, outfolder, label, fit_tag_label, mass)
+        return (True, label, mass, None)
+
+    cmd = [
+        "combine", "-M", "AsymptoticLimits", input_root,
+        "--rMin", str(rmin), "--rMax", str(rmax),
+        "-n", f"_{label}{fit_tag_label}",
+        "--cminDefaultMinimizerStrategy", "0",
+    ]
+
+    if set_params:
+        cmd.extend(["--setParameters", set_params])
+
+    if freeze_params:
+        cmd.extend(["--freezeParameters", freeze_params])
+
+    if cl_value is not None:
+        cmd.extend(["--cl", str(cl_value)])
+
+    cmd.extend(["-v", "1"])
+
+    try:
+        with open(log_file, 'w') as f:
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, timeout=1200, cwd=workdir)
+        trim_file_to_head_tail(log_file)
+        success = result.returncode == 0
+        if success:
+            copy_direct_outputs(workdir, outfolder, label, fit_tag_label, mass)
+        return (success, label, mass, log_file)
+    except subprocess.TimeoutExpired:
+        trim_file_to_head_tail(log_file)
+        return (False, label, mass, log_file)
+    except Exception as e:
+        return (False, label, mass, str(e))
 
 # ============================================================================
 # Harvesting (requires all grid points)
@@ -417,6 +507,7 @@ def harvest_limits(workdir, label, fit_tag_label, points, input_root, rmin, rmax
         "combine", "-M", "AsymptoticLimits", input_root,
         "--rMin", str(rmin), "--rMax", str(rmax),
         "--getLimitFromGrid", grid_output,
+        # "--run", "expected",
         "-n", f"_{label}{fit_tag_label}",
         "-v", "1" #3
     ]
@@ -506,6 +597,7 @@ def process_mass_directory(args):
         'mass': mass,
         'mass_dir': mass_dir,
         'grid_jobs': [],
+        'direct_jobs': [],
         'harvest_params': []
     }
     
@@ -608,12 +700,10 @@ def process_mass_directory(args):
         # Use just the filename since we'll chdir to workdir
         input_root = os.path.basename(root_file)
         
-        # Create grid jobs for all points
-        for point in points:
+        if config.get('no_grid'):
             job = {
                 'workdir': workdir,
                 'input_root': input_root,
-                'point': point,
                 'label': label,
                 'fit_tag_label': config['fit_tag_label'],
                 'rmin': rmin,
@@ -622,25 +712,45 @@ def process_mass_directory(args):
                 'set_params': set_params,
                 'freeze_params': freeze_params,
                 'mass': mass,
+                'outfolder': config['outfolder'],
                 'caching': config['caching'],
                 'era': config['era']
             }
-            result['grid_jobs'].append(job)
-        
-        # Store harvest parameters
-        harvest_params = {
-            'workdir': workdir,
-            'label': label,
-            'fit_tag_label': config['fit_tag_label'],
-            'points': points,
-            'input_root': input_root,
-            'rmin': rmin,
-            'rmax': rmax,
-            'outfolder': config['outfolder'],
-            'mass': mass,
-            'cl': config.get('cl')
-        }
-        result['harvest_params'].append(harvest_params)
+            result['direct_jobs'].append(job)
+        else:
+            # Create grid jobs for all points
+            for point in points:
+                job = {
+                    'workdir': workdir,
+                    'input_root': input_root,
+                    'point': point,
+                    'label': label,
+                    'fit_tag_label': config['fit_tag_label'],
+                    'rmin': rmin,
+                    'rmax': rmax,
+                    'cl': config.get('cl'),
+                    'set_params': set_params,
+                    'freeze_params': freeze_params,
+                    'mass': mass,
+                    'caching': config['caching'],
+                    'era': config['era']
+                }
+                result['grid_jobs'].append(job)
+
+            # Store harvest parameters
+            harvest_params = {
+                'workdir': workdir,
+                'label': label,
+                'fit_tag_label': config['fit_tag_label'],
+                'points': points,
+                'input_root': input_root,
+                'rmin': rmin,
+                'rmax': rmax,
+                'outfolder': config['outfolder'],
+                'mass': mass,
+                'cl': config.get('cl')
+            }
+            result['harvest_params'].append(harvest_params)
     
     return result
 
@@ -687,6 +797,11 @@ def main():
         ),
     )
     parser.add_argument('--combination', action='store_true', help='Run category combination')
+    parser.add_argument(
+        '--noGrid',
+        action='store_true',
+        help='Run AsymptoticLimits directly (no grid scan, no getLimitFromGrid).',
+    )
     parser.add_argument('--no_caching', action='store_false', dest='caching', help='Disable caching')
     parser.add_argument('--eras', nargs='+', default=[],
                         choices=['2022', '2022EE', '2023', '2023BPix', 'allYears'],
@@ -748,6 +863,7 @@ def main():
     print(f"  Categories: {get_all_category_ids(args.category)}")
     print(f"  Plot only: {args.plot_only}")
     print(f"  Run combination: {args.combination}")
+    print(f"  Use grid scan: {not args.noGrid}")
     print(f"  Caching grid points: {args.caching}")
     print(f"  Set parameters: {args.setParameters if args.setParameters else '(none)'}")
     print(f"  Freeze parameters: {args.freezeParameters if args.freezeParameters else '(none)'}")
@@ -808,6 +924,7 @@ def main():
                 'freeze_parameters': args.freezeParameters.strip(),
                 'run_combination': args.combination,
                 'run_year_combination': run_year_combination,
+                'no_grid': args.noGrid,
                 'use_data': args.data,
                 'use_reweight': not args.no_reweight,
                 'plot_only': args.plot_only,
@@ -852,12 +969,16 @@ def main():
     # STEP 1: Process all directories and collect grid jobs for ALL configs
     # ========================================================================
     print("\n" + "="*80)
-    print("STEP 1: Collecting grid point jobs for all (era, region) combinations")
+    if args.noGrid:
+        print("STEP 1: Collecting direct AsymptoticLimits jobs for all (era, region) combinations")
+    else:
+        print("STEP 1: Collecting grid point jobs for all (era, region) combinations")
     print("="*80)
     step1_start = time.perf_counter()
     
     all_grid_jobs = []
     all_harvest_params = []
+    all_direct_jobs = []
     
     for config_idx, config in enumerate(configs, 1):
         print(f"\n--- Processing config {config_idx}/{len(configs)}: {config['era']}, {config['region']} ---")
@@ -887,6 +1008,7 @@ def main():
         print(f"  step-1 preprocessing workers for this config: {prep_workers}")
 
         config_jobs_before = len(all_grid_jobs)
+        config_direct_before = len(all_direct_jobs)
         with ThreadPoolExecutor(max_workers=prep_workers) as prep_executor:
             futures = {
                 prep_executor.submit(process_mass_directory, (str(mass_dir), config)): mass_dir
@@ -900,29 +1022,45 @@ def main():
                     if result:
                         all_grid_jobs.extend(result['grid_jobs'])
                         all_harvest_params.extend(result['harvest_params'])
+                        all_direct_jobs.extend(result['direct_jobs'])
                 except Exception as e:
                     print(f"  EXCEPTION while preprocessing mass dir {mass_dir}: {e}")
         
         jobs_added = len(all_grid_jobs) - config_jobs_before
-        print(f"  Added {jobs_added} grid jobs from this config")
+        direct_added = len(all_direct_jobs) - config_direct_before
+        if args.noGrid:
+            print(f"  Added {direct_added} direct jobs from this config")
+        else:
+            print(f"  Added {jobs_added} grid jobs from this config")
 
     step_durations['step1_collect'] = time.perf_counter() - step1_start
     print(f"STEP 1 elapsed: {format_duration(step_durations['step1_collect'])}")
     
     print(f"\n" + "="*80)
-    print(f"Total grid points to compute across all configs: {len(all_grid_jobs)}")
-    print(f"Total harvest targets: {len(all_harvest_params)}")
+    if args.noGrid:
+        print(f"Total direct AsymptoticLimits jobs to compute across all configs: {len(all_direct_jobs)}")
+    else:
+        print(f"Total grid points to compute across all configs: {len(all_grid_jobs)}")
+        print(f"Total harvest targets: {len(all_harvest_params)}")
     print("="*80)
     
-    if not all_grid_jobs:
-        print("No grid jobs to run!")
-        return 0
+    if args.noGrid:
+        if not all_direct_jobs:
+            print("No direct jobs to run!")
+            return 0
+    else:
+        if not all_grid_jobs:
+            print("No grid jobs to run!")
+            return 0
     
     # ========================================================================
     # STEP 2: Run all grid points in parallel (HIGHLY PARALLEL)
     # ========================================================================
     print("\n" + "="*80)
-    print(f"STEP 2: Running {len(all_grid_jobs)} grid points on {args.jobs} cores")
+    if args.noGrid:
+        print(f"STEP 2: Running {len(all_direct_jobs)} direct AsymptoticLimits jobs on {args.jobs} cores")
+    else:
+        print(f"STEP 2: Running {len(all_grid_jobs)} grid points on {args.jobs} cores")
     print("="*80 + "\n")
     step2_start = time.perf_counter()
     
@@ -931,65 +1069,96 @@ def main():
     cached = 0
     
     with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-        # Submit all jobs
-        futures = {executor.submit(run_single_grid_point, job): job for job in all_grid_jobs}
-        
-        # Process completed jobs
-        for future in as_completed(futures):
-            job = futures[future]
-            try:
-                success, point, label, mass, log_path = future.result()
-                if success:
-                    if log_path is None:
-                        cached += 1
-                        if cached % 100 == 0:
-                            print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {len(all_grid_jobs)})")
+        if args.noGrid:
+            futures = {executor.submit(run_single_limit, job): job for job in all_direct_jobs}
+            total_jobs = len(all_direct_jobs)
+
+            for future in as_completed(futures):
+                job = futures[future]
+                try:
+                    success, label, mass, log_path = future.result()
+                    if success:
+                        if log_path is None:
+                            cached += 1
+                            if cached % 100 == 0:
+                                print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {total_jobs})")
+                        else:
+                            completed += 1
+                            if completed % 10 == 0:
+                                print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {total_jobs})")
                     else:
-                        completed += 1
-                        if completed % 10 == 0:
-                            print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {len(all_grid_jobs)})")
-                else:
+                        failed += 1
+                        print(f"FAILED: {label} M{mass}")
+                except Exception as e:
                     failed += 1
-                    print(f"FAILED: {label} M{mass} point {point}")
-            except Exception as e:
-                failed += 1
-                print(f"EXCEPTION: {job['label']} M{job['mass']} point {job['point']}: {e}")
+                    print(f"EXCEPTION: {job['label']} M{job['mass']}: {e}")
+        else:
+            futures = {executor.submit(run_single_grid_point, job): job for job in all_grid_jobs}
+            total_jobs = len(all_grid_jobs)
+
+            for future in as_completed(futures):
+                job = futures[future]
+                try:
+                    success, point, label, mass, log_path = future.result()
+                    if success:
+                        if log_path is None:
+                            cached += 1
+                            if cached % 100 == 0:
+                                print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {total_jobs})")
+                        else:
+                            completed += 1
+                            if completed % 10 == 0:
+                                print(f"Progress: {completed} computed, {cached} cached, {failed} failed (of {total_jobs})")
+                    else:
+                        failed += 1
+                        print(f"FAILED: {label} M{mass} point {point}")
+                except Exception as e:
+                    failed += 1
+                    print(f"EXCEPTION: {job['label']} M{job['mass']} point {job['point']}: {e}")
     
-    print(f"\nGrid computation complete: {completed} computed, {cached} cached, {failed} failed")
+    if args.noGrid:
+        print(f"\nDirect computation complete: {completed} computed, {cached} cached, {failed} failed")
+    else:
+        print(f"\nGrid computation complete: {completed} computed, {cached} cached, {failed} failed")
     step_durations['step2_grid'] = time.perf_counter() - step2_start
     print(f"STEP 2 elapsed: {format_duration(step_durations['step2_grid'])}")
     
     if failed > 0:
-        print(f"WARNING: {failed} grid points failed. Harvesting will likely fail for affected targets.")
+        if args.noGrid:
+            print(f"WARNING: {failed} direct jobs failed.")
+        else:
+            print(f"WARNING: {failed} grid points failed. Harvesting will likely fail for affected targets.")
     
     # ========================================================================
     # STEP 3: Harvest all results (less parallel, but still parallel per target)
     # ========================================================================
-    print("\n" + "="*80)
-    print(f"STEP 3: Harvesting {len(all_harvest_params)} targets")
-    print("="*80 + "\n")
+    if not args.noGrid:
+        print("\n" + "="*80)
+        print(f"STEP 3: Harvesting {len(all_harvest_params)} targets")
+        print("="*80 + "\n")
     step3_start = time.perf_counter()
     
     harvest_failed = 0
     
-    # Harvesting is I/O bound and less CPU intensive, use fewer workers
-    with ProcessPoolExecutor(max_workers=min(16, args.jobs)) as executor:
-        futures = {executor.submit(harvest_limits, **params): params for params in all_harvest_params}
-        
-        for future in as_completed(futures):
-            params = futures[future]
-            try:
-                success = future.result()
-                if not success:
+    if not args.noGrid:
+        # Harvesting is I/O bound and less CPU intensive, use fewer workers
+        with ProcessPoolExecutor(max_workers=min(16, args.jobs)) as executor:
+            futures = {executor.submit(harvest_limits, **params): params for params in all_harvest_params}
+
+            for future in as_completed(futures):
+                params = futures[future]
+                try:
+                    success = future.result()
+                    if not success:
+                        harvest_failed += 1
+                        print(f"Harvest FAILED: {params['label']} M{params['mass']}")
+                except Exception as e:
                     harvest_failed += 1
-                    print(f"Harvest FAILED: {params['label']} M{params['mass']}")
-            except Exception as e:
-                harvest_failed += 1
-                print(f"Harvest EXCEPTION: {params['label']} M{params['mass']}: {e}")
-    
-    print(f"\nHarvesting complete: {len(all_harvest_params) - harvest_failed} successful, {harvest_failed} failed")
-    step_durations['step3_harvest'] = time.perf_counter() - step3_start
-    print(f"STEP 3 elapsed: {format_duration(step_durations['step3_harvest'])}")
+                    print(f"Harvest EXCEPTION: {params['label']} M{params['mass']}: {e}")
+
+        print(f"\nHarvesting complete: {len(all_harvest_params) - harvest_failed} successful, {harvest_failed} failed")
+        step_durations['step3_harvest'] = time.perf_counter() - step3_start
+        print(f"STEP 3 elapsed: {format_duration(step_durations['step3_harvest'])}")
     
     # ========================================================================
     # STEP 4: Generate summary plots for all configs
@@ -1056,14 +1225,19 @@ def main():
     print("\n" + "="*80)
     print("✓ ALL STEPS COMPLETE - SUCCESS")
     print(f"  Processed {len(configs)} (era, region) combinations")
-    print(f"  Total grid points: {len(all_grid_jobs)}")
-    print(f"  Grid failures: {failed}")
-    print(f"  Harvest failures: {harvest_failed}")
+    if args.noGrid:
+        print(f"  Total direct jobs: {len(all_direct_jobs)}")
+        print(f"  Direct failures: {failed}")
+    else:
+        print(f"  Total grid points: {len(all_grid_jobs)}")
+        print(f"  Grid failures: {failed}")
+        print(f"  Harvest failures: {harvest_failed}")
     print("="*80)
     print("TIMING SUMMARY")
     print(f"  Step 1 (collect/preprocess): {format_duration(step_durations['step1_collect'])}")
     print(f"  Step 2 (grid points):        {format_duration(step_durations['step2_grid'])}")
-    print(f"  Step 3 (harvesting):         {format_duration(step_durations['step3_harvest'])}")
+    if not args.noGrid:
+        print(f"  Step 3 (harvesting):         {format_duration(step_durations['step3_harvest'])}")
     print(f"  Step 4 (plots):              {format_duration(step_durations['step4_plots'])}")
     print(f"  Total runtime:                {format_duration(step_durations['total'])}")
     print("="*80)

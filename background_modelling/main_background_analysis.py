@@ -79,8 +79,9 @@ class BackgroundAnalysis:
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_6p5triggerOnly.root'
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight.root'
-            signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
+            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_noWeights.root'
+            signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_allCorrections.root'
         else:
             print("WARNING: No signal folder tag specified, using default path for signal workspace.")
             # signal_ws_file = f'../signal_modelling/workspaces/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
@@ -130,7 +131,11 @@ class BackgroundAnalysis:
                 print(f"⚠️  Warning: Fit region '{fit_region_name}' not found, using full mass range from signal workspace")
         else:
             print(f"⚠️  Warning: No fit region specified, using full mass range from signal workspace")
-        m.setBins(350)
+        # if fit_region_name == "region2":
+        #     m.setBins(350)
+        # else:
+        #     m.setBins(450)
+        m.setBins(450)
         self.output_workspace.Import(m, ROOT.RooCmdArg())
         
         signal_file.Close()
@@ -877,9 +882,9 @@ def create_argument_parser():
     
     # Fitting options
     parser.add_argument("--fit_region", default="region1", 
-                       choices=["region1", "region0", "region2", "full"],
+                       choices=["region1", "region0", "region2", "region2_restricted", "full"],
                        help="Pick fit region")
-    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
                        help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; 4: Chebyshev, 5: Bernstein + exp, 6: modified BW. -1 for all)")
     parser.add_argument("--input_workspaces", nargs='+', default=[],
                        help="Input workspace files for envelope (only works with bkg_function=-1)")

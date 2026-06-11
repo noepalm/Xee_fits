@@ -260,6 +260,8 @@ def run_fitdiag_draw_job(job):
             "--keepFailures",
             "-n", f"_{cat_name}{fit_tag_label}_{era}",
             "-v", "1", #3
+            # "--setParameters", "signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
+            # "--freezeParameters", "signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
         ]
         # "--preFitValue", "0",
         # "--freezeParameters", "mean_nuisance_electronScaleVariation",
@@ -361,8 +363,10 @@ def run_single_multidim_job(task):
             "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
             "--cminDefaultMinimizerStrategy", "0",
             "--keepFailures",
-            "-n", f"_{cat_name}{fit_tag_label}_{era}_Bonly",
+            "-n", f"_{cat_name}{fit_tag_label}_{era}_BfitDiagnostics_inclusive_2022.logonly",
             "-v", "1", #3
+            # "--setParameters", "r=0,signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
+            # "--freezeParameters", "r,signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
         ]
         combine_logger_name = f"combine_logger_MultiDimFit_Bonly_{cat_name}{fit_tag_label}.out"
     else:
@@ -379,6 +383,8 @@ def run_single_multidim_job(task):
             "--keepFailures",
             "-n", f"_{cat_name}{fit_tag_label}_{era}_SB",
             "-v", "1", #3
+            # "--setParameters", "signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
+            # "--freezeParameters", "signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
         ]
         combine_logger_name = f"combine_logger_MultiDimFit_SB_{cat_name}{fit_tag_label}.out"
 

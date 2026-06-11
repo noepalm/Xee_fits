@@ -88,15 +88,18 @@ def get_input_folders(era="2023", folder_tag="260226"):
     # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly"
     # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
     # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
-    base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight"
+    # base_path = "/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight"
+    # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+    base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/{folder_tag}/signal_model_allCorrections"
     input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
     input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
 
 
     return input_folder, input_folder_snap
 
-# Default folders (for backward compatibility and standalone usage)
-input_folder, input_folder_snap = get_input_folders(era="2023", folder_tag="260226")
+# # Default folders (for backward compatibility and standalone usage)
+# input_folder, input_folder_snap = get_input_folders(era="2023", folder_tag="260226")
 
 def clean_string(s):
     # Convert subscript/superscript characters to normal characters
@@ -131,15 +134,19 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
 
     # First, detect if trigger variations are available by checking the first file
     has_trigger_variations = False
+    has_reco_variations = False
     first_file = next((f for f in os.listdir(input_folder_snap) if f.endswith(".root") and not f.startswith(".")), None)
     if first_file:
         with ROOT.TFile.Open(os.path.join(input_folder_snap, first_file)) as root_file:
             print("DEBUG: checking for trigger variations in file ", first_file)
             rdf = ROOT.RDataFrame(root_file.Get("Events"))
             columns = rdf.GetColumnNames()
-            has_trigger_variations = "weight__triggerSF1DCorrection_up" in columns
+            # has_trigger_variations = "weight__triggerSF1DCorrection_up" in columns
+            has_trigger_variations = "weight__triggerSFDielePtCorrection_up" in columns
+            has_reco_variations = "weight__electronRecoSF_up" in columns
     
     print(f"Detected trigger variations: {has_trigger_variations}")
+    print(f"Detected reco variations: {has_reco_variations}")
 
     n_evts_final = {}
     for filename in os.listdir(input_folder_snap):
@@ -157,10 +164,18 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
                 }
                 
                 if has_trigger_variations:
-                    n_evts_trigger_up = rdf.Sum("weight__triggerSF1DCorrection_up").GetValue()
-                    n_evts_trigger_down = rdf.Sum("weight__triggerSF1DCorrection_down").GetValue()
+                    # n_evts_trigger_up = rdf.Sum("weight__triggerSF1DCorrection_up").GetValue()
+                    # n_evts_trigger_down = rdf.Sum("weight__triggerSF1DCorrection_down").GetValue()
+                    n_evts_trigger_up = rdf.Sum("weight__triggerSFDielePtCorrection_up").GetValue()
+                    n_evts_trigger_down = rdf.Sum("weight__triggerSFDielePtCorrection_down").GetValue()
                     outdict["trigger_up"] = n_evts_trigger_up
                     outdict["trigger_down"] = n_evts_trigger_down
+
+                if has_reco_variations:
+                    n_evts_reco_up = rdf.Sum("weight__electronRecoSF_up").GetValue()
+                    n_evts_reco_down = rdf.Sum("weight__electronRecoSF_down").GetValue()
+                    outdict["reco_up"] = n_evts_reco_up
+                    outdict["reco_down"] = n_evts_reco_down
                     
                 n_evts_final[filename.replace('.root', '')] = outdict
                 print("DEBUG: era ", era, " file ", filename, " n_evts_nominal = ", n_evts_nominal)
@@ -188,20 +203,29 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
                         # Use flat 1% relative uncertainty (temporary)
                         flat_unc = nominal_eff * 0.01
                         
-                        if has_trigger_variations:
-                            # New naming scheme with both ID and trigger
-                            trigger_up_eff = n_evts_final[sample_name]["trigger_up"] / n_evts_initial * 100
-                            trigger_down_eff = n_evts_final[sample_name]["trigger_down"] / n_evts_initial * 100
+                        if has_trigger_variations or has_reco_variations:
                             reweight_efficiencies[sample_name] = {
                                 'nominal': nominal_eff,
                                 'electronID_up': electronID_up_eff,
                                 'electronID_down': electronID_down_eff,
-                                'trigger_up': trigger_up_eff,
-                                'trigger_down': trigger_down_eff,
                                 'unc_down': flat_unc,
                                 'unc_up': flat_unc
                             }
-                            print("DEBUG: final nominal efficiency = ", nominal_eff, " electronID up efficiency = ", electronID_up_eff, " trigger up efficiency = ", trigger_up_eff)
+                            if has_trigger_variations:
+                                trigger_up_eff = n_evts_final[sample_name]["trigger_up"] / n_evts_initial * 100
+                                trigger_down_eff = n_evts_final[sample_name]["trigger_down"] / n_evts_initial * 100
+                                reweight_efficiencies[sample_name].update({
+                                    'trigger_up': trigger_up_eff,
+                                    'trigger_down': trigger_down_eff,
+                                })
+                            if has_reco_variations:
+                                reco_up_eff = n_evts_final[sample_name]["reco_up"] / n_evts_initial * 100
+                                reco_down_eff = n_evts_final[sample_name]["reco_down"] / n_evts_initial * 100
+                                reweight_efficiencies[sample_name].update({
+                                    'reco_up': reco_up_eff,
+                                    'reco_down': reco_down_eff,
+                                })
+                            print("DEBUG: final nominal efficiency = ", nominal_eff, " electronID up efficiency = ", electronID_up_eff)
                         else:
                             # Old naming scheme with just ID (backward compatibility)
                             reweight_efficiencies[sample_name] = {
@@ -216,7 +240,12 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
                         ID_efficiencies[filename.replace('.csv', '')] = clean_string(row[5])
     
     # print(f"DEBUG: reweight efficiencies = {reweight_efficiencies}")
-    return {"ID_efficiencies": ID_efficiencies, "reweight_efficiencies": reweight_efficiencies, "has_trigger_variations": has_trigger_variations}
+    return {
+        "ID_efficiencies": ID_efficiencies,
+        "reweight_efficiencies": reweight_efficiencies,
+        "has_trigger_variations": has_trigger_variations,
+        "has_reco_variations": has_reco_variations
+    }
 
 
 def retrieve_efficiencies(input_folder):
@@ -315,7 +344,8 @@ def retrieve_producer_efficiencies(input_py):
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260329/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight"
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections"
 
 # -- Interpolate xsec, selection efficiency
 # samples = [
@@ -348,10 +378,11 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     
     This updates the global variables used by the interpolation functions.
     """
-    global efficiencies, old_efficiencies, has_trigger_variations, producer_efficiencies
+    global efficiencies, old_efficiencies, has_trigger_variations, has_reco_variations, producer_efficiencies
     global input_folder, input_folder_snap
     global effs_dict, masses_dict, effs_nominal, effs_err, effs_old, effs_err_old
     global effs_electronID_up, effs_electronID_down, effs_trigger_up, effs_trigger_down
+    global effs_reco_up, effs_reco_down
     global masses_ext, effs_ext, effs_err_ext, effs_old_ext, effs_err_old_ext
     
     # Get folder paths for this era
@@ -360,7 +391,8 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     # Load producer efficiencies (currently era-independent, using default path)
     # TODO: Update this if producer efficiencies become era-dependent
     # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15.py"
-    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts.py"
+    # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts.py"
+    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/signal_model_allCorrections/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts_perYear.py"
     producer_efficiencies = retrieve_producer_efficiencies(producer_eff_path)
     
     # Load efficiencies from snap r
@@ -368,6 +400,7 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     efficiencies = both_efficiencies["reweight_efficiencies"]
     old_efficiencies = both_efficiencies["ID_efficiencies"]
     has_trigger_variations = both_efficiencies.get("has_trigger_variations", False)
+    has_reco_variations = both_efficiencies.get("has_reco_variations", False)
     
     # Apply producer efficiencies
     print("DEBUG: applying producer efficiencies")
@@ -395,16 +428,26 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     effs_nominal = np.array([efficiencies[sample]['nominal'] if isinstance(efficiencies[sample], dict) else efficiencies[sample][0] for sample in samples]) / 100
     effs_err = np.array([(efficiencies[sample]['unc_down']+efficiencies[sample]['unc_up'])/2 if isinstance(efficiencies[sample], dict) else (efficiencies[sample][1]+efficiencies[sample][2])/2 for sample in samples]) / 100
     
-    if has_trigger_variations:
+    if has_trigger_variations or has_reco_variations:
         effs_electronID_up = np.array([efficiencies[sample]['electronID_up'] for sample in samples]) / 100
         effs_electronID_down = np.array([efficiencies[sample]['electronID_down'] for sample in samples]) / 100
-        effs_trigger_up = np.array([efficiencies[sample]['trigger_up'] for sample in samples]) / 100
-        effs_trigger_down = np.array([efficiencies[sample]['trigger_down'] for sample in samples]) / 100
+        effs_trigger_up = None
+        effs_trigger_down = None
+        effs_reco_up = None
+        effs_reco_down = None
+        if has_trigger_variations:
+            effs_trigger_up = np.array([efficiencies[sample]['trigger_up'] for sample in samples]) / 100
+            effs_trigger_down = np.array([efficiencies[sample]['trigger_down'] for sample in samples]) / 100
+        if has_reco_variations:
+            effs_reco_up = np.array([efficiencies[sample]['reco_up'] for sample in samples]) / 100
+            effs_reco_down = np.array([efficiencies[sample]['reco_down'] for sample in samples]) / 100
     else:
         effs_electronID_up = np.array([efficiencies[sample]['up'] for sample in samples]) / 100
         effs_electronID_down = np.array([efficiencies[sample]['down'] for sample in samples]) / 100
         effs_trigger_up = None
         effs_trigger_down = None
+        effs_reco_up = None
+        effs_reco_down = None
     
     effs_old_ext = effs_old
     effs_err_old_ext = effs_err_old
@@ -428,19 +471,33 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
         }
     }
     
-    if has_trigger_variations:
+    if has_trigger_variations or has_reco_variations:
         effs_dict["ext"].update({
             "new_electronID_up": (effs_electronID_up, effs_err),
             "new_electronID_down": (effs_electronID_down, effs_err),
-            "new_trigger_up": (effs_trigger_up, effs_err),
-            "new_trigger_down": (effs_trigger_down, effs_err),
         })
         effs_dict["base"].update({
             "new_electronID_up": (effs_electronID_up, effs_err),
             "new_electronID_down": (effs_electronID_down, effs_err),
-            "new_trigger_up": (effs_trigger_up, effs_err),
-            "new_trigger_down": (effs_trigger_down, effs_err),
         })
+        if has_trigger_variations:
+            effs_dict["ext"].update({
+                "new_trigger_up": (effs_trigger_up, effs_err),
+                "new_trigger_down": (effs_trigger_down, effs_err),
+            })
+            effs_dict["base"].update({
+                "new_trigger_up": (effs_trigger_up, effs_err),
+                "new_trigger_down": (effs_trigger_down, effs_err),
+            })
+        if has_reco_variations:
+            effs_dict["ext"].update({
+                "new_reco_up": (effs_reco_up, effs_err),
+                "new_reco_down": (effs_reco_down, effs_err),
+            })
+            effs_dict["base"].update({
+                "new_reco_up": (effs_reco_up, effs_err),
+                "new_reco_down": (effs_reco_down, effs_err),
+            })
     else:
         effs_dict["ext"].update({
             "new_up": (effs_electronID_up, effs_err),
@@ -457,19 +514,32 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
 masses = np.array([0.5, 1, 2, 3.1, 4, 6, 8, 10, 12])
 x = np.linspace(0, 12, 1000)  # for plotting; was 1, 7
 
-_load_efficiency_data(era="2023", folder_tag="260226")
+# _load_efficiency_data(era="2023", folder_tag="260226")
 
-print(f"\nUsing naming scheme: {'new (electronID/trigger)' if has_trigger_variations else 'old (up/down for ID only)'}")
+# if has_trigger_variations and has_reco_variations:
+#     scheme_label = "new (electronID/trigger/reco)"
+# elif has_trigger_variations:
+#     scheme_label = "new (electronID/trigger)"
+# elif has_reco_variations:
+#     scheme_label = "new (electronID/reco)"
+# else:
+#     scheme_label = "old (up/down for ID only)"
+# print(f"\nUsing naming scheme: {scheme_label}")
 
 # effs = np.array([1.562, 14.010, 19.821, 20.552, 18.541, 11.550]) # %
 # effs_err = np.array([0.055, 0.155, 0.179, 0.181, 0.2, 0.143])
 # xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07, 8.273, 6.458]) # pb
 # xsecs_err = xsecs * 0.0015 # oom for available points
-acceptances = np.array([0.294, 0.31, 0.322, 0.33, 0.32, 0.26, 0.798, 0.8, 0.758])
-xsecs = np.array([123.7, 127.1, 69.58, 49.08, 35.83, 27.67, 84.28, 59.49, 43.81]) * acceptances # pb
-xsecs_err = np.array([0.21, 0.14, 0.096, 0.066, 0.04, 0.046, 0.078, 0.057, 0.041]) * acceptances # pb
+# acceptances = np.array([0.294, 0.31, 0.322, 0.33, 0.32, 0.26, 0.798, 0.8, 0.758])
+acceptances = np.array([0.294, 0.26, 0.322, 0.32, 0.30, 0.27, 0.798, 0.805, 0.778])
+madgraph_acceptances = np.array([0.004685, 0.008324, 0.008045, 0.006681, 0.009087, 0.015415, 0.084712, 0.099632, 0.106361])
+# xsecs = np.array([123.7, 127.1, 69.58, 49.08, 35.83, 27.67, 84.28, 59.49, 43.81]) * acceptances # pb
+# xsecs_err = np.array([0.21, 0.14, 0.096, 0.066, 0.04, 0.046, 0.078, 0.057, 0.041]) * acceptances # pb
 # xsecs = np.array([123.7 * 0.294, 127.1*0.31, 69.58*0.322, 49.08*0.33, 35.83*0.32, 27.67*0.26, 84.28*0.798, 59.49*0.8, 43.81*0.758]) # pb
 # xsecs_err = np.array([0.21*0.294, 0.14*0.31, 0.096*0.322, 0.066*0.33, 0.04*0.32, 0.046*0.26, 0.078*0.798, 0.057*0.8, 0.041*0.758])
+xsecs = np.array([117.551, 129.5, 70.59, 48.125, 35.7, 27.374, 83.759, 58.733, 43.046]) * acceptances # pb
+xsecs_err = np.array([0.42177, 0.48154, 0.22575, 0.15863, 0.1219, 0.10122, 0.09952, 0.07029, 0.05636]) * acceptances # pb
+
 
 # TODO: update with new mass points
 # xsecs = np.array([39.62, 16.00, 11.31, 11.06, 10.81, 10.07]) # pb
@@ -540,8 +610,9 @@ def pchip_effs(use_old = False, use_crystalball=False, variation=None):
         use_old: Use old efficiencies without reweighting
         use_crystalball: Use extended mass range
         variation: None for nominal, 'up'/'down' for ID-only (backward compat),
-                  'electronID_up'/'electronID_down' for electron ID variations,
-                  'trigger_up'/'trigger_down' for trigger SF variations
+              'electronID_up'/'electronID_down' for electron ID variations,
+              'trigger_up'/'trigger_down' for trigger SF variations,
+              'reco_up'/'reco_down' for reco SF variations
     """
     mass = masses_dict["ext"] if use_crystalball else masses_dict["base"]
     extension_flag = "ext" if use_crystalball else "base"
@@ -552,7 +623,7 @@ def pchip_effs(use_old = False, use_crystalball=False, variation=None):
     elif variation in ["up", "down"]:
         # Backward compatibility naming
         old_flag = f"new_{variation}"
-    elif variation in ["electronID_up", "electronID_down", "trigger_up", "trigger_down"]:
+    elif variation in ["electronID_up", "electronID_down", "trigger_up", "trigger_down", "reco_up", "reco_down"]:
         # New naming scheme
         old_flag = f"new_{variation}"
     else:
@@ -583,7 +654,8 @@ def get_efficiency_function(use_old=False, variation=None, era="2023", folder_ta
     Args:
         use_old: Use old efficiencies without reweighting
         variation: None for nominal, 'electronID_up'/'electronID_down' for electron ID variations,
-                  'trigger_up'/'trigger_down' for trigger SF variations
+              'trigger_up'/'trigger_down' for trigger SF variations,
+              'reco_up'/'reco_down' for reco SF variations
         era: Data-taking era (default: "2023")
         folder_tag: Folder tag for organizing runs (default: "260226")
     
@@ -605,7 +677,8 @@ def get_all_efficiency_functions(use_old=False, era="2023", folder_tag="260226")
     
     Returns:
         Dictionary with keys 'nominal' and available variations ('up'/'down' for ID-only,
-        or 'electronID_up'/'electronID_down'/'trigger_up'/'trigger_down' for both)
+        or 'electronID_up'/'electronID_down'/'trigger_up'/'trigger_down' for both,
+        or 'electronID_up'/'electronID_down'/'reco_up'/'reco_down' for reco SF)
     """
     # Load data for the specified era if not using old efficiencies
     if not use_old:
@@ -615,13 +688,21 @@ def get_all_efficiency_functions(use_old=False, era="2023", folder_tag="260226")
         'nominal': pchip_effs(use_old=use_old, use_crystalball=False, variation=None),
     }
     
-    if has_trigger_variations:
+    if has_trigger_variations or has_reco_variations:
         result.update({
             'electronID_up': pchip_effs(use_old=use_old, use_crystalball=False, variation='electronID_up'),
-            'electronID_down': pchip_effs(use_old=use_old, use_crystalball=False, variation='electronID_down'),
-            'trigger_up': pchip_effs(use_old=use_old, use_crystalball=False, variation='trigger_up'),
-            'trigger_down': pchip_effs(use_old=use_old, use_crystalball=False, variation='trigger_down')
+            'electronID_down': pchip_effs(use_old=use_old, use_crystalball=False, variation='electronID_down')
         })
+        if has_trigger_variations:
+            result.update({
+                'trigger_up': pchip_effs(use_old=use_old, use_crystalball=False, variation='trigger_up'),
+                'trigger_down': pchip_effs(use_old=use_old, use_crystalball=False, variation='trigger_down')
+            })
+        if has_reco_variations:
+            result.update({
+                'reco_up': pchip_effs(use_old=use_old, use_crystalball=False, variation='reco_up'),
+                'reco_down': pchip_effs(use_old=use_old, use_crystalball=False, variation='reco_down')
+            })
     else:
         # Backward compatibility: just 'up'/'down' for ID
         result.update({
@@ -654,6 +735,10 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
             return palette[1], "^", "Electron ID SF up"
         if "electronid" in label_lower and "down" in label_lower:
             return palette[2], "v", "Electron ID SF down"
+        if "reco" in label_lower and "up" in label_lower:
+            return palette[5], "s", "Reco SF up"
+        if "reco" in label_lower and "down" in label_lower:
+            return palette[6], "D", "Reco SF down"
         if "trigger" in label_lower and "up" in label_lower:
             return palette[3], ">", "Trigger SF up"
         if "trigger" in label_lower and "down" in label_lower:
@@ -736,6 +821,22 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
                     Line2D([], [], color=palette[3], marker='>', linestyle='--', markersize=7, label='Trigger SF up'),
                     Line2D([], [], color=palette[4], marker='<', linestyle='--', markersize=7, label='Trigger SF down'),
                 ])
+            if "new_reco_up" in effs_dict[extension_flag]:
+                y_reco_up, y_err_reco_up = effs_dict[extension_flag]["new_reco_up"]
+                y_reco_down, y_err_reco_down = effs_dict[extension_flag]["new_reco_down"]
+
+                ax.errorbar(
+                    mass, y_reco_up * 100, yerr=y_err_reco_up * 100, fmt='s', label='_nolegend_',
+                    markersize=7, capsize=5, elinewidth=1.5, color=palette[5]
+                )
+                ax.errorbar(
+                    mass, y_reco_down * 100, yerr=y_err_reco_down * 100, fmt='D', label='_nolegend_',
+                    markersize=7, capsize=5, elinewidth=1.5, color=palette[6]
+                )
+                legend_handles.extend([
+                    Line2D([], [], color=palette[5], marker='s', linestyle='--', markersize=7, label='Reco SF up'),
+                    Line2D([], [], color=palette[6], marker='D', linestyle='--', markersize=7, label='Reco SF down'),
+                ])
         elif "new_up" in effs_dict[extension_flag]:
             # Old naming scheme (backward compatibility) - just ID variations as up/down
             y_up, y_err_up = effs_dict[extension_flag]["new_up"]
@@ -771,7 +872,7 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
     # Use smaller ymax for final plot, larger for comparison plots
     ymax = 17 if not plot_both and len(funcs_to_draw) < 5 else 20
     # if maximum is larger than ymax, take max * 1.1
-    max_y = max([max(effs_dict[extension_flag][key][0]) for key in effs_dict[extension_flag].keys()]) * 1.1 * 100
+    max_y = max([max(effs_dict[extension_flag][key][0]) for key in effs_dict[extension_flag].keys() if "old" not in key]) * 1.1 * 100
     ymin = -0.1 if not plot_both and len(funcs_to_draw) < 5 else 0
     if use_log:
         ymin = 1e-6
@@ -842,10 +943,17 @@ def pchip_xsecs(use_old=False):
     
     return {"fit_function" : fit_func, "fit_parameters" : []}
 
-def pchip_acceptances():
-    """PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) interpolation for acceptances."""
-    pchip_func = PchipInterpolator(masses, acceptances, extrapolate=True)
+def pchip_madgraph_acceptances():
+    """PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) interpolation for MadGraph acceptances."""
+    pchip_func = PchipInterpolator(masses, madgraph_acceptances, extrapolate=True)
     fit_func = lambda x: pchip_func(x)
+    return {"fit_function" : fit_func, "fit_parameters" : []}
+
+def pchip_acceptances():
+    """PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) interpolation for combined acceptances."""
+    pchip_pythia = PchipInterpolator(masses, acceptances, extrapolate=True)
+    pchip_madgraph = PchipInterpolator(masses, madgraph_acceptances, extrapolate=True)
+    fit_func = lambda x: pchip_pythia(x) * pchip_madgraph(x)
     return {"fit_function" : fit_func, "fit_parameters" : []}
 
 # Default acceptance function for module usage
@@ -864,7 +972,8 @@ def plot_acceptances(funcs_to_draw, outname = "acceptance_vs_mass", outfolder_ar
     # Acceptance values
     fig, ax = plt.subplots(figsize=(9, 8))
 
-    ax.plot(masses, acceptances, 'o', markersize=8, label="Acceptance")
+    combined_acceptances = acceptances * madgraph_acceptances
+    ax.plot(masses, combined_acceptances, 'o', markersize=8, label="Acceptance")
 
     for label, fit_info in funcs_to_draw.items():
         fit_func = fit_info["fit_function"]
@@ -878,7 +987,9 @@ def plot_acceptances(funcs_to_draw, outname = "acceptance_vs_mass", outfolder_ar
 
     ax.set_xlabel("M($Z_D$) [GeV]")
     ax.set_ylabel("Acceptance")
-    ax.set_ylim(0, 1)
+    # ax.set_ylim(0, 1)
+    ax.set_ylim(6e-4, 0.15)
+    ax.set_yscale('log')
     ax.grid()
     ax.legend()
 
@@ -932,7 +1043,7 @@ def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfold
         ax.plot(x, y, label=label, linewidth=2, linestyle="--")
 
     ax.set_xlabel("M($Z_D$) [GeV]")
-    ax.set_ylabel("$\sigma$ [pb]")
+    ax.set_ylabel(r"$\sigma$ [pb]")
     y_max = 45
     if use_old:
         y_max = 5
@@ -965,7 +1076,8 @@ if __name__ == "__main__":
         os.makedirs(era_outfolder, exist_ok=True)  # Create if doesn't exist, no error if exists
         
         # Load efficiency data for this era
-        _load_efficiency_data(era=era, folder_tag="260226")
+        # _load_efficiency_data(era=era, folder_tag="260226")
+        _load_efficiency_data(era=era, folder_tag="260430")
         
         print("effs (NEW) = ", effs_nominal)
         print("effs (OLD) = ", effs_old)
@@ -983,17 +1095,27 @@ if __name__ == "__main__":
         interp_result = interp_effs(use_old=False, use_crystalball=False)
         pchip_result = pchip_effs(use_old=False, use_crystalball=False, variation=None)
         
-        if has_trigger_variations:
+        if has_trigger_variations or has_reco_variations:
             pchip_result_electronID_up = pchip_effs(use_old=False, use_crystalball=False, variation='electronID_up')
             pchip_result_electronID_down = pchip_effs(use_old=False, use_crystalball=False, variation='electronID_down')
-            pchip_result_trigger_up = pchip_effs(use_old=False, use_crystalball=False, variation='trigger_up')
-            pchip_result_trigger_down = pchip_effs(use_old=False, use_crystalball=False, variation='trigger_down')
+            pchip_result_trigger_up = None
+            pchip_result_trigger_down = None
+            pchip_result_reco_up = None
+            pchip_result_reco_down = None
+            if has_trigger_variations:
+                pchip_result_trigger_up = pchip_effs(use_old=False, use_crystalball=False, variation='trigger_up')
+                pchip_result_trigger_down = pchip_effs(use_old=False, use_crystalball=False, variation='trigger_down')
+            if has_reco_variations:
+                pchip_result_reco_up = pchip_effs(use_old=False, use_crystalball=False, variation='reco_up')
+                pchip_result_reco_down = pchip_effs(use_old=False, use_crystalball=False, variation='reco_down')
         else:
             # Backward compatibility
             pchip_result_electronID_up = pchip_effs(use_old=False, use_crystalball=False, variation='up')
             pchip_result_electronID_down = pchip_effs(use_old=False, use_crystalball=False, variation='down')
             pchip_result_trigger_up = None
             pchip_result_trigger_down = None
+            pchip_result_reco_up = None
+            pchip_result_reco_down = None
         
         # print("FIT RESULTS dCB: ", fit_result["fit_parameters"])
         # print("FIT RESULTS poly: ", fit_result_poly["fit_parameters"])
@@ -1026,20 +1148,28 @@ if __name__ == "__main__":
         #          outname="acceptance_vs_mass", outfolder_arg=era_outfolder)
         
         # Clean plots with just final PCHIP interpolation and variations
-        if has_trigger_variations:
+        if has_trigger_variations or has_reco_variations:
+            funcs_to_draw = {
+                "PCHIP nominal" : pchip_result,
+                "PCHIP electronID up" : pchip_result_electronID_up,
+                "PCHIP electronID down" : pchip_result_electronID_down,
+            }
+            if has_trigger_variations:
+                funcs_to_draw.update({
+                    "PCHIP trigger up" : pchip_result_trigger_up,
+                    "PCHIP trigger down" : pchip_result_trigger_down
+                })
+            if has_reco_variations:
+                funcs_to_draw.update({
+                    "PCHIP reco up" : pchip_result_reco_up,
+                    "PCHIP reco down" : pchip_result_reco_down
+                })
+
             plot_effs(use_old=False, use_crystalball=False,
-                      funcs_to_draw = {"PCHIP nominal" : pchip_result,
-                                      "PCHIP electronID up" : pchip_result_electronID_up,
-                                      "PCHIP electronID down" : pchip_result_electronID_down,
-                                      "PCHIP trigger up" : pchip_result_trigger_up,
-                                      "PCHIP trigger down" : pchip_result_trigger_down},
+                      funcs_to_draw = funcs_to_draw,
                       outname="efficiency_vs_mass_final", plot_both=False, outfolder_arg=era_outfolder, era=era)
             plot_effs(use_old=False, use_crystalball=False,
-                      funcs_to_draw = {"PCHIP nominal" : pchip_result,
-                                      "PCHIP electronID up" : pchip_result_electronID_up,
-                                      "PCHIP electronID down" : pchip_result_electronID_down,
-                                      "PCHIP trigger up" : pchip_result_trigger_up,
-                                      "PCHIP trigger down" : pchip_result_trigger_down},
+                      funcs_to_draw = funcs_to_draw,
                       outname="efficiency_vs_mass_final_log", plot_both=False, outfolder_arg=era_outfolder, era=era,
                       use_log=True)
         else:

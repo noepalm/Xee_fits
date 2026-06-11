@@ -208,52 +208,82 @@ for era in eras:
 print('>> Adding systematics...')
 
 # ID SF 
-### first, determine highest variation across mass values AND between up/down
-### apply worst case scenario as lnN uncertainty on signal yield
-id_variation_value = 1.0
-for mass in masses:
-    w_var_nominal = w.var(f"Zd_M{mass}_expected_{args.era}")
-    w_var_up = w.var(f"Zd_M{mass}_expected_electronID_up_{args.era}")
-    w_var_down = w.var(f"Zd_M{mass}_expected_electronID_down_{args.era}")
-    if w_var_nominal and w_var_up and w_var_down:
-        var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
-        if var_nominal > 0:
-            frac_up = 1 + abs(1 - var_up/var_nominal)
-            frac_down = 1 + abs(1 - var_down/var_nominal)
-            max_frac = max(frac_up, frac_down)
-            if max_frac > id_variation_value:
-                id_variation_value = max_frac
-        else:
-            print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping electron ID systematic for this mass point.")
-    else:
-        print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping electron ID systematic for this mass point.")
+# ### first, determine highest variation across mass values AND between up/down
+# ### apply worst case scenario as lnN uncertainty on signal yield
+# id_variation_value = 1.0
+# for mass in masses:
+#     w_var_nominal = w.var(f"Zd_M{mass}_expected_{args.era}")
+#     w_var_up = w.var(f"Zd_M{mass}_expected_electronID_up_{args.era}")
+#     w_var_down = w.var(f"Zd_M{mass}_expected_electronID_down_{args.era}")
+#     if w_var_nominal and w_var_up and w_var_down:
+#         var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
+#         if var_nominal > 0:
+#             frac_up = 1 + abs(1 - var_up/var_nominal)
+#             frac_down = 1 + abs(1 - var_down/var_nominal)
+#             max_frac = max(frac_up, frac_down)
+#             if max_frac > id_variation_value:
+#                 id_variation_value = max_frac
+#         else:
+#             print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping electron ID systematic for this mass point.")
+#     else:
+#         print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping electron ID systematic for this mass point.")
+# print(f"Determined electron ID systematic lnN value: {id_variation_value:.4f}")
+# cb.cp().signals().AddSyst(cb, 'electronID_syst', 'lnN', ch.SystMap()(id_variation_value))
 
-print(f"Determined electron ID systematic lnN value: {id_variation_value:.4f}")
-cb.cp().signals().AddSyst(cb, 'electronID_syst', 'lnN', ch.SystMap()(id_variation_value))
+def id_syst_for_mass(mass, era, variation="electronID"):
+    nominal = w.var(f"Zd_M{mass:.1f}_expected_{era}").getVal()
+    down = w.var(f"Zd_M{mass:.1f}_expected_{variation}_down_{era}").getVal()
+    up = w.var(f"Zd_M{mass:.1f}_expected_{variation}_up_{era}").getVal()
+    if nominal <= 0:
+        raise RuntimeError(f"Non-positive nominal for M={mass:.1f}, era={era}")
+    return (down / nominal, up / nominal)
+
+syst_map = ch.SystMap("era", "mass")
+for mass in masses:
+    down, up = id_syst_for_mass(float(mass), args.era, variation="electronID")
+    syst_map = syst_map([args.era], [mass], (down, up))
+
+cb.cp().signals().AddSyst(cb, "electronID_syst", "lnN", syst_map)
 
 # Trigger SF 
-### first, determine highest variation across mass values AND between up/down
-### apply worst case scenario as lnN uncertainty on signal yield
-id_variation_value = 1.0
-for mass in masses:
-    w_var_nominal = w.var(f"Zd_M{mass}_expected_{args.era}")
-    w_var_up = w.var(f"Zd_M{mass}_expected_trigger_up_{args.era}")
-    w_var_down = w.var(f"Zd_M{mass}_expected_trigger_down_{args.era}")
-    if w_var_nominal and w_var_up and w_var_down:
-        var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
-        if var_nominal > 0:
-            frac_up = 1 + abs(1 - var_up/var_nominal)
-            frac_down = 1 + abs(1 - var_down/var_nominal)
-            max_frac = max(frac_up, frac_down)
-            if max_frac > id_variation_value:
-                id_variation_value = max_frac
-        else:
-            print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping trigger SF systematic for this mass point.")
-    else:
-        print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping trigger SF systematic for this mass point.")
+# ### first, determine highest variation across mass values AND between up/down
+# ### apply worst case scenario as lnN uncertainty on signal yield
+# id_variation_value = 1.0
+# for mass in masses:
+#     w_var_nominal = w.var(f"Zd_M{mass}_expected_{args.era}")
+#     w_var_up = w.var(f"Zd_M{mass}_expected_trigger_up_{args.era}")
+#     w_var_down = w.var(f"Zd_M{mass}_expected_trigger_down_{args.era}")
+#     if w_var_nominal and w_var_up and w_var_down:
+#         var_nominal, var_up, var_down = w_var_nominal.getVal(), w_var_up.getVal(), w_var_down.getVal()
+#         if var_nominal > 0:
+#             frac_up = 1 + abs(1 - var_up/var_nominal)
+#             frac_down = 1 + abs(1 - var_down/var_nominal)
+#             max_frac = max(frac_up, frac_down)
+#             if max_frac > id_variation_value:
+#                 id_variation_value = max_frac
+#         else:
+#             print(f"Warning: Nominal signal yield for mass {mass} is non-positive ({var_nominal}), skipping trigger SF systematic for this mass point.")
+#     else:
+#         print(f"Warning: Missing variables for mass {mass}: nominal={w_var_nominal}, up={w_var_up}, down={w_var_down}. Skipping trigger SF systematic for this mass point.")
 
-print(f"Determined trigger SF systematic lnN value: {id_variation_value:.4f}")
-cb.cp().signals().AddSyst(cb, 'triggerSF_syst', 'lnN', ch.SystMap()(id_variation_value))
+# print(f"Determined trigger SF systematic lnN value: {id_variation_value:.4f}")
+# cb.cp().signals().AddSyst(cb, 'triggerSF_syst', 'lnN', ch.SystMap()(id_variation_value))
+
+syst_map = ch.SystMap("era", "mass")
+for mass in masses:
+    down, up = id_syst_for_mass(float(mass), args.era, variation="trigger")
+    syst_map = syst_map([args.era], [mass], (down, up))
+
+cb.cp().signals().AddSyst(cb, "triggerSF_syst", "lnN", syst_map)
+
+# Reco SF
+syst_map = ch.SystMap("era", "mass")
+for mass in masses:
+    down, up = id_syst_for_mass(float(mass), args.era, variation="reco")
+    syst_map = syst_map([args.era], [mass], (down, up))
+
+cb.cp().signals().AddSyst(cb, "recoSF_syst", "lnN", syst_map)
+
 
 # Scale and smearing
 if args.withSyst:
@@ -265,7 +295,8 @@ if args.withSyst:
 
 # Signal modelling shape uncertainty
 if args.withSyst:
-    for par in ["sigma", "alphaL", "alphaR", "nL", "nR"]:
+    # for par in ["sigma", "alphaL", "alphaR", "nL", "nR"]:
+    for par in ["sigma"]:
         cb.AddDatacardLineAtEnd(f"{par}_nuisance_stat_{args.era}      param 0 1")
 
 # # Discrete nuisance parameter for discrete profiling ("pdf_index")
@@ -286,7 +317,6 @@ lumi2_uncertainties_by_era = {
 cb.cp().signals().AddSyst(cb, 'lumi_1', 'lnN', ch.SystMap()(lumi1_uncertainties_by_era[args.era]))
 if args.era in lumi2_uncertainties_by_era:
     cb.cp().signals().AddSyst(cb, 'lumi_2', 'lnN', ch.SystMap()(lumi2_uncertainties_by_era[args.era]))
-
 
 
 # Add a rateParam for each background process (let the yield freely float)

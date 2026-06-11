@@ -7,37 +7,45 @@ models=(chebyshev bernstein polyexp)
 log_dir="logs/260316"
 folder_tag_base="260316"
 signal_folder_tag="260226"
+# signal_folder_tag="260320"
 
 # Keep envelope as a dedicated stage. Set to 1 to run it after model fits.
 run_envelope=1
 
-# mkdir -p "$log_dir"
+mkdir -p "$log_dir"
+mkdir -p "datasets/${folder_tag_base}"
 
-# get_bkg_function() {
-#     local model="$1"
-#     local region="$2"
-#     case "$model" in
-#         chebyshev)
-#             if [[ "$region" == "region1" ]]; then
-#                 echo 4
-#             else
-#                 echo 7
-#             fi
-#             ;;
-#         bernstein)
-#             echo 0
-#             ;;
-#         polyexp)
-#             echo 1
-#             ;;
-#         *)
-#             echo "Unknown model: $model" >&2
-#             return 1
-#             ;;
-#     esac
-# }
+get_bkg_function() {
+    local model="$1"
+    local region="$2"
+    case "$model" in
+        chebyshev)
+            if [[ "$region" == "region1" ]]; then
+                echo 4
+            else
+                echo 7
+            fi
+            ;;
+        bernstein)
+            echo 0
+            ;;
+        polyexp)
+            echo 1
+            ;;
+        polyexp_alt)
+            echo 9
+            ;;
+        bernsteinexp)
+            echo 10
+            ;;
+        *)
+            echo "Unknown model: $model" >&2
+            return 1
+            ;;
+    esac
+}
 
-# # Run alternative background fits 
+# # Run alternative background fits
 # for era in "${eras[@]}"; do
 #     for region in "${regions[@]}"; do
 #         for model in "${models[@]}"; do
@@ -51,8 +59,8 @@ run_envelope=1
 #                                               --era "$era" \
 #                                               --categories="inclusive" \
 #                                               --binned \
-#                                               --fit_data \
 #                                               --cached \
+#                                               --fit_data \
 #                                               --withSyst --corrected \
 #                                               --folder_tag="${folder_tag_base}/${era}" \
 #                                               --signal_folder_tag="$signal_folder_tag" \

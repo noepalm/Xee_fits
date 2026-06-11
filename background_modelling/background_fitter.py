@@ -245,6 +245,15 @@ class BackgroundFitter:
             elif func_config.name == "bkg_f14":
                 # Polynomial × Exponential, 7th deg
                 self._create_poly_exp_function(func_config)
+            elif func_config.name == "bkg_f15":
+                # expoenntial of polynomial, 4th deg
+                self._create_exppoly_function(func_config)
+            elif func_config.name == "bkg_f16":
+                # Dijet function
+                self._create_dijet_function(func_config)
+            elif func_config.name == "bkg_f17":
+                # Dijet function
+                self._create_chebyshev_times_fermi(func_config)
                 
     def _create_bernstein_function(self, func_config: BackgroundFunction):
         """Create Bernstein polynomial function"""
@@ -312,6 +321,44 @@ class BackgroundFitter:
 
         self.background_functions[func_config.name] = func
 
+    def _create_exppoly_function(self, func_config: BackgroundFunction):
+        """Create polynomial × exponential function"""
+        # Create parameters
+        params = self._create_vars(func_config)
+            
+        # Create polynomial part
+        exppoly_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names]
+
+        exppoly_formula = "exp(@1/5 * @0 + @2/5**2 * @0**2 + @3/5**3 * @0**3 + @4/5**4 * @0**4)"
+
+        func = ROOT.RooGenericPdf(
+            f"{func_config.name}{self.category.label}_{self.era}",
+            f"{func_config.name}{self.category.label}_{self.era}",
+            exppoly_formula,
+            ROOT.RooArgList(self.mass_var, *exppoly_params)
+        )
+
+        self.background_functions[func_config.name] = func
+        
+    def _create_dijet_function(self, func_config: BackgroundFunction):
+        """Create CMS empirical dijet function"""
+        # Create parameters
+        params = self._create_vars(func_config)
+            
+        # Retrieve parameters: [0] = mass, [1] = p1, [2] = p2, [3] = p3
+        dijet_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names]
+
+        # Center of mass energy is hardcoded to 13600.0 GeV for Run 3
+        dijet_formula = "pow(@0, @1 + @2*log(@0) + @3*pow(log(@0),2))"# * pow((1-@0), @3)"
+
+        func = ROOT.RooGenericPdf(
+            f"{func_config.name}{self.category.label}_{self.era}",
+            f"{func_config.name}{self.category.label}_{self.era}",
+            dijet_formula,
+            ROOT.RooArgList(self.mass_var, *dijet_params)
+        )
+        self.background_functions[func_config.name] = func
+
     def _create_sum_exp_function(self, func_config: BackgroundFunction):
         """Create sum of exponentials function"""
         # Create parameters
@@ -355,8 +402,36 @@ class BackgroundFitter:
         func = ROOT.RooChebychev(f"{func_config.name}{self.category.label}_{self.era}",
                                  f"{func_config.name}{self.category.label}_{self.era}", self.mass_var, param_list)
         
-        self.background_functions[func_config.name] = func
+    def _create_chebyshev_times_fermi(self, func_config: BackgroundFunction):
+        """Create Chebyshev polynomial function modulated by a Fermi turn-on"""
+        # Create parameters
+        param_list = self._create_vars(func_config)
+        chebyshev_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names[:-2]]
+        fermi_params = [self.workspace.obj(f"{name}{self.category.label}_{self.era}") for name in func_config.param_names[-2:]]
+
+        # Implement * unpacking for the RooArgList
+        cheb_func = ROOT.RooChebychev(f"{func_config.name}_cheb{self.category.label}_{self.era}",
+                                      f"{func_config.name}_cheb{self.category.label}_{self.era}", 
+                                      self.mass_var, ROOT.RooArgList(*chebyshev_params))
         
+        # Declare the Fermi turn-on as a RooFormulaVar (RooAbsReal), NOT a RooGenericPdf
+        fermi_func = ROOT.RooFormulaVar(f"{func_config.name}_fermi{self.category.label}_{self.era}",
+                                        f"{func_config.name}_fermi{self.category.label}_{self.era}", 
+                                        "1/(1 + exp(@2*(@0 - @1)))", 
+                                        ROOT.RooArgList(self.mass_var, *fermi_params))
+        
+        # Store intermediate functions for ownership
+        self.background_functions[f"{func_config.name}_cheb"] = cheb_func
+        self.background_functions[f"{func_config.name}_fermi"] = fermi_func
+
+        # Construct the shape * efficiency product
+        func = ROOT.RooEffProd(f"{func_config.name}{self.category.label}_{self.era}",
+                               f"{func_config.name}{self.category.label}_{self.era}", 
+                               cheb_func, fermi_func)
+        
+        self.background_functions[func_config.name] = func
+        return func
+
     def _create_bernstein_exp_function(self, func_config: BackgroundFunction):
         """Create Bernstein polynomial function"""
         # Create parameters
@@ -468,20 +543,20 @@ class BackgroundFitter:
                 var_name = f"{model_name}_{param_name}{self.category.label}_{self.era}"
                 
                 # Set reasonable limits based on parameter type
-                if param_name == "mean":
+                if "mean" in param_name:
                     limits = (init_val * 0.95, init_val * 1.05)
-                elif param_name == "sigma":
+                elif "sigma" in param_name:
                     # limits = (0.01, 0.2)
-                    limits = (init_val * 0.5, init_val * 2)
+                    limits = (init_val * 0.1, init_val * 3) #0.5,2
                 elif param_name in ["alphaL", "alphaR"]:
                     # limits = (0.1, 10)
                     limits = (init_val * 0.5, init_val * 2)
                 elif param_name in ["nL", "nR"]:
-                    # limits = (0.1, 50)
-                    limits = (init_val * 0.5, init_val * 2)
+                    limits = (0.01, 50)
+                    # limits = (init_val * 0.5, init_val * 2)
                 else:
-                    # limits = (0.1, 10)
-                    limits = (init_val * 0.5, init_val * 2)
+                    limits = (0.1, 10)
+                    # limits = (init_val * 0.5, init_val * 2)
                     
                 param = ROOT.RooRealVar(var_name, var_name, init_val, limits[0], limits[1])
                 print("DEBUG: created parameter", param, "with name", var_name, flush = True)
@@ -495,13 +570,76 @@ class BackgroundFitter:
                 
             # Create double-sided Crystal Ball (typical resonant background shape)
             full_model_name = f"{model_name}_resonant_bkg{self.category.label}_{self.era}"
-            model = ROOT.RooCrystalBall(
-                full_model_name, model_config["title"],
-                self.mass_var,
-                params["mean"], params["sigma"],
-                params["alphaL"], params["nL"],
-                params["alphaR"], params["nR"]
-            )
+
+            if model_name == "jpsi":
+                mean_init = model_config["initial_params"].get("mean")
+                sigma_init = model_config["initial_params"].get("sigma")
+
+                mean_core_name = f"{model_name}_mean_core{self.category.label}_{self.era}"
+                sigma_core_name = f"{model_name}_sigma_core{self.category.label}_{self.era}"
+
+                mean_core = ROOT.RooRealVar(
+                    mean_core_name,
+                    mean_core_name,
+                    mean_init,
+                    mean_init * 0.95,
+                    mean_init * 1.05,
+                )
+                sigma_core = ROOT.RooRealVar(
+                    sigma_core_name,
+                    sigma_core_name,
+                    sigma_init,
+                    0.01,
+                    0.2,
+                )
+
+                self.workspace.Import(mean_core, ROOT.RooCmdArg())
+                self.workspace.Import(sigma_core, ROOT.RooCmdArg())
+                mean_core = self.workspace.obj(mean_core_name)
+                sigma_core = self.workspace.obj(sigma_core_name)
+
+                frac_name = f"{model_name}_core_frac{self.category.label}_{self.era}"
+                core_frac = ROOT.RooRealVar(frac_name, frac_name, 0.0, 0.0, 1.0)
+                self.workspace.Import(core_frac, ROOT.RooCmdArg())
+                core_frac = self.workspace.obj(frac_name)
+
+                cb_model = ROOT.RooCrystalBall(
+                    f"{model_name}_cb{self.category.label}_{self.era}",
+                    model_config["title"],
+                    self.mass_var,
+                    params["mean"], params["sigma"],
+                    params["alphaL"], params["nL"],
+                    params["alphaR"], params["nR"],
+                )
+
+                gauss_model = ROOT.RooGaussian(
+                    f"{model_name}_gauss{self.category.label}_{self.era}",
+                    model_config["title"],
+                    self.mass_var,
+                    mean_core,
+                    sigma_core,
+                )
+
+                self.workspace.Import(cb_model, ROOT.RooCmdArg())
+                self.workspace.Import(gauss_model, ROOT.RooCmdArg())
+
+                cb_model = self.workspace.obj(f"{model_name}_cb{self.category.label}_{self.era}")
+                gauss_model = self.workspace.obj(f"{model_name}_gauss{self.category.label}_{self.era}")
+
+                model = ROOT.RooAddPdf(
+                    full_model_name,
+                    model_config["title"],
+                    ROOT.RooArgList(cb_model, gauss_model),
+                    ROOT.RooArgList(core_frac),
+                )
+            else:
+                model = ROOT.RooCrystalBall(
+                    full_model_name, model_config["title"],
+                    self.mass_var,
+                    params["mean"], params["sigma"],
+                    params["alphaL"], params["nL"],
+                    params["alphaR"], params["nR"]
+                )
             
             print("DEBUG: created floating model", model, flush = True)
             
@@ -596,6 +734,7 @@ class BackgroundFitter:
         
         # Get chosen non-resonant background function
         chosen_bkg = self.get_chosen_background_function()
+        print("DEBUG: chosen bkg f = ", chosen_bkg, flush = True)
         if not chosen_bkg:
             raise ValueError("No non-resonant background function chosen")
         
@@ -626,10 +765,12 @@ class BackgroundFitter:
         self.combined_model = ROOT.RooAddPdf(f"full_bkg_model{self.category.label}_{self.era}", f"full_bkg_model{self.category.label}_{self.era}", model_list, norm_list)
         
         print("  Combined background model created", flush = True)
+        self.combined_model.Print()
         
     def get_chosen_background_function(self) -> Optional[ROOT.RooAbsPdf]:
         """Get the chosen background function"""
         func_config = self.config.get_chosen_background_function()
+        print(f"DEBUG: background functions = {self.background_functions}; retrieving {func_config.name}", flush = True)
         return self.background_functions.get(func_config.name)
         
     def fit_combined_model(self, fit_region: FitRegion) -> FitResult:
@@ -834,7 +975,8 @@ class BackgroundFitter:
         print(f"DEBUG: freezing resonant background parameters", flush=True)
         for model in models:
             # skip the jpsi
-            if "jpsi" in model.GetName():
+            # FIXME TEMPORARY: also freezing the psi2s
+            if "jpsi" in model.GetName() or "psi2s" in model.GetName():
                 continue
             for param in model.getParameters(resonant_data):
                 param.setConstant(True)
@@ -960,6 +1102,7 @@ class BackgroundFitter:
             if not model.GetName().startswith("Zd"):
                 print(f"  Model: {model.GetName()}")
                 params = model.getParameters(self.data)
+                model.Print()
                 print(f"DEBUG: Parameters for model {model.GetName()}, category {category_label}:")
                 for param in params:
                     # Check if parameter is close to boundary

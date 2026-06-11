@@ -4,6 +4,7 @@ Background plotting - Object-oriented approach
 This module handles plotting of background fits and results.
 """
 import ROOT
+import ctypes
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -151,7 +152,7 @@ class BackgroundPlotter:
             frame.SetMinimum(1)
 
         frame.SetMaximum(frame.GetMaximum() * 2)      
-        
+
         frame.GetXaxis().SetTitle("")
         frame.GetXaxis().SetLabelSize(0)
         frame.GetYaxis().SetTitle("Events")
@@ -201,7 +202,7 @@ class BackgroundPlotter:
         # Plot total model (always named "full_bkg_model" + category label)
         plot_name = "full_bkg_model"
         self.fitter.combined_model.plotOn(frame, 
-                                        ROOT.RooFit.LineColor(ROOT.kGray),
+                                        ROOT.RooFit.LineColor(ROOT.kRed),
                                         ROOT.RooFit.LineWidth(2),
                                         ROOT.RooFit.Name(plot_name),
                                         ROOT.RooFit.NormRange(norm_range))
@@ -244,7 +245,7 @@ class BackgroundPlotter:
             print(f"DEBUG: chosen bkg = {self.fitter.get_chosen_background_function()}", flush=True)
             self.fitter.combined_model.plotOn(frame, 
                                             ROOT.RooFit.Components(nonres_bkg_name),
-                                            ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e76300")), 
+                                            ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")), 
                                             ROOT.RooFit.Name("nonresonant_bkg"), 
                                             ROOT.RooFit.Range(fit_region.range[0], fit_region.range[1]),
                                             ROOT.RooFit.NormRange(norm_range))
@@ -355,6 +356,28 @@ class BackgroundPlotter:
                 chi2_val = frame.chiSquare(name, "data_obs", result.n_free_params)
                 chi2_values[name] = chi2_val
                 print(f"  Chi2 for {name}: {chi2_val} (n. free params = {result.n_free_params})", flush=True)
+
+                # # DEBUG: compute pulls and print them -- compute chi2 by summing
+                # hist = frame.pullHist("data_obs", name)
+                # print("DEBUG: Manually computing chi2 for reference", flush = True)
+                # chi2_sum = 0
+                # chi2_sum_nooutliers = 0
+                # outlier_count = 0
+                # for i in range(hist.GetN()):
+                #     x, pull = ctypes.c_double(0), ctypes.c_double(0)
+                #     hist.GetPoint(i, x, pull)
+                #     print(f"    bin {i}: x={x}, pull={pull.value:.3f}, pull2 = {pull.value**2:.3f}", flush=True)
+                #     if pull != 0:
+                #         chi2_sum += pull.value**2
+                #     if pull.value**2 < 9:
+                #         outlier_count += 1
+                #         chi2_sum_nooutliers += pull.value**2
+                # print(f"  (DEBUG) Chi2 for {name} by summing pulls: {chi2_sum}", flush=True)
+                # print(f"  (DEBUG) Chi2 for {name} by summing pulls (no outliers): {chi2_sum_nooutliers} => ({outlier_count} outliers)", flush=True)
+                # chi2_over_ndf_manual = chi2_sum / (100 - result.n_free_params)
+                # chi2_over_ndf_manual_nooutliers = chi2_sum_nooutliers / (100 - result.n_free_params)
+                # print(f"  (DEBUG) Chi2/ndf for {name} by summing pulls: {chi2_over_ndf_manual}", flush=True)
+                # print(f"  (DEBUG) Chi2/ndf for {name} by summing pulls (no outliers): {chi2_over_ndf_manual_nooutliers}", flush=True)
 
                 # # DEBUG: compute using createChi2 
                 # # first: create binned clone of data

@@ -171,17 +171,34 @@ for idx, bkg_name in enumerate(all_bkgs):
 # total_distro.Scale(total_distro.GetBinWidth(1))
 # total_distro.Draw("same")
 
-# compute chi2 of data wrt total model
+# # compute chi2 of data wrt total model
+# data_h = dataset.createHistogram("data_hist", m, ROOT.RooFit.Binning(bkgs["total_background"].GetNbinsX()))
+# chi2 = bkgs["total_background"].Chi2Test(data_h, "UU CHI2")
+# n_free_params = f1.Get("w").pdf("model_b").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
+# reduced_chi2 = chi2 / (bkgs["total_background"].GetNbinsX() - 1 - n_free_params)
+# print("DEBUG: chi2 =", chi2, "nbins =", bkgs ["total_background"].GetNbinsX(), "n_free_params =", n_free_params, "reduced_chi2 =", reduced_chi2)
+
+# compute chi2 manually from bins
 data_h = dataset.createHistogram("data_hist", m, ROOT.RooFit.Binning(bkgs["total_background"].GetNbinsX()))
-chi2 = bkgs["total_background"].Chi2Test(data_h, "UU CHI2")
+
+chi2 = 0.0
+for i in range(1, data_h.GetNbinsX() + 1):
+    obs = data_h.GetBinContent(i)
+    exp = bkgs["total_background"].GetBinContent(i)
+    err = data_h.GetBinError(i)
+    if err > 0:
+        chi2 += ((obs - exp) / err)**2
+
 n_free_params = f1.Get("w").pdf("model_b").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
-reduced_chi2 = chi2 / (bkgs["total_background"].GetNbinsX() - 1 - n_free_params)
-print("DEBUG: chi2 =", chi2, "nbins =", bkgs ["total_background"].GetNbinsX(), "n_free_params =", n_free_params, "reduced_chi2 =", reduced_chi2)
+ndof = bkgs["total_background"].GetNbinsX() - 1 - n_free_params
+reduced_chi2 = chi2 / ndof if ndof > 0 else 0
+print(f"DEBUG: chi2 = {chi2:.2f}, nbins = {bkgs['total_background'].GetNbinsX()}, n_free_params = {n_free_params}, reduced_chi2 = {reduced_chi2:.2f}")
 
 # Make legend
-xmin = 0.5 if args.region == "region0" else 0.535 if args.region == "region1" else 0.2
-ymin = 0.15 if args.region == "region0" else 0.6 if args.region == "region1" else 0.2
-yheight = 0.25 if args.region == "region1" else 0.35
+xmin = 0.5 if args.region == "region0" else 0.535 #if args.region == "region1" else 0.2
+ymin = 0.15 if args.region == "region0" else 0.6 #if args.region == "region1" else 0.2
+# yheight = 0.25 if args.region == "region1" else 0.35
+yheight = 0.35 if args.region == "region0" else 0.25
 legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + yheight)
 legend.SetFillStyle(0)
 legend.SetBorderSize(0)
@@ -360,10 +377,23 @@ for idx, (distro_name, distro) in enumerate(all_distros.items()):
 # total_distro.Scale(total_distro.GetBinWidth(1))
 # total_distro.Draw("same")
 
-# compute chi2 of data wrt total model
-chi2 = all_distros["total"].Chi2Test(data_h, "UU CHI2")
+# # compute chi2 of data wrt total model
+# chi2 = all_distros["total"].Chi2Test(data_h, "UU CHI2")
+# n_free_params = f1.Get("w").pdf("model_s").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
+# reduced_chi2 = chi2 / (all_distros["total"].GetNbinsX() - 1 - n_free_params)
+
+# compute chi2 manually from bins
+chi2 = 0.0
+for i in range(1, data_h.GetNbinsX() + 1):
+    obs = data_h.GetBinContent(i)
+    exp = all_distros["total"].GetBinContent(i)
+    err = data_h.GetBinError(i)
+    if err > 0:
+        chi2 += ((obs - exp) / err)**2
+
 n_free_params = f1.Get("w").pdf("model_s").getParameters(f1.Get("w").data("data_obs")).selectByAttrib("Constant", False).getSize()
-reduced_chi2 = chi2 / (all_distros["total"].GetNbinsX() - 1 - n_free_params)
+ndof = all_distros["total"].GetNbinsX() - 1 - n_free_params
+reduced_chi2 = chi2 / ndof if ndof > 0 else 0
 
 # # change minimum to 0.1
 # if args.region == "region1":
@@ -384,9 +414,11 @@ elif args.region == "region0":
 frame.SetMaximum(data_h.GetMaximum() * 5)
 
 # Make legend
-xmin = 0.5 if args.region == "region0" else 0.2
-ymin = 0.15 if args.region == "region0" else 0.2
-legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + 0.35)
+xmin = 0.5 if args.region == "region0" else 0.535 # if args.region == "region1" else 0.2
+ymin = 0.15 if args.region == "region0" else 0.6 # if args.region == "region1" else 0.2
+# yheight = 0.25 if args.region == "region1" else 0.35
+yheight = 0.35 if args.region == "region0" else 0.25
+legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + yheight)
 legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
