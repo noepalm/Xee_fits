@@ -37,9 +37,18 @@ class AnalysisConfig:
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly__updatedSignal/zsnap/era{era}/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zsnap/era{era}/"
         # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/signal_model_withScaleSyst_IDSF_triggerSF_tighterCuts_updatedSignal_PUreweight/zsnap/era{era}/"
-        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/signal_model_allCorrections/zsnap/era{era}/"
-        self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptJpsi_allCorrections/zsnap/era{era}/"
-        self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/promptUpsilon_allCorrections/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260624/signal_model_allCorrections/zsnap/era{era}/"
+        # self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260624/promptJpsi_allCorrections/zsnap/era{era}/"
+        # self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260624/promptUpsilon_allCorrections/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260717/signal_model_allCorrections/zsnap/era{era}/"
+        # self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260717/promptJpsi_allCorrections/zsnap/era{era}/"
+        # self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260717/promptUpsilon_allCorrections/zsnap/era{era}/"
+        # self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/signal_model_allCorrections/zsnap/era{era}/"
+        # self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/promptJpsi_allCorrections/zsnap/era{era}/"
+        # self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/promptUpsilon_allCorrections/zsnap/era{era}/"
+        self.base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260807/signal_model_allCorrections/zsnap/era{era}/"
+        self.base_path_jpsi = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260807/promptJpsi_allCorrections/zsnap/era{era}/"
+        self.base_path_upsilon = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260807/promptUpsilon_allCorrections/zsnap/era{era}/"
         self.base_eos_folder = Path("/eos/home-n/npalmeri/www/DiElectron/signal_model")
         self.eos_folder = str(self.base_eos_folder)
         
@@ -307,8 +316,10 @@ class AnalysisConfig:
             #     samples[name].file = os.path.join(self.base_path_upsilon, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
             #     samples[name].file_GEN = os.path.join(self.base_path_upsilon, "base_6_full", data["filename"].replace(".root", "_pth10toInf.root"))
             # else:
-            samples[name].file = os.path.join(self.base_path, "base_14_full", data["filename"])
-            samples[name].file_GEN = os.path.join(self.base_path, "base_14_full", data["filename"])
+            # samples[name].file = os.path.join(self.base_path, "base_14_full", data["filename"])
+            # samples[name].file_GEN = os.path.join(self.base_path, "base_14_full", data["filename"])
+            samples[name].file = os.path.join(self.base_path, "base_15_full", data["filename"])
+            samples[name].file_GEN = os.path.join(self.base_path, "base_15_full", data["filename"])
         
         return samples
     
@@ -359,7 +370,7 @@ class AnalysisConfig:
             "reduced_mass_range": [0, -0.6, 0.6],
             "response_mean_range": [0, -1, 1],
             # "response_mean_range": [0, -0.2, 0.2],
-            "response_sigma_range": [0.01, 0.001, 1],
+            "response_sigma_range": [0.01, 0.005, 1],
             # "response_sigma_range": [0.2, 0.001, 0.7],
             "response_alphaL_range": [0.4, 0.1, 10],
             "response_alphaR_range": [5, 0.1, 10],
@@ -522,7 +533,7 @@ class AnalysisRunner:
     def run_mass_testing(self, use_reco_mass: bool = False):
         """Run mass point testing"""
         print("=== Running Mass Point Testing ===")
-        mass_points = np.concatenate([np.arange(0.1, 11.1, 0.1), [3.1, 3.7]])
+        mass_points = np.concatenate([np.arange(0.1, 15.1, 0.1), [3.1, 3.7]])
         self.analyzer.test_model_for_masses(mass_points.tolist(), use_reco_mass)
     
     def generate_plots(self, args, plot_max_workers: int = 1):

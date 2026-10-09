@@ -1,25 +1,111 @@
-### per-year signal, all corrections (now also including reco SFs + new trigger SFs vs diele pt)
-mkdir -p logs/260430
+# mkdir -p logs/260807
 # for era in 2022 2022EE 2023 2023BPix; do
-for era in 2022EE; do
+#     time python3 main_oo.py --full --delete_ws --use_reco_mass \
+#                     --no_categories --syst \
+#                     --no_plots \
+#                     --era "$era" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --folder_tag "260807" \
+#                     --copy_eos --tag="allCorrections" &> logs/260807/log_reco_allCorrections_era${era}.log
+#     time python3 main_oo.py --plots --use_reco_mass \
+#                     --no_categories --syst \
+#                     --era "$era" \
+#                     --folder_tag "260807" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --copy_eos --tag="allCorrections" &> logs/260807/log_reco_allCorrections_era${era}_plotting.log
+# done
+
+mkdir -p logs/260727
+for era in 2022 2022EE 2023 2023BPix; do
     time python3 main_oo.py --full --delete_ws --use_reco_mass \
                     --no_categories --syst \
                     --no_plots \
                     --era "$era" \
                     --nuisanced_vars mean:electronScaleVariation \
                     --nuisanced_vars_stat sigma \
-                    --folder_tag "260430" \
-                    --copy_eos --tag="allCorrections" &> logs/260430/log_reco_allCorrections_era${era}.log
+                    --folder_tag "260727" \
+                    --copy_eos --tag="allCorrections" &> logs/260727/log_reco_allCorrections_era${era}.log
     time python3 main_oo.py --plots --use_reco_mass \
                     --no_categories --syst \
                     --era "$era" \
-                    --folder_tag "260430" \
+                    --folder_tag "260727" \
                     --nuisanced_vars mean:electronScaleVariation \
                     --nuisanced_vars_stat sigma \
-                    --copy_eos --tag="allCorrections" &> logs/260430/log_reco_allCorrections_era${era}_plotting.log
+                    --copy_eos --tag="allCorrections" &> logs/260727/log_reco_allCorrections_era${era}_plotting.log
 done
                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
-                    # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1DCorrection sigma:pileupReweight,electronID,triggerSF1DCorrection alphaL:pileupReweight,electronID,triggerSF1DCorrection alphaR:pileupReweight,electronID,triggerSF1DCorrection nR:pileupReweight,electronID,triggerSF1DCorrection nL:pileupReweight,electronID,triggerSF1DCorrection \
+                    # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1D
+
+
+# mkdir -p logs/260717
+# # for era in 2022 2022EE 2023 2023BPix; do
+# for era in 2023; do
+#     time python3 main_oo.py --full --delete_ws --use_reco_mass \
+#                     --no_categories --syst \
+#                     --no_plots \
+#                     --era "$era" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --folder_tag "260717" \
+#                     --copy_eos --tag="allCorrections" &> logs/260717/log_reco_allCorrections_era${era}.log
+#     time python3 main_oo.py --plots --use_reco_mass \
+#                     --no_categories --syst \
+#                     --era "$era" \
+#                     --folder_tag "260717" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --copy_eos --tag="allCorrections" &> logs/260717/log_reco_allCorrections_era${era}_plotting.log
+# done
+#                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
+#                     # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1D
+
+# ### per-year signal, all corrections (now also including reco SFs + new trigger SFs vs diele pt)
+# mkdir -p logs/260624
+# for era in 2022 2022EE 2023 2023BPix; do
+# # for era in 2022EE; do
+#     # time python3 main_oo.py --full --delete_ws --use_reco_mass \
+#     #                 --no_categories --syst \
+#     #                 --no_plots \
+#     #                 --era "$era" \
+#     #                 --nuisanced_vars mean:electronScaleVariation \
+#     #                 --nuisanced_vars_stat sigma \
+#     #                 --folder_tag "260624" \
+#     #                 --copy_eos --tag="allCorrections" &> logs/260624/log_reco_allCorrections_era${era}.log
+#     time python3 main_oo.py --plots --use_reco_mass \
+#                     --no_categories --syst \
+#                     --era "$era" \
+#                     --folder_tag "260624" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --copy_eos --tag="allCorrections" &> logs/260624/log_reco_allCorrections_era${era}_plotting.log
+# done
+#                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
+#                     # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1D
+
+# ### per-year signal, all corrections (now also including reco SFs + new trigger SFs vs diele pt)
+# mkdir -p logs/260617
+# for era in 2022 2022EE 2023 2023BPix; do
+# # for era in 2022EE; do
+#     time python3 main_oo.py --full --delete_ws --use_reco_mass \
+#                     --no_categories --syst \
+#                     --no_plots \
+#                     --era "$era" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --folder_tag "260617" \
+#                     --copy_eos --tag="allCorrections" &> logs/260617/log_reco_allCorrections_era${era}.log
+#     time python3 main_oo.py --plots --use_reco_mass \
+#                     --no_categories --syst \
+#                     --era "$era" \
+#                     --folder_tag "260617" \
+#                     --nuisanced_vars mean:electronScaleVariation \
+#                     --nuisanced_vars_stat sigma \
+#                     --copy_eos --tag="allCorrections" &> logs/260617/log_reco_allCorrections_era${era}_plotting.log
+# done
+#                     # --nuisanced_vars_stat sigma nL nR alphaL alphaR \
+#                     # --weight_nuisanced_vars mean:pileupReweight,electronID,triggerSF1DCorrection sigma:pileupReweight,electronID,triggerSF1DCorrection alphaL:pileupReweight,electronID,triggerSF1DCorrection alphaR:pileupReweight,electronID,triggerSF1DCorrection nR:pileupReweight,electronID,triggerSF1DCorrection nL:pileupReweight,electronID,triggerSF1DCorrection \
 
 
 # ### tighter cuts, new signal, PU reweight

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import math
+import re
 from pathlib import Path
 
 import ROOT
@@ -14,18 +16,20 @@ CMS_PALETTE = [
 def open_fitdiag_shapes(path, channel_name):
     tf = ROOT.TFile.Open(str(path), "READ")
     if not tf or tf.IsZombie():
-        return None, None, None, None
+        return None, None, None, None, None
 
     base = f"shapes_fit_s/{channel_name}"
     data = tf.Get(f"{base}/data")
     total = tf.Get(f"{base}/total")
     total_bkg = tf.Get(f"{base}/total_background")
 
+    print(f"DEBUG: opened {path}: data={data}, total={total}, total_bkg={total_bkg}")
+
     if total is None:
         tf.Close()
-        return None, None, None, None
+        return None, None, None, None, None
 
-    return tf, data, total, total_bkg
+    return tf, data, total, total_bkg, get_best_fit_r_label(tf)
 
 
 def category_to_cat_id(category):
@@ -56,7 +60,10 @@ def open_toy_dataset(toy_file, toy_index):
         tf.Close()
         return None, None, None
 
-    toy_names = sorted([k.GetName() for k in toys_dir.GetListOfKeys() if k.GetName().startswith("toy_")])
+    toy_names = sorted(
+        [k.GetName() for k in toys_dir.GetListOfKeys() if k.GetName().startswith("toy_")],
+        key=toy_sort_key,
+    )
     if not toy_names:
         tf.Close()
         return None, None, None
@@ -69,11 +76,19 @@ def open_toy_dataset(toy_file, toy_index):
 
     toy_name = toy_names[idx]
     ds = toys_dir.Get(toy_name)
+    print("DEBUG: opened toy dataset:", toy_name, ds)
     if ds is None:
         tf.Close()
         return None, None, None
 
     return tf, ds, toy_name
+
+
+def toy_sort_key(name):
+    match = re.match(r"toy_(\d+)$", name)
+    if match:
+        return (0, int(match.group(1)))
+    return (1, name)
 
 def get_graph_yerr(graph, idx):
     """Return a positive y-error from either TGraphErrors or TGraphAsymmErrors."""
@@ -97,6 +112,79 @@ def get_graph_yerr(graph, idx):
 
     err = 0.5 * (max(0.0, err_low) + max(0.0, err_high))
     return err if err > 0 else 0.0
+
+
+def _best_fit_r_param(tf):
+    for obj_name in ("fit_s", "fit_mdf", "fit_b"):
+        fit_result = tf.Get(obj_name)
+        if fit_result is None:
+            continue
+
+        try:
+            params = fit_result.floatParsFinal()
+            r_var = params.find("r")
+            if r_var is None:
+                continue
+            return r_var
+        except Exception:
+            continue
+
+    return None
+
+
+def _round_to_significant_digits(value, significant_digits=2):
+    value = abs(float(value))
+    if value <= 0.0 or not math.isfinite(value):
+        return 0
+
+    exponent = math.floor(math.log10(value))
+    return max(0, significant_digits - 1 - exponent)
+
+
+def get_best_fit_r_label(tf):
+    r_var = _best_fit_r_param(tf)
+    if r_var is None:
+        return None
+
+    try:
+        r_value = float(r_var.getVal())
+    except Exception:
+        return None
+
+    r_err_hi = None
+    r_err_lo = None
+    for method_name in ("getErrorHi", "getAsymErrorHi"):
+        if hasattr(r_var, method_name):
+            try:
+                r_err_hi = float(getattr(r_var, method_name)())
+                break
+            except Exception:
+                pass
+    for method_name in ("getErrorLo", "getAsymErrorLo"):
+        if hasattr(r_var, method_name):
+            try:
+                r_err_lo = float(getattr(r_var, method_name)())
+                break
+            except Exception:
+                pass
+
+    try:
+        sym_err = float(r_var.getError())
+    except Exception:
+        sym_err = 0.0
+
+    if r_err_hi is None:
+        r_err_hi = sym_err
+    if r_err_lo is None:
+        r_err_lo = -sym_err
+
+    err_for_digits = max(abs(r_err_lo), abs(r_err_hi))
+    decimals = _round_to_significant_digits(err_for_digits)
+
+    r_value_str = f"{r_value:.{decimals}f}"
+    r_err_hi_str = f"{abs(r_err_hi):.{decimals}f}"
+    r_err_lo_str = f"{abs(r_err_lo):.{decimals}f}"
+    return f"r = {r_value_str}^{{+{r_err_hi_str}}}_{{-{r_err_lo_str}}}"
 
 
 def build_pull_graph(data_graph, fit_hist, name, color):
@@ -129,8 +217,10 @@ def build_pull_graph(data_graph, fit_hist, name, color):
 def main():
     parser = argparse.ArgumentParser(description="Plot one toy with S+B fits for all three background functions")
     parser.add_argument("--toy-file", required=True, help="GenerateOnly toys ROOT file")
-    parser.add_argument("--sb-files", nargs=3, required=True, help="Three fitDiagnostics.<label>.root files")
-    parser.add_argument("--fit-labels", nargs=3, default=["Chebyshev", "Bernstein", "PolyExp"], help="Labels for fit functions")
+    # parser.add_argument("--sb-files", nargs=3, required=True, help="Three fitDiagnostics.<label>.root files")
+    # parser.add_argument("--fit-labels", nargs=3, default=["Chebyshev", "Bernstein", "PolyExp"], help="Labels for fit functions")
+    parser.add_argument("--sb-files", nargs=2, required=True, help="Three fitDiagnostics.<label>.root files")
+    parser.add_argument("--fit-labels", nargs=2, default=["Bernstein", "Chebyshev"], help="Labels for fit functions")
     parser.add_argument("--toy-index", type=int, default=0, help="Toy index to plot")
     parser.add_argument("--category", required=True)
     parser.add_argument("--era", required=True)
@@ -163,7 +253,7 @@ def main():
 
     opened_fitdiag = []
     for fitdiag_file in args.sb_files:
-        tf, data_g, total_h, bkg_h = open_fitdiag_shapes(fitdiag_file, channel_name)
+        tf, data_g, total_h, bkg_h, r_label = open_fitdiag_shapes(fitdiag_file, channel_name)
         if total_h is None:
             print(
                 f"ERROR: Could not open shapes from {fitdiag_file} at "
@@ -171,17 +261,16 @@ def main():
             )
             if toy_tf:
                 toy_tf.Close()
-            for tf_open, _, _, _ in opened_fitdiag:
+            for tf_open, _, _, _, _ in opened_fitdiag:
                 tf_open.Close()
             return 1
-        opened_fitdiag.append((tf, data_g, total_h, bkg_h))
+        opened_fitdiag.append((tf, data_g, total_h, bkg_h, r_label))
 
     plotted_labels = []
     data_graph = None
-    for idx in range(3):
-        fitdiag_file = args.sb_files[idx]
+    for idx in range(len(args.sb_files)):
         fit_label = args.fit_labels[idx]
-        _, data_g, total_hist, bkg_hist = opened_fitdiag[idx]
+        _, data_g, total_hist, bkg_hist, r_label = opened_fitdiag[idx]
 
         if data_graph is None and data_g is not None:
             data_graph = data_g.Clone("toy_data_graph")
@@ -200,7 +289,7 @@ def main():
             bkg_clone.SetLineStyle(2)
             bkg_clone.SetLineWidth(2)
 
-        plotted_labels.append((fit_label, total_hist, bkg_clone))
+        plotted_labels.append((fit_label, r_label, total_hist, bkg_clone))
 
     canvas = ROOT.TCanvas("c_toyfit", "c_toyfit", 900, 900)
     canvas.Divide(1, 2)
@@ -220,20 +309,20 @@ def main():
         print("ERROR: No valid fitDiagnostics inputs to plot")
         if toy_tf:
             toy_tf.Close()
-        for tf_open, _, _, _ in opened_fitdiag:
+        for tf_open, _, _, _, _ in opened_fitdiag:
             tf_open.Close()
         return 1
 
-    axis_hist = plotted_labels[0][1].Clone("axis_hist")
+    axis_hist = plotted_labels[0][2].Clone("axis_hist")
     axis_hist.SetDirectory(0)
     axis_hist.Reset("ICES")
     axis_hist.SetTitle("")
     axis_hist.GetXaxis().SetTitle("m(ee) [GeV]")
-    axis_hist.GetYaxis().SetTitle("Events")
+    axis_hist.GetYaxis().SetTitle("Event density")
     axis_hist.GetXaxis().SetLabelSize(0)
 
-    y_max = max(*[h.GetMaximum() for _, h, _ in plotted_labels], data_graph.GetMaximum())
-    y_min = max(*[h.GetMinimum() for _, h, _ in plotted_labels], data_graph.GetMinimum())
+    y_max = max(*[h.GetMaximum() for _, _, h, _ in plotted_labels], data_graph.GetMaximum())
+    y_min = max(*[h.GetMinimum() for _, _, h, _ in plotted_labels], data_graph.GetMinimum())
     print("DEBUG: y_min =", y_min, "y_max =", y_max)
     axis_hist.SetMinimum(max(y_min * 0.8, 1e-3))
     axis_hist.SetMaximum(y_max * 1.2)
@@ -245,7 +334,7 @@ def main():
         data_graph.SetMarkerStyle(20)
         data_graph.SetMarkerSize(0.8)
         data_graph.Draw("P same")
-    for _, total_hist, bkg_hist in plotted_labels:
+    for _, _, total_hist, bkg_hist in plotted_labels:
         total_hist.Draw("hist same")
         if bkg_hist is not None:
             bkg_hist.Draw("hist same")
@@ -264,8 +353,9 @@ def main():
     if data_graph is not None:
         legend.AddEntry(data_graph, f"Toy {toy_name}", "pe")
 
-    for fit_label, total_hist, bkg_hist in plotted_labels:
-        legend.AddEntry(total_hist, fit_label, "l")
+    for fit_label, r_label, total_hist, bkg_hist in plotted_labels:
+        label_text = fit_label if not r_label else f"{fit_label}, {r_label}"
+        legend.AddEntry(total_hist, label_text, "l")
         if bkg_hist is not None:
             legend.AddEntry(bkg_hist, f"{fit_label} (bkg only)", "l")
 
@@ -324,7 +414,7 @@ def main():
 
     # Keep graph references alive so PyROOT does not garbage-collect earlier draws.
     pull_graphs = []
-    for idx, (_, total_hist, _) in enumerate(plotted_labels):
+    for idx, (_, _, total_hist, _) in enumerate(plotted_labels):
         color = ROOT.TColor.GetColor(CMS_PALETTE[idx])
         pull_graph = build_pull_graph(data_graph, total_hist, f"pull_{idx}", color)
         pull_graphs.append(pull_graph)
@@ -349,7 +439,7 @@ def main():
 
     if toy_tf:
         toy_tf.Close()
-    for tf_open, _, _, _ in opened_fitdiag:
+    for tf_open, _, _, _, _ in opened_fitdiag:
         tf_open.Close()
 
     return 0

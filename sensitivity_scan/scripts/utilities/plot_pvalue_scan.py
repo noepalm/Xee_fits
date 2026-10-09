@@ -28,6 +28,8 @@ def main() -> None:
     pvalues = data["pvalues"]
 
     sorted_indices = np.argsort(masses)
+    # only plot up to mass of 11 GeV
+    sorted_indices = sorted_indices[masses[sorted_indices] <= 10.0]
     masses = masses[sorted_indices]
     pvalues = pvalues[sorted_indices]
 

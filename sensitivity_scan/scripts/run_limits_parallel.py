@@ -139,7 +139,7 @@ def get_rmin_rmax(mass, era):
         # "allYears": {0: (0, 100), 1: (0,10), 9.0: (0, 15), 9.5: (0, 25), 10.0: (0, 50)}
         # "allYears": {0: (0, 100), 1.25: (0,10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
         # "allYears": {1.25: (0,300), 2.0 : (0, 10), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)}
-        "allYears": {0 : (0, 3000), 1.25: (0,500), 2.0 : (0, 100), 3.0 : (0, 1000), 3.2 : (0, 100), 4.0 : (0, 10), 7.5: (0, 100), 9.3 : (0, 2000)}
+        "allYears": {0 : (0, 50), 1.25: (0,500), 2.0 : (0, 100), 3.0 : (0, 1000), 3.2 : (0, 100), 4.0 : (0, 10), 7.5: (0, 100), 9.3 : (0, 2000)}
         # "allYears": {0: (0, 7000), 3.5: (0, 5000), 9.0: (0, 15), 9.5: (0, 50), 10.0: (0, 50)} #for 6p5 trigger test only
     }
     
@@ -164,9 +164,13 @@ def get_mass_range(region):
     #     "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
     # }
     ranges = {
-        "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
-        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        "region0": {"min": 0.3, "min_limit": 0.6, "max": 2.4, "max_limit": 2.2},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        # "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 7.0, "max_limit": 6.5},
+        "region1": {"min": 2.0, "min_limit": 2.2, "max": 7.0, "max_limit": 6.5},
+        # "region2": {"min": 6.0, "min_limit": 5.5, "max": 15.0, "max_limit": 14.5},
+        "region2": {"min": 6.0, "min_limit": 6.5, "max": 12.0, "max_limit": 11.0}, 
     }
     return ranges.get(region, {})
 
@@ -323,7 +327,7 @@ def run_single_grid_point(args_dict):
     # Check if already computed (caching)
     if os.path.exists(output_file) and args_dict.get('caching', True):
         return (True, point, label, mass, None)
-    
+
     # Build combine command - use relative path since we'll run in workdir
     cmd = [
         "combine", "-M", "AsymptoticLimits", input_root,
@@ -331,10 +335,10 @@ def run_single_grid_point(args_dict):
         "--singlePoint", str(point),
         # "--run", "expected",
         "-n", f"_{label}{fit_tag_label}_point_{point}",
-        "--cminDefaultMinimizerStrategy", "0"
+        "--cminDefaultMinimizerStrategy", "0",
+        "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+        "--cminRunAllDiscreteCombinations",
     ]
-
-    # cmd.extend(["--freezeParameters", "lumi_scale"])
     
     # # Add parameter settings for year combination or multi-era handling
     # if era == "allYears":
@@ -345,13 +349,13 @@ def run_single_grid_point(args_dict):
     #         "--freezeParameters", "pdf_index_2022EE,pdf_index_2023,pdf_index_2023BPix,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope"
     #     ])
     
-    # Forward user-provided parameter settings directly to combine.
-    if set_params:
-        cmd.extend(["--setParameters", set_params])
+    # # Forward user-provided parameter settings directly to combine.
+    # if set_params:
+    #     cmd.extend(["--setParameters", set_params])
 
-    # Forward user-provided freeze list directly to combine.
-    if freeze_params:
-        cmd.extend(["--freezeParameters", freeze_params])
+    # # Forward user-provided freeze list directly to combine.
+    # if freeze_params:
+    #     cmd.extend(["--freezeParameters", freeze_params])
 
     # Forward user-provided confidence level directly to combine.
     if cl_value is not None:
@@ -423,23 +427,90 @@ def run_single_limit(args_dict):
         copy_direct_outputs(workdir, outfolder, label, fit_tag_label, mass)
         return (True, label, mass, None)
 
+    eras = ["2022", "2022EE", "2023", "2023BPix"]
+
+
+    # #### FOR SLIDING WINDOW
+
+    # # 1. Parameter ranges [0, 10] separated by colons
+    # param_ranges = ":".join(
+    #     [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    # )
+
+    # # 2. Initial values (low orders = 0.001, higher orders = 0)
+    # set_params = ",".join(
+    #     [f"t{i}_{era}_envelope=0.001" for i in range(2) for era in eras]
+    #     + [f"t{i}_{era}_envelope=0" for i in range(2, 15) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0.001" for i in range(3) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0" for i in range(3, 15) for era in eras]
+    #     # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+    # )
+
+    # # 3. Freeze higher orders
+    # freeze_params = ",".join(
+    #     [f"t{i}_{era}_envelope" for i in range(2, 15) for era in eras]
+    #     + [f"a{i}_{era}_envelope" for i in range(3, 15) for era in eras]
+    #     # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+    # )
+
+    # cmd = [
+    #     "combine", "-M", "AsymptoticLimits", input_root,
+    #     "--rMin", str(rmin), "--rMax", str(rmax),
+    #     "-n", f"_{label}{fit_tag_label}",
+    #     "--cminDefaultMinimizerStrategy", "0",
+    #     "--setParameters", set_params,
+    #     "--setParameterRanges", param_ranges,
+    #     "--freezeParameters", freeze_params,
+    # ]
+
+    ### FOR SMALLER RANGE TESTS (for standard: just remove all setParameters/freezeParameters)
+
+    # 1. Parameter ranges [0, 10] separated by colons
+    param_ranges = ":".join(
+        [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+        + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    )
+
+    # 2. Initial values (low orders = 0.001, higher orders = 0)
+    set_params = ",".join(
+        # [f"t{i}_{era}_envelope=0.001" for i in range(5) for era in eras]
+        [f"t{i}_{era}_envelope=0" for i in range(4, 15) for era in eras]
+        # + [f"a{i}_{era}_envelope=0.001" for i in range(7) for era in eras]
+        + [f"a{i}_{era}_envelope=0" for i in range(6, 15) for era in eras]
+        + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+    )
+
+    # 3. Freeze higher orders
+    freeze_params = ",".join(
+        [f"t{i}_{era}_envelope" for i in range(4, 15) for era in eras]
+        + [f"a{i}_{era}_envelope" for i in range(6, 15) for era in eras]
+        + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+    )
+
     cmd = [
         "combine", "-M", "AsymptoticLimits", input_root,
         "--rMin", str(rmin), "--rMax", str(rmax),
         "-n", f"_{label}{fit_tag_label}",
         "--cminDefaultMinimizerStrategy", "0",
+        # "--setParameters", set_params,
+        # "--setParameterRanges", param_ranges,
+        # "--freezeParameters", freeze_params,
+
+        # "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+        # "--cminRunAllDiscreteCombinations",
     ]
 
-    if set_params:
-        cmd.extend(["--setParameters", set_params])
+    # if set_params:
+    #     cmd.extend(["--setParameters", set_params])
 
-    if freeze_params:
-        cmd.extend(["--freezeParameters", freeze_params])
+    # if freeze_params:
+    #     cmd.extend(["--freezeParameters", freeze_params])
 
     if cl_value is not None:
         cmd.extend(["--cl", str(cl_value)])
 
-    cmd.extend(["-v", "1"])
+    cmd.extend(["-v", "3"])
 
     try:
         with open(log_file, 'w') as f:
@@ -772,6 +843,7 @@ def main():
     parser.add_argument('--no_reweight', action='store_true', help='Do not use reweighting')
     parser.add_argument('--plot_only', action='store_true', help='Only generate plots')
     parser.add_argument('--data', action='store_true', help='Run on data instead of MC')
+    parser.add_argument('--unblind', action='store_true', help='Unblind data in limit plots')
     parser.add_argument(
         '--setParameters',
         default='',
@@ -920,8 +992,8 @@ def main():
                 'fit_tag_label': fit_tag_label,
                 'caching': args.caching,
                 'cl': args.cl,
-                'set_parameters': args.setParameters.strip(),
-                'freeze_parameters': args.freezeParameters.strip(),
+                # 'set_parameters': args.setParameters.strip(),
+                # 'freeze_parameters': args.freezeParameters.strip(),
                 'run_combination': args.combination,
                 'run_year_combination': run_year_combination,
                 'no_grid': args.noGrid,
@@ -1189,6 +1261,8 @@ def main():
             ]
             if args.fit_tag:
                 plot_cmd.extend(["--tag", args.fit_tag])
+            if args.unblind:
+                plot_cmd.append("--unblind")
             
             log_path = f"{outfolder}/{args.category}Combination_{era_suffix}/limits_summary_{region}{fit_tag_label}.log"
             with open(log_path, 'w') as f:
@@ -1206,6 +1280,8 @@ def main():
                 ]
                 if args.fit_tag:
                     plot_cmd.extend(["--tag", args.fit_tag])
+                if args.unblind:
+                    plot_cmd.append("--unblind")
                 
                 log_path = f"{outfolder}/{cat_name}_{era_suffix}/limits_summary_{region}{fit_tag_label}.log"
                 print(f"  Creating summary plots for {cat_name}")

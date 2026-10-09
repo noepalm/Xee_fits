@@ -78,9 +78,16 @@ for era in ["2022", "2022EE", "2023", "2023BPix"]:
     # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/use_reco_mass_nanov15_withScaleSyst_IDSF/"
     # f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260404/{era}/dataset_data_region1_binned_data_envelope_withScaleSyst_IDSF_triggerSF_finerBinning_tighterCuts_PUreweight_signalEnvelope_{era}_envelope_full.root")
     # outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope/era{era}"
-    f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260430/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+    # f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260430/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+    # outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections/era{era}"
 
-    outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections/era{era}"
+    # f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260624/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+    # outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260624/use_reco_mass_allCorrections/era{era}"
+    # f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260727/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+    # outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260727/use_reco_mass_allCorrections/era{era}"
+    f = ROOT.TFile.Open(f"/eos/home-n/npalmeri/DiEleAnalyzer/Xee_fits/background_modelling/datasets/260807/{era}/dataset_data_region1_binned_data_envelope_allCorrections_{era}_envelope_full.root")
+    outfolder = f"/eos/home-n/npalmeri/www/DiElectron/signal_model/260807/use_reco_mass_allCorrections/era{era}"
+
     w = f.Get("w")
     Path(outfolder).mkdir(parents=True, exist_ok=True)
 

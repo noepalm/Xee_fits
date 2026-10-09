@@ -15,7 +15,7 @@ cms_palette = [
 BKG_FUNCTIONS = [
     ("chebyshev", "Chebyshev", cms_palette[0]),
     ("bernstein", "Bernstein", cms_palette[1]),
-    ("polyexp", "PolyExp", cms_palette[2]),
+    # ("polyexp", "PolyExp", cms_palette[2]),
 ]
 
 # REGION_BOUNDS = {
@@ -29,9 +29,12 @@ BKG_FUNCTIONS = [
 #     "region2": (4.9, 10.5),
 # }   
 REGION_BOUNDS = {
-    "region0": (0.5, 2.2),
-    "region1": (1.8, 5.3),
-    "region2": (4.5, 10.5),
+    "region0": (0.5, 2.4),
+    # "region1": (1.8, 5.3),
+    # "region1": (1.8, 7.0),
+    "region1": (2.0, 7.0),
+    # "region2": (4.5, 10.5),
+    "region2": (6.0, 12.0),
 }
 
 def open_workspace(path):
@@ -69,6 +72,7 @@ def main():
     files = []
     for bkg_key, bkg_label, color in BKG_FUNCTIONS:
         fpath = in_dir / f"higgsCombine_{args.category}{tag_label}_{bkg_key}_{args.era}_Bonly.MultiDimFit.mH120.root"
+        print(f"DEBUG: Looking for B-only workspace for {bkg_label}: {fpath}")
         files.append((bkg_key, bkg_label, color, fpath))
 
     opened = []
@@ -100,7 +104,7 @@ def main():
         return 1
 
     x_min, x_max = mass.getMin(), mass.getMax()
-    frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(350))
+    frame = mass.frame(ROOT.RooFit.Range(x_min, x_max), ROOT.RooFit.Bins(450))
     frame.SetTitle("")
     frame.GetXaxis().SetTitle("m(ee) [GeV]")
     frame.GetYaxis().SetTitle("Events")
@@ -120,6 +124,9 @@ def main():
         if model_b is None:
             print(f"WARNING: Missing model_b for {bkg_label}; skipping")
             continue
+        # load MultiDimFit snapshot 
+        ws.loadSnapshot("MultiDimFit")
+        # ws.loadSnapshot("clean")
         model_name = f"model_{bkg_label}"
         opts = [
             ROOT.RooFit.Name(model_name),
@@ -197,6 +204,8 @@ def main():
         y_min = 30
     if args.region == "region0":
         y_min = 5
+    if args.region == "region2":
+        y_min =  8
     frame.SetMinimum(max(y_min, 0.1))  # avoid going to zero
 
     # Bottom pad: pull distributions for each model.

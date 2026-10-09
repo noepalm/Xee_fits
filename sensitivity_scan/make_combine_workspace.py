@@ -21,8 +21,8 @@ region_mass_ranges = {
     # "region2": {"min": 4.9, "max": 10.5},
     #
     "region0": {"min": 0.3, "max": 2.4},
-    "region1": {"min": 1.6, "max": 5.3},
-    "region2": {"min": 4.5, "max": 10.5},
+    "region1": {"min": 2.0, "max": 7.0}, #was [1.6, 7.0]
+    "region2": {"min": 6.0, "max": 12.0},
 }
 
 def is_mass_in_region(mass, region):
@@ -124,13 +124,17 @@ data = w.data("data_obs")
 # save luminosity of projection for later use
 # luminosity = 8.1842 if args.data else 58.9
 luminosities = {
-    "2022" : 0.83,
-    "2022EE" : 1.93,
-    "2023" : 2.65,
-    "2023BPix" : 1.27,
+    # "2022" : 0.83,
+    # "2022EE" : 1.93,
+    # "2023" : 2.65,
+    # "2023BPix" : 1.27,
+    "2022" : 7.73,
+    "2022EE" : 26.62,
+    "2023" : 14.54,
+    "2023BPix" : 9.68,
 }
-luminosity = luminosities[args.era] if args.data else 58.9
-# luminosity = 6.68 if args.data else 58.9
+luminosity = luminosities[args.era] if args.data else 58.6
+# luminosity = 6.68 if args.data else 58.6
 lumi = R.RooRealVar(f"luminosity_{args.era}", f"luminosity_{args.era}", luminosity)
 lumi.setConstant(True)
 w.Import(lumi)
@@ -152,7 +156,7 @@ if args.region == "region1":
     }
 elif args.region == "region2":
     bkg_procs = {
-        'ee': ['dy', 'upsilon1s']
+        'ee': ['dy', 'upsilon1s', 'upsilon2s']
     }
 elif args.region == "region0":
     bkg_procs = {
@@ -189,7 +193,8 @@ elif args.cat == "inclusive":
         ] for era in eras
     }
 
-masses = [f"{v:.1f}" for v in np.arange(0.1, 11.1, 0.1)]
+# masses = [f"{v:.1f}" for v in np.arange(0.1, 11.1, 0.1)]
+masses = [f"{v:.1f}" for v in np.arange(0.1, 12.9, 0.1)]
 # select subrange belonging to processed region
 masses = [mass for mass in masses if is_mass_in_region(mass, args.region)]
 
@@ -243,7 +248,8 @@ for mass in masses:
     down, up = id_syst_for_mass(float(mass), args.era, variation="electronID")
     syst_map = syst_map([args.era], [mass], (down, up))
 
-cb.cp().signals().AddSyst(cb, "electronID_syst", "lnN", syst_map)
+cb.cp().signals().AddSyst(cb, "CMS_eff_e_id", "lnN", syst_map)
+# cb.cp().signals().AddSyst(cb, "electronID_syst", "lnN", syst_map)
 
 # Trigger SF 
 # ### first, determine highest variation across mass values AND between up/down
@@ -274,7 +280,8 @@ for mass in masses:
     down, up = id_syst_for_mass(float(mass), args.era, variation="trigger")
     syst_map = syst_map([args.era], [mass], (down, up))
 
-cb.cp().signals().AddSyst(cb, "triggerSF_syst", "lnN", syst_map)
+# cb.cp().signals().AddSyst(cb, "triggerSF_syst", "lnN", syst_map)
+cb.cp().signals().AddSyst(cb, "CMS_eff_trigger_e", "lnN", syst_map)
 
 # Reco SF
 syst_map = ch.SystMap("era", "mass")
@@ -282,7 +289,8 @@ for mass in masses:
     down, up = id_syst_for_mass(float(mass), args.era, variation="reco")
     syst_map = syst_map([args.era], [mass], (down, up))
 
-cb.cp().signals().AddSyst(cb, "recoSF_syst", "lnN", syst_map)
+# cb.cp().signals().AddSyst(cb, "recoSF_syst", "lnN", syst_map)
+cb.cp().signals().AddSyst(cb, "CMS_eff_e_reco", "lnN", syst_map)
 
 
 # Scale and smearing
@@ -291,13 +299,15 @@ if args.withSyst:
     # add a "param" systematic (gaussian distributed with mean = 0 and sigma = 1)
     # cb.cp().process(sig_procs).AddSyst(cb, 'sigma_nuisance', 'shape', ch.SystMap()(1.0))
     # NOTE: can't get param only to get added, so doing that manually using AddDatacardLineAtEnd
-    cb.AddDatacardLineAtEnd("mean_nuisance_electronScaleVariation      param 0 1")
+    # cb.AddDatacardLineAtEnd("mean_nuisance_electronScaleVariation      param 0 1")
+    cb.AddDatacardLineAtEnd("CMS_scale_e      param 0 1")   
 
 # Signal modelling shape uncertainty
 if args.withSyst:
     # for par in ["sigma", "alphaL", "alphaR", "nL", "nR"]:
     for par in ["sigma"]:
-        cb.AddDatacardLineAtEnd(f"{par}_nuisance_stat_{args.era}      param 0 1")
+        # cb.AddDatacardLineAtEnd(f"{par}_nuisance_stat_{args.era}      param 0 1")
+        cb.AddDatacardLineAtEnd(f"CMS_EXO25020_signalModel{par.capitalize()}Nuisance_{args.era}      param 0 1")
 
 # # Discrete nuisance parameter for discrete profiling ("pdf_index")
 # cb.cp().backgrounds().AddSyst(cb, 'bkg_func_choice', 'discrete', ch.SystMap()(1))
@@ -331,7 +341,8 @@ if args.era in lumi2_uncertainties_by_era:
 #FIXME: make min/max work with cb command (see attempts above)
 for bkg in bkg_procs['ee']:
     for bins_tuple in cats[f'ee_{era}']:
-        cb.AddDatacardLineAtEnd(f"scale_{bkg}_{bins_tuple[1]}_{era} rateParam *       {bkg}       1 [0,10]")
+        # cb.AddDatacardLineAtEnd(f"scale_{bkg}_{bins_tuple[1]}_{era} rateParam *       {bkg}       1 [0,10]")
+        cb.AddDatacardLineAtEnd(f"CMS_EXO25020_bkgScale_{bkg}_{era} rateParam *       {bkg}       1 [0,10]")
 
 
 # # TEST: add rateParam to project limits to x10 luminosity (unblinded target)

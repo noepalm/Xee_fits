@@ -34,10 +34,11 @@ for region in 0 1 2; do
             --X-rtd MINIMIZER_freezeDisassociatedParams \
             --X-rtd REMOVE_CONSTANT_ZERO_POINT=1 -v 0
 
+    # setting both pdf_index_<year>_envelope and CMS_EXO25020_bkgEnvelopeIdx_<year> for retrocompatibility
     for i in {0..1}; do
         combine -M MultiDimFit Xee_ee_4_allYears.root --algo grid --setParameterRanges r=${range} --points 30 \
-                --setParameters signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023=0,signal_model_index_2023BPix=0,pdf_index_2022_envelope=$i,pdf_index_2022EE_envelope=$i,pdf_index_2023_envelope=$i,pdf_index_2023BPix_envelope=$i \
-                --freezeParameters signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023,signal_model_index_2023BPix,pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope \
+                --setParameters signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023=0,signal_model_index_2023BPix=0,pdf_index_2022_envelope=$i,pdf_index_2022EE_envelope=$i,pdf_index_2023_envelope=$i,pdf_index_2023BPix_envelope=$i,CMS_EXO25020_bkgEnvelopeIdx_2022=$i,CMS_EXO25020_bkgEnvelopeIdx_2022EE=$i,CMS_EXO25020_bkgEnvelopeIdx_2023=$i,CMS_EXO25020_bkgEnvelopeIdx_2023BPix=$i \
+                --freezeParameters signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023,signal_model_index_2023BPix,pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope,CMS_EXO25020_bkgEnvelopeIdx_2022,CMS_EXO25020_bkgEnvelopeIdx_2022EE,CMS_EXO25020_bkgEnvelopeIdx_2023,CMS_EXO25020_bkgEnvelopeIdx_2023BPix \
                 --cminDefaultMinimizerStrategy 0 --saveNLL \
                 -n .nll_scan_bkgEnvelope_idx${i} \
                 --X-rtd MINIMIZER_freezeDisassociatedParams \

@@ -683,7 +683,7 @@ class ModelPlotter:
                     # Find nuisance parameters (those ending with "_nuisance")
                     for param in model_params:
                         param_name = param.GetName()
-                        if "nuisance" in param_name:
+                        if "nuisance" in param_name.lower():
                             variation = param_name.split("_")[-1]
                             # if it's an era, skip that, it's a nuisance to be ignored
                             if "2022" in variation or "2023" in variation:
@@ -860,6 +860,8 @@ class ModelPlotter:
             all_objects = [model for model in all_objects if "_cat_" not in model]
         
         models = {model.split("_M")[1].split("_")[0]: model for model in all_objects}
+        # only plot masses between 0.5 and 9.7
+        models = {mass: model for mass, model in models.items() if 0.5 <= float(mass.replace("p", ".")) <= 9.7}
         
         if not models:
             print(f"No test models found for category {category_label}")

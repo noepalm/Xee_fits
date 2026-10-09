@@ -73,45 +73,13 @@ class DatasetCreator:
 
         # Set file paths based on sample type
         if use_jpsi:
+            # J/psi paths are fully defined in the config (can be string or dict)
             self.filepath = fit_region.background_resonant_data
         else:
-            if corrected:
-                # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_corrected_scaleOnly_elenaSyst/zsnap/era2023/'
-                # self.filepath = '/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_withScaleSyst_IDSF/zsnap/era2023/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF/zsnap/era{era}/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260312/fw_output_withScaleSyst_IDSF_triggerSF_isoCut/zsnap/era{era}/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260320/fw_output_withScaleSyst_IDSF_triggerSF_6p5triggerOnly/zsnap/era{era}/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts/zsnap/era{era}/'
-                # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260324/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly/zsnap/era{era}/'
-                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260329/fw_output_withScaleSyst_IDSF_triggerSF_tighterCuts_PUreweight/zsnap/era{era}/'
-            else:
-                self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/fw_output_actualReweight/zsnap/era{era}/'
-
-        # FIXME: retrieve folders dynamically and only select latest step
-        if corrected:
-            if fit_region.name == "region0" and use_jpsi:
-                # self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
-                self.filepath += "all_14_AllResonances/" #different flow for resonant bkg sample in region 0
-                # self.filepath += "all_12_AllResonances/" #different flow for resonant bkg sample in region 0
-            elif fit_region.name in ["region1", "region2"] and use_jpsi:
-                # self.filepath += "base_3_full/"
-                # self.filepath += "base_4_full/"
-                # self.filepath += "base_5_full/"
-                self.filepath += "base_6_full/"
-            else:
-                # when running on data 
-                # self.filepath += "base_2_Final/"
-                # self.filepath += "base_3_full/"   
-                # self.filepath += "base_5_full/"
-                self.filepath += "base_6_full/"
-        elif use_reweighting:
-            if fit_region.name == "region0" and use_jpsi:
-                self.filepath += "all_10_AllResonances/" #different flow for resonant bkg sample in region 0
-            else:
-                self.filepath += 'base_8_TriggerPSReweight/'
-        else:
-            self.filepath += 'base_7_ID/'
+            # self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260717/data_minbias_allCorrections/zsnap/era{era}/base_7_full'
+            self.filepath = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260728/data_minbias_allCorrections/zsnap/era{era}/base_7_full'
+            # suffix = "base_7_full/"
+            # self.filepath = os.path.join(self.filepath, suffix)
 
         self.weight_multiplier = weight_multiplier
             
@@ -149,14 +117,26 @@ class DatasetCreator:
         # Luminosity and cross-section data
         # self.luminosity = 7.98 * 1e3  # pb-1
         # UPDATE BASED ON ERA
+
+        # # 10%
+        # lumi_by_era = {
+        #     "2022" : 0.83,
+        #     "2022EE" : 1.93,
+        #     "2023" : 2.65,
+        #     "2023BPix" : 1.27
+        # }
+
+        # 100%
         lumi_by_era = {
-            "2022" : 0.83,
-            "2022EE" : 1.93,
-            "2023" : 2.65,
-            "2023BPix" : 1.27
+            "2022" : 7.73,
+            "2022EE" : 26.62,
+            "2023" : 14.54,
+            "2023BPix" : 9.68,
         }
+
         self.luminosity = lumi_by_era[era] * 1e3  # pb-1
-        self.lumi_rescale = 58.9/7.98  # 22+23 lumi rescale wrt processed
+        # self.lumi_rescale = 58.9/7.98  # 22+23 lumi rescale wrt processed
+        self.lumi_rescale = 1 #NOW PROCESSING 100% DATA
         
         print(f"Dataset creator initialized:")
         print(f"  Sample type: {'J/psi' if use_jpsi else 'MinBias'}")
@@ -250,200 +230,215 @@ class DatasetCreator:
         """
         print("Creating datasets from files for all categories...")
         
-        # mass_var.setBins(350)  # Set binning if needed # USELESS, VAR IS NOT SAVED AGAIN
         bin_width = mass_var.getBinning().averageBinWidth()
 
-        # Create datasets for each category (using signal modeling naming convention)
-        datasets = {}
-        minbias_datasets = {}  # Separate storage for MinBias when use_data=True
-        
-        for category_name, category_config in self.categories.items():
-            # Dataset name with category label (like signal modeling)
-            dataset_name = f'data_obs{category_config.label}{"_resonant" if self.use_jpsi else ""}'
-            
-            # Setup dataset arguments using shared mass variable
-            dataset_args = [ROOT.RooArgSet(mass_var)]
-            
-            # Add weight variable if dataset not binned
-            # When use_data=True, MinBias still needs weights for background modeling
-            if not self.use_binned and self.use_reweighting:
-                weight_var_name = f"weight{category_config.label}"
-                weight_var = ROOT.RooRealVar(weight_var_name, weight_var_name, 1)
-                self.workspace.Import(weight_var, ROOT.RooCmdArg())
-                dataset_args.append(ROOT.RooFit.WeightVar(weight_var))
-                
-            # Create main dataset (data if use_data=True, else MinBias)
-            if self.use_binned:
-                datasets[category_name] = ROOT.RooDataHist(dataset_name, dataset_name, *dataset_args)
+        # 1. Map dataset suffixes to target directory paths
+        if self.use_jpsi:
+            if isinstance(self.filepath, dict):
+                # Maps e.g. _phi -> path/to/phi, _omega -> path/to/omega
+                path_mapping = {f"_{bkg}": path for bkg, path in self.filepath.items()}
             else:
-                datasets[category_name] = ROOT.RooDataSet(dataset_name, dataset_name, *dataset_args)
-            
-            # If using data, also create MinBias dataset for background modeling
-            if self.use_data:
-                minbias_name = f'data_obs{category_config.label}_minbias'
-                if self.use_binned:
-                    minbias_datasets[category_name] = ROOT.RooDataHist(minbias_name, minbias_name, *dataset_args)
-                else:
-                    minbias_datasets[category_name] = ROOT.RooDataSet(minbias_name, minbias_name, *dataset_args)
+                path_mapping = {"_resonant": self.filepath}
+        else:
+            path_mapping = {"": self.filepath}
+
+        datasets = {}
+        minbias_datasets = {}
         
-        # Process files
         n_files_data = 0
         n_files_minbias = 0
         category_events = {cat: 0 for cat in self.category_names}
         category_events_minbias = {cat: 0 for cat in self.category_names} if self.use_data else None
+
+        # FIX: event duplication issue in early CMGRDF runs. Now fixed, but disambiguation kept for retrocompatibility.
         seen_mass_values = set()
-        
-        print("DEBUG: Starting to loop over files in directory:", self.filepath)
-        for filename in os.listdir(self.filepath):
-            if not filename.endswith('.root'):
-                continue
-            
-            # skip temporary files
-            if filename.startswith('.'):
-                print(f"  Skipping temporary file: {filename}")
-                continue
 
-            # Determine file type
-            # is_data_file = "DoubleElectronNANO" in filename
-            is_data_file = "ParkingDoubleElectronLowMass" in filename
+        # 2. Loop over the mapped paths
+        for suffix, current_filepath in path_mapping.items():
             
-            # Skip logic:
-            # - If NOT using data: skip data files (only process MinBias)
-            # - If using data: process BOTH data and MinBias files
-            if not self.use_data and is_data_file:
-                continue
+            # Setup datasets for this specific path/suffix
+            for category_name, category_config in self.categories.items():
+                # Dataset name with category label (like signal modeling)
+                dataset_name = f'data_obs{category_config.label}{suffix}'
                 
-            print(f"  Processing: {filename} ({'DATA' if is_data_file else 'MinBias'})")
-            file_path = os.path.join(self.filepath, filename)
-            
-            try:
-                root_file = ROOT.TFile.Open(file_path)
-                if not root_file or root_file.IsZombie():
-                    print(f"    Warning: Cannot open {filename}")
-                    continue
+                # Setup dataset arguments using shared mass variable
+                dataset_args = [ROOT.RooArgSet(mass_var)]
+                
+                # Add weight variable if dataset not binned
+                # When use_data=True, MinBias still needs weights for background modeling
+                if not self.use_binned and self.use_reweighting:
+                    weight_var_name = f"weight{category_config.label}"
+                    if not self.workspace.var(weight_var_name): 
+                        weight_var = ROOT.RooRealVar(weight_var_name, weight_var_name, 1)
+                        self.workspace.Import(weight_var, ROOT.RooCmdArg())
+                    dataset_args.append(ROOT.RooFit.WeightVar(self.workspace.var(weight_var_name)))
                     
-                tree = root_file.Get('Events')
-                if not tree:
-                    print(f"    Warning: No 'Events' tree in {filename}")
-                    root_file.Close()
-                    continue
-    
-                for branch in tree.GetListOfBranches():
-                    print(f"  {branch.GetName()}", flush=True)
-
-                # Process entries
-                file_events = {cat: 0 for cat in self.category_names}
-                # TEMPORARY: only process 100000 evts
-                # for i in range(1e5):
-                mass_branch = "DiElectron_fitted_mass_corrected" if self.corrected else "DiElectron_fitted_mass"
-
-                for i in range(tree.GetEntries()):
-                    tree.GetEntry(i)
-
-                    # Calculate weight
-                    weight = tree.weight * self.lumi_rescale * self.weight_multiplier #NOTE: weight includes lumi [7.98/fb] * xsec * filter eff. for minbias; depending on file, trigger PS is also there.
-                    
-                    # Get category variables for this event
-                    cat_vars = {}
-                    for category_name, category_config in self.categories.items():
-                        for var_name in category_config.cuts.keys():
-                            if not hasattr(tree, var_name):
-                                raise ValueError(f"Variable '{var_name}' not found in tree. Rerun flow and save it.")
-                            if var_name not in cat_vars:
-                                cat_vars[var_name] = getattr(tree, var_name)
-
-                    for j, mass_val in enumerate(getattr(tree, mass_branch)):
-                        # Determine which categories this event belongs to
-                        event_categories = []
-                        for category_name, category_config in self.categories.items():
-                            if self._check_category_conditions(category_config, cat_vars, j):
-                                event_categories.append(category_name)
-                        
-                        # Add to appropriate datasets using shared mass variable
-                        for category_name in event_categories:
-                            mass_key = (is_data_file, mass_val)
-                            if mass_key in seen_mass_values:
-                                continue
-                            seen_mass_values.add(mass_key)
-                            mass_var.setVal(mass_val)
-                            if self.fit_region:
-                                if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
-                                    continue
-                                # If no_res is set, only include events in sideband regions
-                                if self.no_res and self.fit_region.sidebands:
-                                    in_sideband = False
-                                    for sb_min, sb_max in self.fit_region.sidebands:
-                                        if sb_min <= mass_val <= sb_max:
-                                            in_sideband = True
-                                            break
-                                    if not in_sideband:
-                                        continue  # Skip events not in sidebands
-                            
-                            # Determine which dataset to fill based on file type
-                            if self.use_data:
-                                if is_data_file:
-                                    # Real data goes to main dataset (no weights for data)
-                                    datasets[category_name].add(ROOT.RooArgSet(mass_var))
-                                else:
-                                    # MinBias goes to separate dataset for background modeling (with weights)
-                                    args = [weight] if self.use_reweighting else []
-                                    minbias_datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
-                            else:
-                                # When not using data, only MinBias is loaded -> goes to main dataset
-                                args = [weight] if self.use_reweighting else []
-                                datasets[category_name].add(ROOT.RooArgSet(mass_var), *args)
-                            
-                            file_events[category_name] += 1
-                        
-                for cat in self.category_names:
-                    category_events[cat] += file_events[cat]
-                    if self.use_data and not is_data_file:
-                        category_events_minbias[cat] += file_events[cat]
-                    
-                if is_data_file:
-                    n_files_data += 1
+                ds_key = f"{category_name}{suffix}"
+                
+                # Create main dataset (data if use_data=True, else MinBias)
+                if self.use_binned:
+                    datasets[ds_key] = ROOT.RooDataHist(dataset_name, dataset_name, *dataset_args)
                 else:
-                    n_files_minbias += 1
-                    
-                print(f"    Added events: {', '.join([f'{cat}={file_events[cat]}' for cat in self.category_names])}")
+                    datasets[ds_key] = ROOT.RooDataSet(dataset_name, dataset_name, *dataset_args)
+                
+                # If using data, also create MinBias dataset for background modeling
                 if self.use_data:
-                    if is_data_file:
-                        print(f"    Total DATA entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
-                        print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
+                    minbias_name = f'data_obs{category_config.label}_minbias{suffix}'
+                    if self.use_binned:
+                        minbias_datasets[ds_key] = ROOT.RooDataHist(minbias_name, minbias_name, *dataset_args)
                     else:
-                        print(f"    Total MinBias entries: {', '.join([f'{cat}={minbias_datasets[cat].numEntries()}' for cat in self.category_names])}")
-                        print(f"      sum of entries: {', '.join([f'{cat}={minbias_datasets[cat].sumEntries()}' for cat in self.category_names])}")
-                else:
-                    print(f"    Total dataset entries: {', '.join([f'{cat}={datasets[cat].numEntries()}' for cat in self.category_names])}")
-                    print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat].sumEntries()}' for cat in self.category_names])}")
+                        minbias_datasets[ds_key] = ROOT.RooDataSet(minbias_name, minbias_name, *dataset_args)
 
+            print(f"DEBUG: Starting to loop over files in directory: {current_filepath}")
+            for filename in os.listdir(current_filepath):
+                if not filename.endswith('.root'):
+                    continue
+                
+                # skip temporary files
+                if filename.startswith('.'):
+                    print(f"  Skipping temporary file: {filename}")
+                    continue
 
-                root_file.Close()
+                # Determine file type
+                is_data_file = "ParkingDoubleElectronLowMass" in filename
                 
-            except Exception as e:
-                print(f"    Error processing {filename}: {e}")
-                continue
+                # Skip logic:
+                # - If NOT using data: skip data files (only process MinBias)
+                # - If using data: process BOTH data and MinBias files
+                if not self.use_data and is_data_file:
+                    continue
+                    
+                print(f"  Processing: {filename} ({'DATA' if is_data_file else 'MinBias'})")
+                file_path = os.path.join(current_filepath, filename)
                 
+                try:
+                    root_file = ROOT.TFile.Open(file_path)
+                    if not root_file or root_file.IsZombie():
+                        print(f"    Warning: Cannot open {filename}")
+                        continue
+                        
+                    tree = root_file.Get('Events')
+                    if not tree:
+                        print(f"    Warning: No 'Events' tree in {filename}")
+                        root_file.Close()
+                        continue
+        
+                    for branch in tree.GetListOfBranches():
+                        print(f"  {branch.GetName()}", flush=True)
+
+                    # Process entries
+                    file_events = {cat: 0 for cat in self.category_names}
+                    mass_branch = "DiElectron_fitted_mass_corrected" if self.corrected else "DiElectron_fitted_mass"
+
+                    for i in range(tree.GetEntries()):
+                        tree.GetEntry(i)
+
+                        # Calculate weight
+                        weight = tree.weight * self.lumi_rescale * self.weight_multiplier
+                        # weight = 1
+                        
+                        # Get category variables for this event
+                        cat_vars = {}
+                        for category_name, category_config in self.categories.items():
+                            for var_name in category_config.cuts.keys():
+                                if not hasattr(tree, var_name):
+                                    raise ValueError(f"Variable '{var_name}' not found in tree. Rerun flow and save it.")
+                                if var_name not in cat_vars:
+                                    cat_vars[var_name] = getattr(tree, var_name)
+
+                        for j, mass_val in enumerate(getattr(tree, mass_branch)):
+                            # Determine which categories this event belongs to
+                            event_categories = []
+                            for category_name, category_config in self.categories.items():
+                                if self._check_category_conditions(category_config, cat_vars, j):
+                                    event_categories.append(category_name)
+                            
+                            # Add to appropriate datasets using shared mass variable
+                            for category_name in event_categories:
+                                mass_key = (is_data_file, mass_val)
+                                if mass_key in seen_mass_values:
+                                    continue
+                                seen_mass_values.add(mass_key)
+                                mass_var.setVal(mass_val)
+                                if self.fit_region:
+                                    if mass_val < self.fit_region.range[0] or mass_val > self.fit_region.range[1]:
+                                        continue
+                                    # If no_res is set, only include events in sideband regions
+                                    if self.no_res and self.fit_region.sidebands:
+                                        in_sideband = False
+                                        for sb_min, sb_max in self.fit_region.sidebands:
+                                            if sb_min <= mass_val <= sb_max:
+                                                in_sideband = True
+                                                break
+                                        if not in_sideband:
+                                            continue  # Skip events not in sidebands
+                                
+                                ds_key = f"{category_name}{suffix}"
+                                
+                                # Determine which dataset to fill based on file type
+                                if self.use_data:
+                                    if is_data_file:
+                                        # Real data goes to main dataset (no weights for data)
+                                        datasets[ds_key].add(ROOT.RooArgSet(mass_var))
+                                    else:
+                                        # MinBias goes to separate dataset for background modeling (with weights)
+                                        args = [weight] if self.use_reweighting else []
+                                        minbias_datasets[ds_key].add(ROOT.RooArgSet(mass_var), *args)
+                                else:
+                                    # When not using data, only MinBias is loaded -> goes to main dataset
+                                    args = [weight] if self.use_reweighting else []
+                                    datasets[ds_key].add(ROOT.RooArgSet(mass_var), *args)
+                                
+                                file_events[category_name] += 1
+                            
+                    for cat in self.category_names:
+                        category_events[cat] += file_events[cat]
+                        if self.use_data and not is_data_file:
+                            category_events_minbias[cat] += file_events[cat]
+                        
+                    if is_data_file:
+                        n_files_data += 1
+                    else:
+                        n_files_minbias += 1
+                        
+                    print(f"    Added events: {', '.join([f'{cat}={file_events[cat]}' for cat in self.category_names])}")
+                    if self.use_data:
+                        if is_data_file:
+                            print(f"    Total DATA entries: {', '.join([f'{cat}={datasets[cat + suffix].numEntries()}' for cat in self.category_names])}")
+                            print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat + suffix].sumEntries()}' for cat in self.category_names])}")
+                        else:
+                            print(f"    Total MinBias entries: {', '.join([f'{cat}={minbias_datasets[cat + suffix].numEntries()}' for cat in self.category_names])}")
+                            print(f"      sum of entries: {', '.join([f'{cat}={minbias_datasets[cat + suffix].sumEntries()}' for cat in self.category_names])}")
+                    else:
+                        print(f"    Total dataset entries: {', '.join([f'{cat}={datasets[cat + suffix].numEntries()}' for cat in self.category_names])}")
+                        print(f"      sum of entries: {', '.join([f'{cat}={datasets[cat + suffix].sumEntries()}' for cat in self.category_names])}")
+
+                    root_file.Close()
+                    
+                except Exception as e:
+                    print(f"    Error processing {filename}: {e}")
+                    continue
+                    
         print(f"Dataset creation complete:")
         if self.use_data:
             print(f"  Data files processed: {n_files_data}")
             print(f"  MinBias files processed: {n_files_minbias}")
             print(f"\n  DATA (for combine):")
-            for category_name in self.category_names:
-                print(f"    {category_name}: {datasets[category_name].numEntries()} entries")
+            for ds_key, ds in datasets.items():
+                print(f"    {ds_key}: {ds.numEntries()} entries")
             print(f"\n  MinBias (for background modeling):")
-            for category_name in self.category_names:
-                print(f"    {category_name}: {category_events_minbias[category_name]} events, {minbias_datasets[category_name].numEntries()} dataset entries")
+            for ds_key, ds in minbias_datasets.items():
+                print(f"    {ds_key}: {ds.numEntries()} dataset entries")
         else:
             print(f"  MinBias files processed: {n_files_minbias}")
-            for category_name in self.category_names:
-                print(f"  {category_name}: {category_events[category_name]} events, {datasets[category_name].numEntries()} dataset entries")
+            for ds_key, ds in datasets.items():
+                print(f"  {ds_key}: {ds.numEntries()} dataset entries")
         
         # Import MinBias datasets to workspace when using data
         if self.use_data:
-            for category_name, category_config in self.categories.items():
-                self.workspace.Import(minbias_datasets[category_name], ROOT.RooCmdArg())
-                print(f"  Imported {minbias_datasets[category_name].GetName()} to workspace for background modeling")
+            for ds_key, ds in minbias_datasets.items():
+                self.workspace.Import(ds, ROOT.RooCmdArg())
+                print(f"  Imported {ds.GetName()} to workspace for background modeling")
         
         return datasets
         
@@ -724,52 +719,69 @@ class DatasetCreator:
             datasets = {}
             # Import cached datasets to workspace
             for category_name, category_config in self.categories.items():
-                dataset_name = f'data_obs{category_config.label}{"_resonant" if self.use_jpsi else ""}'
-                if dataset_name in self.cached_datasets:
-                    datasets[category_name] = self.cached_datasets[dataset_name]
-                    self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
-                    print(f"  Using cached {dataset_name}: {datasets[category_name].numEntries()} entries")
-                else:
-                    print(f"  Warning: Cached dataset {dataset_name} not found")
                 
-                # If using data, also load MinBias dataset for background modeling
-                if self.use_data:
-                    minbias_name = f'data_obs{category_config.label}_minbias{"_resonant" if self.use_jpsi else ""}'
-                    if minbias_name in self.cached_datasets:
-                        minbias_dataset = self.cached_datasets[minbias_name]
-                        self.workspace.Import(minbias_dataset, ROOT.RooCmdArg())
-                        print(f"  Using cached {minbias_name}: {minbias_dataset.numEntries()} entries")
+                # Determine expected suffixes dynamically based on config
+                suffixes = [""]
+                if self.use_jpsi:
+                    # In __init__, self.filepath was assigned from fit_region.background_resonant_data
+                    if isinstance(self.filepath, dict):
+                        suffixes = [f"_{bkg}" for bkg in self.filepath.keys()]
                     else:
-                        print(f"  Warning: Cached MinBias dataset {minbias_name} not found")
+                        suffixes = ["_resonant"]
+                        
+                for suffix in suffixes:
+                    dataset_name = f'data_obs{category_config.label}{suffix}'
+                    ds_key = f"{category_name}{suffix}"
+                    
+                    if dataset_name in self.cached_datasets:
+                        datasets[ds_key] = self.cached_datasets[dataset_name]
+                        # Use safer getattr import to prevent PyROOT GC crashes
+                        getattr(self.workspace, 'import')(datasets[ds_key], ROOT.RooCmdArg())
+                        print(f"  Using cached {dataset_name}: {datasets[ds_key].numEntries()} entries")
+                    else:
+                        print(f"  Warning: Cached dataset {dataset_name} not found")
+                    
+                    # If using data, also load MinBias dataset for background modeling
+                    if self.use_data:
+                        minbias_name = f'data_obs{category_config.label}_minbias{suffix}'
+                        if minbias_name in self.cached_datasets:
+                            minbias_dataset = self.cached_datasets[minbias_name]
+                            getattr(self.workspace, 'import')(minbias_dataset, ROOT.RooCmdArg())
+                            print(f"  Using cached {minbias_name}: {minbias_dataset.numEntries()} entries")
+                        else:
+                            print(f"  Warning: Cached MinBias dataset {minbias_name} not found")
+                            
+            # Anchor to self to prevent garbage collection from stripping them from the workspace
+            self._keepalive_datasets = datasets
         else:
             # Create datasets from files
             datasets = self.create_dataset_from_files(mass_var)
             
             print("DEBUG: datasets created. Applying cuts to mass", flush=True)
-            
+
             # Apply mass cuts and import datasets to single workspace
-            for category_name, category_config in self.categories.items():
-                # Apply mass cuts
-                if self.fit_region:
-                    datasets[category_name] = datasets[category_name].reduce(ROOT.RooFit.Cut(f"mass > {self.fit_region.range[0]} && mass < {self.fit_region.range[1]}"))
-                
-                # Import dataset to single workspace (datasets already have correct names with category labels)
-                self.workspace.Import(datasets[category_name], ROOT.RooCmdArg())
-        
+            for ds_key, dataset in datasets.items():
+                print("DEBUG: importing dataset", ds_key, "with", dataset.numEntries(), "entries", flush=True)
+                self.workspace.Import(datasets[ds_key], ROOT.RooCmdArg())
+            
         # Import resonant background templates
         imported_models = self.import_resonant_background_templates()
 
-        # Interpolate efficiencies and cross-sections
-        if any(imported_models.values()) and not self.use_jpsi:
-            print(f"DEBUG: datasets = {datasets}", flush=True)
-            print(f"DEBUG: inclusive dataset = {datasets.get('inclusive', None)}", flush=True)
-            self.interpolate_efficiencies_xsecs(imported_models, datasets)
-            
-        # Add resonant background normalizations
-        self.add_resonant_normalizations(datasets)
+        # ---------------------------------------------------------
+        # Only compute normalizations/fractions for the main dataset
+        # ---------------------------------------------------------
+        if not self.use_jpsi:
+            # Interpolate efficiencies and cross-sections
+            if any(imported_models.values()):
+                print(f"DEBUG: datasets = {datasets}", flush=True)
+                print(f"DEBUG: inclusive dataset = {datasets.get('inclusive', None)}", flush=True)
+                self.interpolate_efficiencies_xsecs(imported_models, datasets)
+                
+            # Add resonant background normalizations
+            self.add_resonant_normalizations(datasets)
 
-        # Add data normalization
-        self.add_data_normalization(datasets)
+            # Add data normalization
+            self.add_data_normalization(datasets)
         
         # Save workspace
         output_file = None
@@ -792,11 +804,11 @@ class DatasetCreator:
             print(f"Output file: {output_file}")
         else:
             print("Objects added to shared workspace")
-        for category_name in self.category_names:
-            n_entries = datasets[category_name].numEntries()
-            n_models = len(imported_models.get(category_name, []))
-            mass_range = f"[{imported_models[category_name][0]}, {imported_models[category_name][-1]}]" if imported_models.get(category_name) else "[]"
-            print(f"  {category_name}: {n_entries} entries, {n_models} models {mass_range} GeV")
+            
+        # Iterate over ds_keys dynamically to avoid KeyErrors
+        for ds_key, dataset in datasets.items():
+            n_entries = dataset.numEntries()
+            print(f"  {ds_key}: {n_entries} entries")
         print("="*60)
         
         return str(output_file) if output_file else "shared_workspace"

@@ -7,7 +7,7 @@ parser.add_argument("-i", "--input", type=str, default="higgsCombineScan_2D_Trig
 parser.add_argument("-o", "--output", type=str, default="scan_2d.pdf", help="Output filename")
 parser.add_argument("--pois", 
                     nargs="+",
-                    default=["r", "triggerSF_syst"],                    
+                    default=["r", "triggerSF_syst"],
                     help="Names of the parameters of interest (POIs)")
 parser.add_argument("--bins", 
                     type=int, 

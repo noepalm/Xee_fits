@@ -67,9 +67,15 @@ class BackgroundPlotter:
             ROOT.RooFit.MarkerSize(1),
             ROOT.RooFit.MarkerColor(ROOT.kBlack),
             ROOT.RooFit.LineColor(ROOT.kBlack),
-            ROOT.RooFit.DrawOption("HIST"),
+            # ROOT.RooFit.DrawOption("HIST"),
         ]
-        
+
+        # Make data invisible for blinded mode, otherwise draw normally
+        if self.config.blinded:
+            draw_args.append(ROOT.RooFit.Invisible())
+        else:
+            draw_args.append(ROOT.RooFit.DrawOption("HIST"))
+            
         if not self.config.use_binned:
             draw_args.append(ROOT.RooFit.Binning(100))
 
@@ -111,7 +117,8 @@ class BackgroundPlotter:
         legend.SetFillColor(0)
         legend.SetFillStyle(0)
         legend.SetTextSize(0.04)
-        legend.AddEntry(frame.findObject("data_obs"), "Data", "p")
+        if not self.config.blinded:
+            legend.AddEntry(frame.findObject("data_obs"), "Data", "p")
         for func in plotted_functions:
             label = func if func != "full_bkg_model" else f"#splitline{{Full Background Model}}{{(#chi^2 = {chi2_values['full_bkg_model']:.2f})}}"
             legend.AddEntry(frame.findObject(func), label, "l")
@@ -505,71 +512,14 @@ class BackgroundPlotter:
             return []
             
         print("Creating prompt J/psi resonant background fit plots...")
-        
-        # Check if prompt data and models are available
-        if not hasattr(self.fitter, 'resonant_data') or not self.fitter.resonant_data:
-            print("  Warning: No prompt data available for plotting")
-            return []
-            
-        if not hasattr(self.fitter, 'resonant_combined_model') or not self.fitter.resonant_combined_model:
-            print("  Warning: No prompt combined model available for plotting")
-            return []
-            
         created_plots = []
         
-        # Create canvas
-        canvas_prompt = ROOT.TCanvas("canvas_prompt", "canvas_prompt", 800, 600)
-        canvas_prompt.SetGrid()
+        region = self.config.chosen_fit_region
+        res_data_config = region.background_resonant_data
+        output_dir = self.config.output_dir
+        tag_suffix = f"_{tag}" if tag else ""
         
-        # Get mass variable range for unblinded region
-        xmin, xmax = self.config.chosen_fit_region.range
-        # xmin, xmax = self.fitter.mass_var.getRange("unblinded")
-        # xmin = 2
-        # xmax = 4.2
-        frame_resonant = self.fitter.mass_var.frame(xmin, xmax)
-        print(f"DEBUG: Plotting resonant data in range [{xmin}, {xmax}]", flush=True)
-        frame_resonant.SetTitle("")
-        
-        # Plot prompt data
-        # print("DEBUG: resonant data = ", self.fitter.resonant_data, "; entries = ", self.fitter.resonant_data.sumEntries(), flush=True)
-        # for i in range(100):
-        #     self.fitter.resonant_data.get(i)
-        #     print(f"  bin {i}: {self.fitter.resonant_data.weight()}", flush=True)
-        self.fitter.resonant_data.plotOn(frame_resonant,
-                    ROOT.RooFit.Name("resonant_data"),
-                    ROOT.RooFit.Binning(100),
-                    ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
-                            
-        # Plot combined model
-        print("DEBUG: resonant combined model = ", self.fitter.resonant_combined_model, flush=True)
-        self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                    ROOT.RooFit.LineColor(ROOT.kBlack), 
-                    ROOT.RooFit.Name("resonant_combined_model"))
-                    # ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
-        
-        # Plot components
-        # print("DEBUG: plotting J/psi and psi2S models", flush=True)
-        print("DEBUG: self.fitter.resonant_backgrounds = ", self.fitter.resonant_backgrounds, flush=True)
-        # jpsi_model = self.fitter.resonant_backgrounds.get("jpsi")
-        # psi2s_model = self.fitter.resonant_backgrounds.get("psi2s")
-
-        # if jpsi_model:
-        #     self.fitter.resonant_combined_model.plotOn(frame_resonant,
-        #                 ROOT.RooFit.Components(jpsi_model.GetName()),
-        #                 ROOT.RooFit.LineColor(ROOT.kRed),
-        #                 ROOT.RooFit.Name("jpsi_model"),
-        #                 ROOT.RooFit.NormRange("unblinded"))
-        
-        # if psi2s_model:
-        #     self.fitter.resonant_combined_model.plotOn(frame_resonant,
-        #                 ROOT.RooFit.Components(psi2s_model.GetName()),
-        #                 ROOT.RooFit.LineColor(ROOT.kBlue),
-        #                 ROOT.RooFit.Name("psi2s_model"),
-        #                 ROOT.RooFit.NormRange("unblinded"))
-
-        print(f"DEBUG: plotting components: {self.config.chosen_fit_region.backgrounds}", flush=True)
-        
-        # colors = [ROOT.kRed, ROOT.kBlue, ROOT.kGreen, ROOT.kOrange]
+        # Define the custom colors once at the top
         colors = [
             ROOT.TColor.GetColor("#5790fc"),
             ROOT.TColor.GetColor("#f89c20"),
@@ -578,73 +528,153 @@ class BackgroundPlotter:
             ROOT.TColor.GetColor("#9c9ca1"),
             ROOT.TColor.GetColor("#7a21dd")
         ]
-
-        for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
-            print(f"DEBUG: resonant model = {model.GetName()}", flush=True)
+        
+        # ---------------------------------------------------------
+        # DICT LOGIC: Plot individual fits for separate resonances
+        # ---------------------------------------------------------
+        if isinstance(res_data_config, dict):
+            # Get the keys as a list to maintain consistent color indexing
+            all_res_keys = list(self.fitter.resonant_backgrounds.keys())
+            
+            for model_name in res_data_config.keys():
+                dataset_name = f"data_obs{self.category.label}_{model_name}"
+                resonant_data = self.fitter.workspace.data(dataset_name)
+                model = self.fitter.resonant_backgrounds.get(model_name)
+                
+                if not resonant_data or not model:
+                    print(f"  Warning: Data or model missing for {model_name}. Skipping plot.")
+                    continue
+                    
+                canvas_prompt = ROOT.TCanvas(f"canvas_prompt_{model_name}", f"canvas_prompt_{model_name}", 800, 600)
+                canvas_prompt.SetGrid()
+                
+                xmin, xmax = region.range
+                frame_resonant = self.fitter.mass_var.frame(xmin, xmax)
+                frame_resonant.SetTitle("")
+                
+                resonant_data.plotOn(frame_resonant,
+                            ROOT.RooFit.Name("resonant_data"),
+                            ROOT.RooFit.Binning(100),
+                            ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
+                
+                # Fetch the correct color index for this model
+                color_idx = all_res_keys.index(model_name) if model_name in all_res_keys else 0
+                
+                model.plotOn(frame_resonant,
+                            ROOT.RooFit.LineColor(colors[color_idx % len(colors)]), 
+                            ROOT.RooFit.Name("resonant_model"))
+                
+                frame_resonant.Draw()
+                frame_resonant.GetXaxis().SetTitle("m(ee) [GeV]")
+                
+                npar = model.getParameters(resonant_data).selectByAttrib("Constant", False).getSize()
+                chi2_val = frame_resonant.chiSquare("resonant_model", "resonant_data", int(npar))
+                
+                self.fitter.log_print(f"{model_name} chi2 = {chi2_val} (n. free params = {npar})")
+                
+                legend_prompt = ROOT.TLegend(0.2, 0.15, 0.9, 0.45)
+                legend_prompt.SetBorderSize(0)
+                legend_prompt.SetFillColor(0)
+                legend_prompt.SetFillStyle(0)
+                legend_prompt.SetTextSize(0.04)
+                legend_prompt.AddEntry(frame_resonant.findObject("resonant_data"), f"Data for {model.GetTitle()} bkg", "p")
+                legend_prompt.AddEntry(frame_resonant.findObject("resonant_model"), 
+                                     f"#splitline{{{model.GetTitle()} model}}{{#chi^{{2}} = {chi2_val:.2f}}}", "l")
+                legend_prompt.Draw()
+                
+                base_filename = f"dataset_prompt_{model_name}{tag_suffix}_{fit_region}{self.fitter.category.label}"
+                
+                # Linear scale
+                for ext in ["png", "pdf"]:
+                    plot_path = output_dir / self.category.name / f"{base_filename}.{ext}"
+                    plot_path.parent.mkdir(parents=True, exist_ok=True)
+                    canvas_prompt.SaveAs(str(plot_path))
+                    created_plots.append(str(plot_path))
+                    
+                # Log scale
+                frame_resonant.SetMinimum(1)
+                canvas_prompt.SetLogy()
+                for ext in ["png", "pdf"]:
+                    plot_path = output_dir / self.category.name / f"{base_filename}_log.{ext}"
+                    canvas_prompt.SaveAs(str(plot_path))
+                    created_plots.append(str(plot_path))
+                    
+                canvas_prompt.Close()
+                
+        # ---------------------------------------------------------
+        # STRING LOGIC: Plot combined fit for overlapping resonances
+        # ---------------------------------------------------------
+        else:
+            if not hasattr(self.fitter, 'resonant_data') or not self.fitter.resonant_data:
+                print("  Warning: No prompt data available for plotting")
+                return []
+                
+            if not hasattr(self.fitter, 'resonant_combined_model') or not self.fitter.resonant_combined_model:
+                print("  Warning: No prompt combined model available for plotting")
+                return []
+                
+            canvas_prompt = ROOT.TCanvas("canvas_prompt", "canvas_prompt", 800, 600)
+            canvas_prompt.SetGrid()
+            
+            xmin, xmax = region.range
+            frame_resonant = self.fitter.mass_var.frame(xmin, xmax)
+            frame_resonant.SetTitle("")
+            
+            self.fitter.resonant_data.plotOn(frame_resonant,
+                        ROOT.RooFit.Name("resonant_data"),
+                        ROOT.RooFit.Binning(100),
+                        ROOT.RooFit.DataError(ROOT.RooAbsData.SumW2))
+                                
             self.fitter.resonant_combined_model.plotOn(frame_resonant,
-                        ROOT.RooFit.Components(model.GetName()),
-                        ROOT.RooFit.LineColor(colors[idx]),
-                        ROOT.RooFit.Name(model_name))
-                        # ROOT.RooFit.NormRange(self.config.chosen_fit_region.name))
-        
-        # Draw frame
-        frame_resonant.Draw()
-        frame_resonant.GetXaxis().SetTitle("m(ee) [GeV]")
-        
-        # Compute chi2
-        npar = self.fitter.resonant_combined_model.getParameters(self.fitter.resonant_data).selectByAttrib("Constant", False).getSize()
-        chi2_val = frame_resonant.chiSquare("resonant_combined_model", "resonant_data", int(npar))
-        
-        self.fitter.log_print(f"chi2 = {chi2_val} (n. free params = {npar})")
-        
-        # Create legend
-        legend_prompt = ROOT.TLegend(0.2, 0.15, 0.9, 0.45)
-        legend_prompt.SetBorderSize(0)
-        legend_prompt.SetFillColor(0)
-        legend_prompt.SetFillStyle(0)
-        legend_prompt.SetTextSize(0.04)
-        legend_prompt.AddEntry(frame_resonant.findObject("resonant_data"), "Data for resonant bkg", "p")
-        legend_prompt.AddEntry(frame_resonant.findObject("resonant_combined_model"), 
-                             f"#splitline{{Combined resonant model}}{{chi2 = {chi2_val:.2f}}}", "l")
+                        ROOT.RooFit.LineColor(ROOT.kBlack), 
+                        ROOT.RooFit.Name("resonant_combined_model"))
+            
+            for idx, (model_name, model) in enumerate(self.fitter.resonant_backgrounds.items()):
+                self.fitter.resonant_combined_model.plotOn(frame_resonant,
+                            ROOT.RooFit.Components(model.GetName()),
+                            ROOT.RooFit.LineColor(colors[idx]),
+                            ROOT.RooFit.Name(model_name))
+            
+            frame_resonant.Draw()
+            frame_resonant.GetXaxis().SetTitle("m(ee) [GeV]")
+            
+            npar = self.fitter.resonant_combined_model.getParameters(self.fitter.resonant_data).selectByAttrib("Constant", False).getSize()
+            chi2_val = frame_resonant.chiSquare("resonant_combined_model", "resonant_data", int(npar))
+            
+            self.fitter.log_print(f"chi2 = {chi2_val} (n. free params = {npar})")
+            
+            legend_prompt = ROOT.TLegend(0.2, 0.15, 0.9, 0.45)
+            legend_prompt.SetBorderSize(0)
+            legend_prompt.SetFillColor(0)
+            legend_prompt.SetFillStyle(0)
+            legend_prompt.SetTextSize(0.04)
+            legend_prompt.AddEntry(frame_resonant.findObject("resonant_data"), "Data for resonant bkg", "p")
+            legend_prompt.AddEntry(frame_resonant.findObject("resonant_combined_model"), 
+                                 f"#splitline{{Combined resonant model}}{{chi2 = {chi2_val:.2f}}}", "l")
 
-        for model_name, model in self.fitter.resonant_backgrounds.items():
-            legend_prompt.AddEntry(frame_resonant.findObject(model_name), f"{model.GetTitle()} model", "l")
-        # if jpsi_model:
-        #     legend_prompt.AddEntry(frame_resonant.findObject("jpsi_model"), "J/psi model", "l")
-        # if psi2s_model:
-        #     legend_prompt.AddEntry(frame_resonant.findObject("psi2s_model"), "psi(2S) model", "l")
-        legend_prompt.Draw()
-        
-        # Save plots
-        output_dir = self.config.output_dir
-        tag_suffix = f"_{tag}" if tag else ""
-        
-        # Linear scale
-        plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}.png"
-        # Ensure parent directories exist (supports nested paths)
-        plot_path.parent.mkdir(parents=True, exist_ok=True)
-        canvas_prompt.SaveAs(str(plot_path))
-        created_plots.append(str(plot_path))
-        
-        plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}.pdf"
-        plot_path.parent.mkdir(parents=True, exist_ok=True)
-        canvas_prompt.SaveAs(str(plot_path))
-        created_plots.append(str(plot_path))
-        
-        # Log scale
-        frame_resonant.SetMinimum(1)
-        canvas_prompt.SetLogy()
-        
-        plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}_log.png"
-        plot_path.parent.mkdir(parents=True, exist_ok=True)
-        canvas_prompt.SaveAs(str(plot_path))
-        created_plots.append(str(plot_path))
-        
-        plot_path = output_dir / self.category.name / f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}_log.pdf"
-        plot_path.parent.mkdir(parents=True, exist_ok=True)
-        canvas_prompt.SaveAs(str(plot_path))
-        created_plots.append(str(plot_path))
-        
+            for model_name, model in self.fitter.resonant_backgrounds.items():
+                legend_prompt.AddEntry(frame_resonant.findObject(model_name), f"{model.GetTitle()} model", "l")
+            legend_prompt.Draw()
+            
+            base_filename = f"dataset_prompt{tag_suffix}_{fit_region}{self.fitter.category.label}"
+            
+            # Linear scale
+            for ext in ["png", "pdf"]:
+                plot_path = output_dir / self.category.name / f"{base_filename}.{ext}"
+                plot_path.parent.mkdir(parents=True, exist_ok=True)
+                canvas_prompt.SaveAs(str(plot_path))
+                created_plots.append(str(plot_path))
+                
+            # Log scale
+            frame_resonant.SetMinimum(1)
+            canvas_prompt.SetLogy()
+            for ext in ["png", "pdf"]:
+                plot_path = output_dir / self.category.name / f"{base_filename}_log.{ext}"
+                canvas_prompt.SaveAs(str(plot_path))
+                created_plots.append(str(plot_path))
+                
+            canvas_prompt.Close()
+            
         print(f"  Created {len(created_plots)} resonant fit plots")
         return created_plots
         

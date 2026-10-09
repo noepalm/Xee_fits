@@ -1460,9 +1460,11 @@ class SignalModelAnalyzer:
                 for variation in variations:
                     # Keep historical mean/electronScaleVariation naming for backward compatibility.
                     if var == "mean" and "electronScaleVariation" in variation:
-                        nuisance = f"{var}{category.label}_nuisance_{variation}"
+                        # nuisance = f"{var}{category.label}_nuisance_{variation}"
+                        nuisance = f"CMS_scale_e"
                     else:
-                        nuisance = f"{var}{category.label}_nuisance_{variation}_{self.era}"
+                        # nuisance = f"{var}{category.label}_nuisance_{variation}_{self.era}"
+                        nuisance = f"CMS_EXO25020_signalModel{var.capitalize()}Nuisance_{self.era}"
                     self.param_manager.create_variable(nuisance, [0, -5, 5])
 
                     par0_diff = f"{var}{category.label}_fit_par0_{variation}_avgdiff_{self.era}"
@@ -1476,7 +1478,9 @@ class SignalModelAnalyzer:
 
                 # Add one statistical-band nuisance term using nominal linear-fit uncertainties.
                 if use_stat_nuisance:
-                    nuisance_stat = f"{var}{category.label}_nuisance_stat_{self.era}"
+                    # nuisance_stat = f"{var}{category.label}_nuisance_stat_{self.era}"
+                    nuisance_stat = f"CMS_EXO25020_signalModel{var.capitalize()}Nuisance_{self.era}"
+
                     self.param_manager.create_variable(nuisance_stat, [0, -5, 5])
 
                     par0_err = f"{var}{category.label}_fit_par0_err_{self.era}"

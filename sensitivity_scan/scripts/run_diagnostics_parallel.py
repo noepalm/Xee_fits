@@ -60,10 +60,32 @@ def get_mass_range(region):
     # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
-        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        # "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 7.0, "max_limit": 6.5},
+        "region1": {"min": 2.0, "min_limit": 2.2, "max": 7.0, "max_limit": 6.5},
+        # "region2": {"min": 6.0, "min_limit": 5.5, "max": 15.0, "max_limit": 14.5}, 
+        "region2": {"min": 6.0, "min_limit": 5.5, "max": 12.0, "max_limit": 11.0},
     }
     return ranges.get(region, {})
+
+# def get_mass_rmin_rmax(mass):
+#     if mass < 1.5:
+#         return (-50, 10)
+#     else:
+#         return (-10, 10)
+
+# def get_mass_rmin_rmax(mass):
+#     if mass < 1.5:
+#         return (-50, 50)
+#     else:
+#         return (-30, 30)
+
+def get_mass_rmin_rmax(mass):
+    if mass < 1.5:
+        return (-50, 50)
+    else:
+        return (-30, 30)
 
 
 def format_duration(seconds):
@@ -72,10 +94,8 @@ def format_duration(seconds):
     minutes, secs = divmod(rem, 60)
     return f"{hours}:{minutes:02d}:{secs:02d}"
 
-
-LOG_MAX_BYTES = 500 * 1024
+LOG_MAX_BYTES = 1000 * 1024
 LOG_HEAD_LINES = 10
-
 
 def write_log_with_head_tail(path, text, max_bytes=LOG_MAX_BYTES, head_lines=LOG_HEAD_LINES):
     """Write log text, keeping full file when small and head+tail when large."""
@@ -250,33 +270,119 @@ def run_fitdiag_draw_job(job):
             job_log_sections.append(f"SKIP: workspace exists, not running text2workspace: {root_path}\n")
 
         fitdiag_log = os.path.join(workdir, f"fitDiagnostics_{cat_name}{fit_tag_label}_{era}.log")
+
+        # sigma_mass = 0.025
+        # if mass > 2.0:
+        #     sigma_mass = 0.07
+        # if mass > 7.1:
+        #     sigma_mass = 0.1    
+        # min_mass_fix, max_mass_fix = mass - sigma_mass*3, mass + sigma_mass*2
+
+        eras = ["2022", "2022EE", "2023", "2023BPix"]
+
+        # #### FOR SLIDING WINDOW
+        # # 1. Parameter ranges [0, 10] separated by colons
+        # param_ranges = ":".join(
+        #     [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+        #     + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+        # )
+
+        # # 2. Initial values (low orders = 0.001, higher orders = 0)
+        # set_params = ",".join(
+        #     [f"t{i}_{era}_envelope=0.001" for i in range(2) for era in eras]
+        #     + [f"t{i}_{era}_envelope=0" for i in range(2, 15) for era in eras]
+        #     + [f"a{i}_{era}_envelope=0.001" for i in range(3) for era in eras]
+        #     + [f"a{i}_{era}_envelope=0" for i in range(3, 15) for era in eras]
+        #     # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+        # )
+
+        # # 3. Freeze higher orders
+        # freeze_params = ",".join(
+        #     [f"t{i}_{era}_envelope" for i in range(2, 15) for era in eras]
+        #     + [f"a{i}_{era}_envelope" for i in range(3, 15) for era in eras]
+        #     # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+        # )
+
+        # 1. Parameter ranges [0, 10] separated by colons
+        param_ranges = ":".join(
+            [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+            + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+        )
+
+        # 2. Initial values (low orders = 0.001, higher orders = 0)
+        set_params = ",".join(
+            # [f"t{i}_{era}_envelope=0.001" for i in range(5) for era in eras]
+            [f"t{i}_{era}_envelope=0" for i in range(4, 15) for era in eras]
+            # + [f"a{i}_{era}_envelope=0.001" for i in range(7) for era in eras]
+            + [f"a{i}_{era}_envelope=0" for i in range(6, 15) for era in eras]
+            + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=0" for era in eras]
+        )
+
+        # 3. Freeze higher orders
+        freeze_params = ",".join(
+            [f"t{i}_{era}_envelope" for i in range(4, 15) for era in eras]
+            + [f"a{i}_{era}_envelope" for i in range(6, 15) for era in eras]
+            + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+        )
+
         fitdiag_cmd = [
             "combine",
             "-M", "FitDiagnostics",
             root_file,
             "--saveNormalizations",
             "--saveShapes",
-            "--setParameterRanges", f"mass={min_mass},{max_mass}",
-            "--keepFailures",
+            # "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            # "--setParameterRanges", f"mass={min_mass_fix},{max_mass_fix}",
+
+            # "--setParameters", set_params,
+            # # "--setParameterRanges", param_ranges,
+            # "--freezeParameters", freeze_params,
+
+            # "--setParameters", "CMS_EXO25020_bkgEnvelopeIdx_2022EE=0",
+            # "--freezeParameters", "CMS_EXO25020_bkgEnvelopeIdx_2022EE",
+
+            # "--setParameters", ",".join([f"t{i}_{era}_envelope=0" for i in range(2, 15) for era in ['2022', '2022EE', '2023', '2023BPix']]) + "," + ",".join([f"a{i}_{era}_envelope=0" for i in range(3, 15) for era in ['2022', '2022EE', '2023', '2023BPix']]),# + ",CMS_EXO25020_bkgEnvelopeIdx_2022=1",
+            # "--freezeParameters", ",".join([f"t{i}_{era}_envelope" for i in range(2,15) for era in ['2022', '2022EE', '2023', '2023BPix']]) + "," + ",".join([f"a{i}_{era}_envelope" for i in range(3, 15) for era in ['2022', '2022EE', '2023', '2023BPix']]),# + ",CMS_EXO25020_bkgEnvelopeIdx_2022",
+
+            "--keepFailures", 
+            "--rMin", str(get_mass_rmin_rmax(mass)[0]),
+            "--rMax", str(get_mass_rmin_rmax(mass)[1]),
+            "--cminDefaultMinimizerStrategy", "0",
+
+            # "--robustFit", "1",
+            # "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+            # "--cminRunAllDiscreteCombinations",
+
             "-n", f"_{cat_name}{fit_tag_label}_{era}",
-            "-v", "1", #3
+            "-v", "3", #3
+            # "--skipBOnlyFit",
             # "--setParameters", "signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
             # "--freezeParameters", "signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
         ]
         # "--preFitValue", "0",
         # "--freezeParameters", "mean_nuisance_electronScaleVariation",
 
+        fitdiag_cmd_str = " ".join(fitdiag_cmd)
         fitdiag_out = os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}.FitDiagnostics.mH120.root")
         if caching and os.path.exists(fitdiag_out):
             job_log_sections.append(f"SKIP: cached FitDiagnostics output exists: {fitdiag_out}\n")
         else:
-            job_log_sections.append(f"Output file {fitdiag_out} not found. Running FitDiagnostics.")
+            header = "=" * 80
+            job_log_sections.append(f"Output file {fitdiag_out} not found. Running FitDiagnostics: {fitdiag_cmd_str}\n")
             try:
-                with open(fitdiag_log, "w") as f:
-                    subprocess.run(fitdiag_cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
-                trim_file_to_head_tail(fitdiag_log)
+                proc = subprocess.run(
+                    fitdiag_cmd,
+                    cwd=workdir,
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                fitdiag_section = f"{header}\nCMD: {fitdiag_cmd_str}\nRET: {proc.returncode}\n{header}\n{proc.stdout or ''}\n"
+                write_log_with_head_tail(fitdiag_log, fitdiag_section)
+                if proc.returncode != 0:
+                    raise subprocess.CalledProcessError(proc.returncode, fitdiag_cmd)
             except subprocess.CalledProcessError:
-                trim_file_to_head_tail(fitdiag_log)
                 flush_job_log()
                 copy_job_log_to_output()
                 return (False, f"FitDiagnostics failed for {cat_name} M{mass} ({era}, {region})")
@@ -349,6 +455,53 @@ def run_single_multidim_job(task):
     dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / f"M{mass}"
     dest_mass_dir.mkdir(parents=True, exist_ok=True)
 
+    eras = ["2022", "2022EE", "2023", "2023BPix"]
+
+    # ### FOR SLIDING WINDOW
+    # # 1. Parameter ranges [0, 10] separated by colons
+    # param_ranges = ":".join(
+    #     [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    # )
+
+    # # 2. Initial values (low orders = 0.001, higher orders = 0)
+    # set_params = ",".join(
+    #     [f"t{i}_{era}_envelope=0.001" for i in range(2) for era in eras]
+    #     + [f"t{i}_{era}_envelope=0" for i in range(2, 15) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0.001" for i in range(3) for era in eras]
+    #     + [f"a{i}_{era}_envelope=0" for i in range(3, 15) for era in eras]
+    #     + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+    # )
+
+    # # 3. Freeze higher orders
+    # freeze_params = ",".join(
+    #     [f"t{i}_{era}_envelope" for i in range(2, 15) for era in eras]
+    #     + [f"a{i}_{era}_envelope" for i in range(3, 15) for era in eras]
+    #     + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+    # )
+
+    # 1. Parameter ranges [0, 10] separated by colons
+    param_ranges = ":".join(
+        [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+        + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    )
+
+    # 2. Initial values (low orders = 0.001, higher orders = 0)
+    set_params = ",".join(
+        # [f"t{i}_{era}_envelope=0.001" for i in range(5) for era in eras]
+        [f"t{i}_{era}_envelope=0" for i in range(4, 15) for era in eras]
+        # + [f"a{i}_{era}_envelope=0.001" for i in range(7) for era in eras]
+        + [f"a{i}_{era}_envelope=0" for i in range(6, 15) for era in eras]
+        # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+    )
+
+    # 3. Freeze higher orders
+    freeze_params = ",".join(
+        [f"t{i}_{era}_envelope" for i in range(4, 15) for era in eras]
+        + [f"a{i}_{era}_envelope" for i in range(6, 15) for era in eras]
+        # + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+    )
+    
     if mode == "Bonly":
         log_file = os.path.join(workdir, f"fitMultiDimFit_Bonly_{cat_name}{fit_tag_label}_{era}.log")
         output_file = os.path.join(workdir, f"higgsCombine_{cat_name}{fit_tag_label}_{era}_Bonly.MultiDimFit.mH120.root")
@@ -357,16 +510,29 @@ def run_single_multidim_job(task):
             "-M", "MultiDimFit",
             root_file,
             "--saveWorkspace",
+
             "--setParameters", "r=0",
             "--freezeParameters", "r",
-            "--setParameterRanges", f"mass={min_mass},{max_mass}",
-            "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
+
+            # "--setParameters", set_params + ",r=0",
+            # "--setParameterRanges", param_ranges,
+            # "--freezeParameters", freeze_params + ",r",
+
+            # "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            "--saveSpecifiedIndex", f"CMS_EXO25020_bkgEnvelopeIdx_{era}",
             "--cminDefaultMinimizerStrategy", "0",
+            # "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+            # "--cminRunAllDiscreteCombinations",
+            "--robustFit", "1",
+
+            "--rMin", str(get_mass_rmin_rmax(mass)[0]),
+            "--rMax", str(get_mass_rmin_rmax(mass)[1]),
             "--keepFailures",
             "-n", f"_{cat_name}{fit_tag_label}_{era}_BfitDiagnostics_inclusive_2022.logonly",
-            "-v", "1", #3
+            "-v", "2", #3
             # "--setParameters", "r=0,signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
             # "--freezeParameters", "r,signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
+            # "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
         ]
         combine_logger_name = f"combine_logger_MultiDimFit_Bonly_{cat_name}{fit_tag_label}.out"
     else:
@@ -377,14 +543,24 @@ def run_single_multidim_job(task):
             "-M", "MultiDimFit",
             root_file,
             "--saveWorkspace",
-            "--setParameterRanges", f"mass={min_mass},{max_mass}",
-            "--saveSpecifiedIndex", f"pdf_index_{era}_envelope",
+            # "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            "--saveSpecifiedIndex", f"CMS_EXO25020_bkgEnvelopeIdx_{era}",
             "--cminDefaultMinimizerStrategy", "0",
+            "--rMin", str(get_mass_rmin_rmax(mass)[0]),
+            "--rMax", str(get_mass_rmin_rmax(mass)[1]),
+            # "--X-rtd", "MINIMIZER_freezeDisassociatedParams=1",
             "--keepFailures",
             "-n", f"_{cat_name}{fit_tag_label}_{era}_SB",
-            "-v", "1", #3
+            "-v", "2", #3
+            "--robustFit", "1",
+
+            # "--setParameters", set_params,
+            # "--setParameterRanges", param_ranges,
+            # "--freezeParameters", freeze_params,
+
             # "--setParameters", "signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0",
             # "--freezeParameters", "signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix",
+            # "--saveSpecifiedIndex", f"pdf_index_{era}_envelope,CMS_EXO25020_bkgEnvelopeIdx_{era}",
         ]
         combine_logger_name = f"combine_logger_MultiDimFit_SB_{cat_name}{fit_tag_label}.out"
 
@@ -648,6 +824,12 @@ def main():
         print("=" * 80 + "\n")
         successful_jobs = list(all_jobs)
         phase_durations["phase2_fitdiag_draw"] = 0.0
+    elif args.plot_only:
+        print("\n" + "=" * 80)
+        print("PHASE 2: Skipped (--plot_only enabled)")
+        print("=" * 80 + "\n")
+        successful_jobs = list(all_jobs)
+        phase_durations["phase2_fitdiag_draw"] = 0.0
     else:
         print("\n" + "=" * 80)
         print(f"PHASE 2: Running FitDiagnostics+draw for {len(all_jobs)} jobs on {args.jobs} workers")
@@ -755,6 +937,8 @@ def main():
                     f"{basedir}/scripts/plot_diagnostics_result.py",
                     "-o",
                     f"{outfolder}/{cat_name}_{era}",
+                    "--era",
+                    era,
                     "-c",
                     cat_name,
                 ]

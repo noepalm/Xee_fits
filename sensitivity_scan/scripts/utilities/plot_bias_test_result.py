@@ -15,7 +15,9 @@ cms_palette = [
     "#7a21dd",
 ]
 
-BKG_FUNCTION_LABELS = ["Chebyshev", "Bernstein", "PolyExp"]
+# BKG_FUNCTION_LABELS = ["Chebyshev", "Bernstein", "PolyExp"]
+BKG_FUNCTION_LABELS = ["Chebyshev", "Bernstein"]
+
 # REGION_BOUNDS = {
 #     "region0": (0.5, 2.2),
 #     "region1": (1.8, 4.4),
@@ -186,6 +188,9 @@ def make_summary_grid_plot(output_dir, era, truth_results, regions, extra_tag, n
 
         decorate_region_spans(ax_r)
         decorate_region_spans(ax_pull)
+
+        # also plot horizontal line at 0 for PULLS only
+        ax_pull.axhline(0, color="black", alpha=0.5, linestyle="--")
 
         for fit_label, color in zip(BKG_FUNCTION_LABELS, cms_palette[:len(BKG_FUNCTION_LABELS)]):
             mass_map = fit_results[fit_label]
@@ -398,6 +403,8 @@ def main():
     truth_results = {truth: {fit: {} for fit in BKG_FUNCTION_LABELS} for truth in BKG_FUNCTION_LABELS}
     truth_files = {truth: {fit: {} for fit in BKG_FUNCTION_LABELS} for truth in BKG_FUNCTION_LABELS}
 
+    print("DBEUG: input dir = ", input_dir)
+
     mass_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name.startswith("M")]
     mass_dirs = sorted(mass_dirs, key=lambda d: float(d.name[1:]))
 
@@ -429,6 +436,9 @@ def main():
                     continue
                 truth_results[truth_label][fit_label][mass] = stats
                 truth_files[truth_label][fit_label][mass] = fpath
+    
+    print("DEBUG: truth results = ", truth_results)
+    print("DEBUG: truth files = ", truth_files)
 
     extra_tag = f"_{args.tag}" if args.tag else ""
 

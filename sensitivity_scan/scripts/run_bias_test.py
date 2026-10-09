@@ -3,10 +3,12 @@
 import argparse
 import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -15,6 +17,13 @@ from pathlib import Path
 # Configuration and utilities
 # ============================================================================
 
+def decode_output(out) -> str:
+    """Ensure output is always a decoded string with real newlines."""
+    if out is None:
+        return ""
+    if isinstance(out, bytes):
+        return out.decode("utf-8", errors="replace")
+    return str(out)
 
 def get_category_label(cat_name):
     mapping = {
@@ -50,19 +59,21 @@ def get_all_category_ids(category_type):
 
 def get_mass_range(region):
     # ranges = {
-    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
-    #     "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
+    #      "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #      "region1": {"min": 1.6, "min_limit": 1.8, "max": 4.6, "max_limit": 4.4},
+    #      "region2": {"min": 3.8, "min_limit": 4.0, "max": 11.0, "max_limit": 10.8},
     # }
     # ranges = {
-    #     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-    #     "region1": {"min": 1.6, "min_limit": 1.8, "max": 6.0, "max_limit": 5.6},
-    #     "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
+    #      "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
+    #      "region1": {"min": 1.6, "min_limit": 1.8, "max": 6.0, "max_limit": 5.6},
+    #      "region2": {"min": 4.9, "min_limit": 5.4, "max": 10.5, "max_limit": 10},
     # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
-        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 7.0, "max_limit": 6.5},
+        "region1": {"min": 2.0, "min_limit": 2.2, "max": 7.0, "max_limit": 6.5},
+        # "region2": {"min": 6.0, "min_limit": 5.5, "max": 15.0, "max_limit": 14.5}, 
+        "region2": {"min": 6.0, "min_limit": 5.5, "max": 12.0, "max_limit": 11.0}, 
     }
     return ranges.get(region, {})
 
@@ -86,41 +97,228 @@ def get_run_mode_label(expect_signal):
 
 LOG_MAX_BYTES = 800 * 1024
 
+HEADER_PATTERN = re.compile(
+    r"^(?:(?:SKIP:[^\n]*|#.*)\r?\n)*(={40,}\r?\n.*?\r?\n={40,}\r?\n)",
+    re.DOTALL,
+)
+
+
+def split_header_and_body(text: str):
+    """Split log text into leading header (with banners) and output body."""
+    m = HEADER_PATTERN.match(text)
+    if m:
+        header = m.group(0)
+        body = text[len(header):]
+        return header, body
+    return "", text
+
+
+def make_log_header(
+    cmd,
+    ret,
+    start_dt: datetime.datetime,
+    end_dt: datetime.datetime,
+    elapsed: float,
+) -> str:
+    """Construct a standardized 80-char banner header with timing and command."""
+    banner = "=" * 80
+    cmd_str = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+    meta = (
+        f"START:   {start_dt.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"END:     {end_dt.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"ELAPSED: {elapsed:.2f}s ({format_duration(elapsed)})\n"
+        f"CMD:     {cmd_str}\n"
+        f"RET:     {ret}\n"
+    )
+    return f"{banner}\n{meta}{banner}\n"
+
+
+def format_log_section(
+    cmd,
+    output: str,
+    ret,
+    start_dt: datetime.datetime,
+    end_dt: datetime.datetime,
+    elapsed: float,
+    max_bytes: int = LOG_MAX_BYTES,
+) -> str:
+    """Format a log section with header and output, trimming only the output tail if too long."""
+    header = make_log_header(cmd, ret, start_dt, end_dt, elapsed)
+    header_bytes = header.encode("utf-8")
+    output_bytes = output.encode("utf-8", errors="replace")
+    prefix = b"[... log trimmed; showing tail only ...]\n"
+
+    if len(header_bytes) + len(output_bytes) <= max_bytes:
+        body = output
+    else:
+        budget = max(0, max_bytes - len(header_bytes) - len(prefix))
+        if budget > 0:
+            tail_bytes = output_bytes[-budget:]
+            tail_str = tail_bytes.decode("utf-8", errors="replace")
+            if "\n" in tail_str:
+                parts = tail_str.split("\n", 1)
+                if parts[1]:
+                    tail_str = parts[1]
+            body = prefix.decode("utf-8") + tail_str
+        else:
+            body = prefix.decode("utf-8")
+
+    if not body.endswith("\n"):
+        body += "\n"
+    return f"{header}{body}"
+
 
 def write_log_with_tail(path, text, max_bytes=LOG_MAX_BYTES):
-    """Write log text, keeping only tail when it exceeds max_bytes."""
-    data = text.encode("utf-8", errors="replace")
+    """Write log text, preserving header and keeping tail of output when exceeding max_bytes."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(text, bytes):
+        text_str = text.decode("utf-8", errors="replace")
+    else:
+        text_str = str(text)
+
+    data = text_str.encode("utf-8", errors="replace")
     if len(data) <= max_bytes:
         with open(path, "wb") as f:
             f.write(data)
         return
 
+    header, body = split_header_and_body(text_str)
     prefix = b"[... log trimmed; showing tail only ...]\n"
-    tail_budget = max(0, max_bytes - len(prefix))
-    tail = data[-tail_budget:] if tail_budget > 0 else b""
+
+    if header:
+        header_bytes = header.encode("utf-8")
+        body_bytes = body.encode("utf-8", errors="replace")
+        tail_budget = max(0, max_bytes - len(header_bytes) - len(prefix))
+        if tail_budget > 0:
+            tail = body_bytes[-tail_budget:]
+            tail_str = tail.decode("utf-8", errors="replace")
+            if "\n" in tail_str:
+                parts = tail_str.split("\n", 1)
+                if parts[1]:
+                    tail_str = parts[1]
+            trimmed = header_bytes + prefix + tail_str.encode("utf-8")
+        else:
+            trimmed = header_bytes + prefix
+    else:
+        tail_budget = max(0, max_bytes - len(prefix))
+        if tail_budget > 0:
+            tail = data[-tail_budget:]
+            tail_str = tail.decode("utf-8", errors="replace")
+            if "\n" in tail_str:
+                parts = tail_str.split("\n", 1)
+                if parts[1]:
+                    tail_str = parts[1]
+            trimmed = prefix + tail_str.encode("utf-8")
+        else:
+            trimmed = prefix
+
     with open(path, "wb") as f:
-        f.write(prefix + tail)
+        f.write(trimmed)
 
 
 def trim_file_to_tail(path, max_bytes=LOG_MAX_BYTES):
-    """Trim an existing log file in-place to tail when it exceeds max_bytes."""
+    """Trim an existing log file in-place to tail when it exceeds max_bytes, preserving header."""
     if not os.path.exists(path):
         return
     size = os.path.getsize(path)
     if size <= max_bytes:
         return
 
-    prefix = b"[... log trimmed; showing tail only ...]\n"
-    tail_budget = max(0, max_bytes - len(prefix))
     with open(path, "rb") as f:
-        if tail_budget > 0:
-            f.seek(-tail_budget, os.SEEK_END)
-            tail = f.read()
-        else:
-            tail = b""
+        head_sample = f.read(8192)
+    head_sample_str = head_sample.decode("utf-8", errors="replace")
+    header, _ = split_header_and_body(head_sample_str)
 
-    with open(path, "wb") as f:
-        f.write(prefix + tail)
+    prefix = b"[... log trimmed; showing tail only ...]\n"
+    if header:
+        header_bytes = header.encode("utf-8")
+        tail_budget = max(0, max_bytes - len(header_bytes) - len(prefix))
+        with open(path, "rb") as f:
+            if tail_budget > 0:
+                f.seek(-tail_budget, os.SEEK_END)
+                tail = f.read()
+            else:
+                tail = b""
+        tail_str = tail.decode("utf-8", errors="replace")
+        if "\n" in tail_str:
+            parts = tail_str.split("\n", 1)
+            if parts[1]:
+                tail_str = parts[1]
+        with open(path, "wb") as f:
+            f.write(header_bytes + prefix + tail_str.encode("utf-8"))
+    else:
+        tail_budget = max(0, max_bytes - len(prefix))
+        with open(path, "rb") as f:
+            if tail_budget > 0:
+                f.seek(-tail_budget, os.SEEK_END)
+                tail = f.read()
+            else:
+                tail = b""
+        tail_str = tail.decode("utf-8", errors="replace")
+        if "\n" in tail_str:
+            parts = tail_str.split("\n", 1)
+            if parts[1]:
+                tail_str = parts[1]
+        with open(path, "wb") as f:
+            f.write(prefix + tail_str.encode("utf-8"))
+
+
+class LoggedProcessError(subprocess.CalledProcessError):
+    """CalledProcessError that carries the formatted log section text."""
+
+    def __init__(self, returncode, cmd, output=None, stderr=None, section=""):
+        super().__init__(returncode, cmd, output=output, stderr=stderr)
+        self.section = section
+
+
+def run_logged_command(
+    cmd,
+    *,
+    cwd=None,
+    timeout=1200,
+    logger_copy_from=None,
+    logger_copy_to=None,
+    max_bytes=LOG_MAX_BYTES,
+):
+    """Run a subprocess command, capture timing, format log section with header, and copy logger if requested."""
+    start_dt = datetime.datetime.now()
+    t0 = time.perf_counter()
+    timed_out = False
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=cwd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+        elapsed = time.perf_counter() - t0
+        end_dt = datetime.datetime.now()
+        ret = proc.returncode
+        output = decode_output(proc.stdout if proc.stdout is not None else "")
+    except subprocess.TimeoutExpired as e:
+        elapsed = time.perf_counter() - t0
+        end_dt = datetime.datetime.now()
+        ret = "TIMEOUT"
+        output = decode_output(e.stdout if e.stdout is not None else "")
+        timed_out = True
+
+    section = format_log_section(cmd, output, ret, start_dt, end_dt, elapsed, max_bytes=max_bytes)
+
+    if logger_copy_from and logger_copy_to:
+        src = Path(logger_copy_from)
+        if src.exists():
+            shutil.copy2(str(src), str(logger_copy_to))
+
+    if timed_out:
+        raise LoggedProcessError(-1, cmd, output=output, section=section)
+    elif ret != 0:
+        raise LoggedProcessError(ret, cmd, output=output, section=section)
+
+    return section, output
 
 
 def parse_mass_selector(selector):
@@ -186,10 +384,11 @@ def make_mass_key(mass):
 
 
 # Background function index → name mapping (matches combine pdf_index parameter).
-BKG_FUNCTION_NAMES = {0: "chebyshev", 1: "bernstein", 2: "polyexp"}
-BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein", "polyexp": "PolyExp"}
+# BKG_FUNCTION_NAMES = {0: "chebyshev", 1: "bernstein", 2: "polyexp"}
+# BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein", "polyexp": "PolyExp"}
 # BKG_FUNCTION_NAMES = {0: "chebyshev", 1: "bernstein"}
-# BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein"}
+BKG_FUNCTION_NAMES = {0: "bernstein", 1: "chebyshev"}
+BKG_FUNCTION_LABELS = {"chebyshev": "Chebyshev", "bernstein": "Bernstein"}
 
 
 def resolve_fit_specific_workspace(workdir, root_file, fit_name):
@@ -208,42 +407,40 @@ def resolve_fit_specific_workspace(workdir, root_file, fit_name):
         if token not in cards_name:
                 return None
 
-        fit_cards_name = cards_name.replace(token, f"_altbkg_{fit_name}_")
+        # fit_cards_name = cards_name.replace(token, f"_altbkg_{fit_name}_")
+        fit_cards_name = cards_name.replace("blabla", f"_altbkg_{fit_name}_")
         fit_cards_dir = cards_dir.parent / fit_cards_name
         fit_root = fit_cards_dir / "ee" / mass_dir.name / root_file
+        # print("DEBUG: looking for ", fit_root)
         return str(fit_root.resolve())
 
 
-def is_sb_job_fully_cached(job):
-    """Check if all S+B fit outputs already exist for this job.
-    
-    Returns True only if all truth/fit combinations have cached results.
-    """
+def is_sb_subjob_fully_cached(job):
+    """Check if fit outputs already exist for this single truth/fit subjob."""
     if not job.get("caching", True):
         return False
-    
+
     cat_name = job["cat_name"]
     era = job["era"]
     mass = job["mass"]
-    fit_tag_label = job["fit_tag_label"]
     outfolder = job["outfolder"]
     expect_signal = float(job.get("expect_signal", 0.0))
     run_mode_label = get_run_mode_label(expect_signal)
-    
+    truth_label = job["truth_label"]
+    fit_label = job["fit_label"]
+    single_toy_only = job.get("single_toy_only", False)
+
     dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / run_mode_label / f"M{mass}"
-    
-    # Check if all truth/fit combinations have output files
-    for truth_idx, truth_name in BKG_FUNCTION_NAMES.items():
-        truth_label = BKG_FUNCTION_LABELS[truth_name]
-        for fit_idx, fit_name in BKG_FUNCTION_NAMES.items():
-            fit_label = BKG_FUNCTION_LABELS[fit_name]
-            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
-            combine_out = dest_mass_dir / f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
-            fitdiag_out = dest_mass_dir / f"fitDiagnostics{n_label}.root"
-            if not combine_out.exists() or not fitdiag_out.exists():
-                return False
-    
-    return True
+
+    if single_toy_only:
+        n_label_toy = f".toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
+        toy_fitdiag_out = dest_mass_dir / f"fitDiagnostics{n_label_toy}.root"
+        return toy_fitdiag_out.exists()
+    else:
+        n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
+        combine_out = dest_mass_dir / f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
+        fitdiag_out = dest_mass_dir / f"fitDiagnostics{n_label}.root"
+        return combine_out.exists() and fitdiag_out.exists()
 
 
 # ============================================================================
@@ -276,20 +473,12 @@ def run_bkg_fits_job(job):
     job_log_sections = []
 
     def capture_and_buffer(cmd, *, cwd=None):
-        proc = subprocess.run(
-            cmd,
-            cwd=cwd,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        header = "=" * 80
-        output = proc.stdout if proc.stdout is not None else ""
-        section = f"{header}\nCMD: {' '.join(cmd)}\nRET: {proc.returncode}\n{header}\n{output}\n"
-        job_log_sections.append(section)
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd)
+        try:
+            section, _ = run_logged_command(cmd, cwd=cwd or workdir, timeout=1200)
+            job_log_sections.append(section)
+        except LoggedProcessError as e:
+            job_log_sections.append(e.section)
+            raise
 
     def flush_and_copy_log():
         write_log_with_tail(job_log_path, "".join(job_log_sections))
@@ -313,6 +502,7 @@ def run_bkg_fits_job(job):
     # Run B-only MultiDimFit for pdf_index = 0, 1, 2.
     for pdf_idx, bkg_name in BKG_FUNCTION_NAMES.items():
         pdf_param = f"pdf_index_{era}_envelope"
+        pdf_param_new = f"CMS_EXO25020_bkgEnvelopeIdx_{era}"
         n_suffix = f"_{cat_name}{fit_tag_label}_{bkg_name}_{era}_Bonly"
         fit_log = os.path.join(
             workdir,
@@ -332,28 +522,30 @@ def run_bkg_fits_job(job):
                 f"SKIP: cached B-only workspace exists for {bkg_name}: {ws_dst}\n"
             )
             continue
-
+        
         cmd = [
             "combine", "-M", "MultiDimFit",
             root_file,
             "--saveWorkspace",
-            "--setParameters", f"r=0,{pdf_param}={pdf_idx}",
-            "--freezeParameters", f"r,{pdf_param}",
+            "--setParameters", f"r=0,{pdf_param}={pdf_idx},{pdf_param_new}={pdf_idx}",
+            "--freezeParameters", f"r,{pdf_param},{pdf_param_new}",
             "--setParameterRanges", f"mass={min_mass},{max_mass}",
+            # doesn't matter, r is frozen to 0
             "--rMin", "-10",
             "--rMax", "10",
             "--cminDefaultMinimizerStrategy", "0",
             "--robustFit", "1",
             "-n", n_suffix,
-            "-v", "3",  # increase to 3 for debugging
+            "-v", "1",  # increase to 3 for debugging
         ]
 
         try:
-            with open(fit_log, "w") as f:
-                subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=True, cwd=workdir)
-            trim_file_to_tail(fit_log)
-        except subprocess.CalledProcessError:
-            trim_file_to_tail(fit_log)
+            section, _ = run_logged_command(cmd, cwd=workdir, timeout=1200)
+            write_log_with_tail(fit_log, section)
+        except subprocess.CalledProcessError as e:
+            sec = getattr(e, "section", "")
+            if sec:
+                write_log_with_tail(fit_log, sec)
             flush_and_copy_log()
             return (False, f"MultiDimFit B-only ({bkg_name}) failed for {cat_name} M{mass} ({era}, {region})")
 
@@ -389,24 +581,24 @@ def run_generate_toys_job(job):
     sections = []
 
     def capture_and_buffer(cmd, logger_suffix=""):
-        proc = subprocess.run(
-            cmd,
-            cwd=toy_workdir,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+        suffix = f"_{logger_suffix}" if logger_suffix else ""
+        combine_logger_src = Path(toy_workdir) / "combine_logger.out"
+        combine_logger_dest = (
+            Path(toy_workdir)
+            / f"combine_logger_{cat_name}{fit_tag_label}_{era}_{run_mode_label}{suffix}.out"
         )
-        header = "=" * 80
-        output = proc.stdout if proc.stdout is not None else ""
-        sections.append(f"{header}\nCMD: {' '.join(cmd)}\nRET: {proc.returncode}\n{header}\n{output}\n")
-        combine_logger = Path(toy_workdir) / "combine_logger.out"
-        if combine_logger.exists():
-            suffix = f"_{logger_suffix}" if logger_suffix else ""
-            combine_logger_copy = Path(toy_workdir) / f"combine_logger_{cat_name}{fit_tag_label}_{era}_{run_mode_label}{suffix}.out"
-            shutil.copy2(str(combine_logger), str(combine_logger_copy))
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd)
+        try:
+            section, _ = run_logged_command(
+                cmd,
+                cwd=toy_workdir,
+                timeout=1200,
+                logger_copy_from=combine_logger_src,
+                logger_copy_to=combine_logger_dest,
+            )
+            sections.append(section)
+        except LoggedProcessError as e:
+            sections.append(e.section)
+            raise
 
     Path(toy_workdir).mkdir(parents=True, exist_ok=True)
 
@@ -467,226 +659,233 @@ def run_generate_toys_job(job):
     return (True, f"OK toys: {cat_name} ({era}, {region})")
 
 
-def run_sb_bias_fit_job(job):
-    """Run S+B fits on toys for all truth/fit background combinations."""
-    workdir = str(Path(job["workdir"]).resolve())
-    bkg_fits_dir = str(Path(job["bkg_fits_dir"]).resolve())
-    root_file = job["root_file"]
-    cat_name = job["cat_name"]
-    era = job["era"]
-    region = job["region"]
-    mass = job["mass"]
-    fit_tag_label = job["fit_tag_label"]
-    fit_toys = int(job["fit_toys"])
-    outfolder = job["outfolder"]
-    caching = job.get("caching", True)
-    expect_signal = float(job.get("expect_signal", 0.0))
-    mass_dependent = abs(expect_signal) > 1e-12
-    single_toy_only = bool(job.get("single_toy_only", False))
+def run_sb_single_fit_subjob(subjob):
+    """Run an individual S+B fit for a specific (truth, fit) combination in parallel."""
+    workdir = str(Path(subjob["workdir"]).resolve())
+    root_file = subjob["root_file"]
+    cat_name = subjob["cat_name"]
+    era = subjob["era"]
+    region = subjob["region"]
+    mass = subjob["mass"]
+    fit_tag_label = subjob["fit_tag_label"]
+    fit_toys = int(subjob["fit_toys"])
+    outfolder = subjob["outfolder"]
+    caching = subjob.get("caching", True)
+    expect_signal = float(subjob.get("expect_signal", 0.0))
+    single_toy_only = bool(subjob.get("single_toy_only", False))
     run_mode_label = get_run_mode_label(expect_signal)
+    
+    truth_idx = subjob["truth_idx"]
+    truth_name = subjob["truth_name"]
+    truth_label = subjob["truth_label"]
+    fit_idx = subjob["fit_idx"]
+    fit_name = subjob["fit_name"]
+    fit_label = subjob["fit_label"]
+    toys_file = subjob["toys_file"]
 
     pdf_param = f"pdf_index_{era}_envelope"
-    job_log = os.path.join(workdir, f"bias_sb_fits_{cat_name}{fit_tag_label}_{era}_{run_mode_label}.log")
+    pdf_param_new = f"CMS_EXO25020_bkgEnvelopeIdx_{era}"
+    mode_str = "toyplot" if single_toy_only else "sb"
+    subjob_log = os.path.join(
+        workdir,
+        f"bias_{mode_str}_fit_truth{truth_label}_fit{fit_label}_{cat_name}{fit_tag_label}_{era}_{run_mode_label}.log"
+    )
     sections = []
 
     dest_mass_dir = Path(outfolder) / f"{cat_name}_{era}" / run_mode_label / f"M{mass}"
     dest_mass_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resolve generated toys files once, by truth model.
-    toys_by_truth = {}
-    for truth_name in BKG_FUNCTION_NAMES.values():
-        truth_label = BKG_FUNCTION_LABELS[truth_name]
-        if mass_dependent:
-            pattern = os.path.join(
-                workdir,
-                f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root",
-            )
-        else:
-            pattern = os.path.join(
-                bkg_fits_dir,
-                f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root",
-            )
-        candidates = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-        if not candidates:
-            write_log_with_tail(job_log, "".join(sections))
-            if mass_dependent:
-                return (False, f"Missing toys file for truth {truth_label} in {workdir}")
-            return (False, f"Missing toys file for truth {truth_label} in {bkg_fits_dir}")
-        toys_by_truth[truth_name] = os.path.abspath(candidates[0])
-
     def capture_and_buffer(cmd, logger_suffix=""):
-        proc = subprocess.run(
-            cmd,
-            cwd=workdir,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+        suffix = f"_{logger_suffix}" if logger_suffix else ""
+        combine_logger_src = Path(workdir) / "combine_logger.out"
+        combine_logger_dest = (
+            Path(workdir)
+            / f"combine_logger_{cat_name}{fit_tag_label}_{era}_{run_mode_label}{suffix}.out"
         )
-        header = "=" * 80
-        output = proc.stdout if proc.stdout is not None else ""
-        sections.append(f"{header}\nCMD: {' '.join(cmd)}\nRET: {proc.returncode}\n{header}\n{output}\n")
-        combine_logger = Path(workdir) / "combine_logger.out"
-        if combine_logger.exists():
-            suffix = f"_{logger_suffix}" if logger_suffix else ""
-            combine_logger_copy = Path(workdir) / f"combine_logger_{cat_name}{fit_tag_label}_{era}_{run_mode_label}{suffix}.out"
-            shutil.copy2(str(combine_logger), str(combine_logger_copy))
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd)
+        try:
+            section, _ = run_logged_command(
+                cmd,
+                cwd=workdir,
+                timeout=1200,
+                logger_copy_from=combine_logger_src,
+                logger_copy_to=combine_logger_dest,
+            )
+            sections.append(section)
+        except LoggedProcessError as e:
+            sections.append(e.section)
+            raise
 
     files_to_copy = []
-    for truth_idx, truth_name in BKG_FUNCTION_NAMES.items():
-        truth_label = BKG_FUNCTION_LABELS[truth_name]
-        toys_file = toys_by_truth[truth_name]
 
-        for fit_idx, fit_name in BKG_FUNCTION_NAMES.items():
-            fit_label = BKG_FUNCTION_LABELS[fit_name]
-            fit_root_file = resolve_fit_specific_workspace(workdir, root_file, fit_name)
-            if fit_root_file is None:
-                write_log_with_tail(job_log, "".join(sections))
-                return (
-                    False,
-                    (
-                        f"Could not resolve fit-specific cards folder from workdir '{workdir}'. "
-                        "Expected folder name containing '_altbkg_envelope_'."
-                    ),
-                )
-            if not os.path.exists(fit_root_file):
-                write_log_with_tail(job_log, "".join(sections))
-                return (
-                    False,
-                    (
-                        f"Missing fit-specific workspace for fit {fit_label}: {fit_root_file}"
-                    ),
-                )
+    fit_root_file = resolve_fit_specific_workspace(workdir, root_file, fit_name)
+    if fit_root_file is None:
+        write_log_with_tail(subjob_log, "".join(sections))
+        return (
+            False,
+            (
+                f"Could not resolve fit-specific cards folder from workdir '{workdir}'. "
+                "Expected folder name containing '_altbkg_envelope_'."
+            ),
+        )
+    if not os.path.exists(fit_root_file):
+        write_log_with_tail(subjob_log, "".join(sections))
+        return (
+            False,
+            (
+                f"Missing fit-specific workspace for fit {fit_label}: {fit_root_file}"
+            ),
+        )
 
-            # Keep requested base naming, and append cat/era for collision safety.
-            n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
-            # r_min = -2 if run_mode_label == "no_signal" else -10
-            # r_max = 2 if run_mode_label == "no_signal" else 10
-            r_min = -10 if run_mode_label == "no_signal" else -10
-            r_max = 10 if run_mode_label == "no_signal" else 10
+    if run_mode_label == "no_signal":
+        MASS_LIMIT_THRESHOLDS = [
+            (1.0, 50),
+            (1.4, 30),
+            (2.1, 15),
+            (9.1, 5),
+            (9.4, 10),
+        ]
+        default_limit = 50
+        limit = next((lim for max_m, lim in MASS_LIMIT_THRESHOLDS if mass <= max_m), default_limit)
+        r_min, r_max = -limit, limit
+    else:
+        MASS_LIMIT_THRESHOLDS = [
+            (1.0, 60),
+            (1.4, 40),
+            (2.1, 25),
+            (9.1, 15),
+            (9.4, 20),
+        ]
+        default_limit = 50
+        limit = next((lim for max_m, lim in MASS_LIMIT_THRESHOLDS if mass <= max_m), default_limit)
+        r_min, r_max = -limit, limit
 
-            cmd = [
-                "combine",
-                "-M", "FitDiagnostics",
-                fit_root_file,
-                "--setParameters", f"{pdf_param}={fit_idx}",
-                "--freezeParameters", pdf_param,
-                "--rMin", str(r_min),
-                "--rMax", str(r_max),
-                "--robustFit", "1",
-                "-t", str(fit_toys),
-                "-n", n_label,
-                "--toysFile", toys_file,
-                "--cminDefaultMinimizerStrategy", "0",
-                "--saveWorkspace",
-                "--skipBOnlyFit",
-                "-v", "1",
-            ]
+    if not single_toy_only:
+        n_label = f".bias_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
+        cmd = [
+            "combine",
+            "-M", "FitDiagnostics",
+            fit_root_file,
+            "--setParameters", f"{pdf_param}={fit_idx},{pdf_param_new}={fit_idx}",
+            "--freezeParameters", f"{pdf_param},{pdf_param_new}",
+            "--rMin", str(r_min),
+            "--rMax", str(r_max),
+            "--toysFile", toys_file,
+            "-t", str(fit_toys),
+            "-n", n_label,
+            "--robustFit", "1",
+            "--cminDefaultMinimizerStrategy", "0",
+            "--keepFailures",
+            # "--setCrossingTolerance", "0.01",
+            # "--setRobustFitTolerance", "0.3",
+            # "--cminDefaultMinimizerTolerance", "0.1",
+            # "--skipBOnlyFit",
+            "--saveWorkspace",
+            "-v", "0",
+        ]
 
-            out_name = f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
-            out_path = os.path.join(workdir, out_name)
-            out_dst = str(dest_mass_dir / out_name)
-            fitdiag_name = f"fitDiagnostics{n_label}.root"
-            fitdiag_path = os.path.join(workdir, fitdiag_name)
-            fitdiag_dst = str(dest_mass_dir / fitdiag_name)
+        out_name = f"higgsCombine{n_label}.FitDiagnostics.mH120.123456.root"
+        out_path = os.path.join(workdir, out_name)
+        out_dst = str(dest_mass_dir / out_name)
+        fitdiag_name = f"fitDiagnostics{n_label}.root"
+        fitdiag_path = os.path.join(workdir, fitdiag_name)
+        fitdiag_dst = str(dest_mass_dir / fitdiag_name)
 
-            n_label_toy = f".toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
-            cmd_toy = [
-                "combine",
-                "-M", "FitDiagnostics",
-                fit_root_file,
-                "--setParameters", f"{pdf_param}={fit_idx}",
-                "--freezeParameters", pdf_param,
-                "--rMin", str(r_min),
-                "--rMax", str(r_max),
-                "-t", "1",
-                "-n", n_label_toy,
-                "--toysFile", toys_file,
-                "--cminDefaultMinimizerStrategy", "0",
-                "--robustFit", "1",
-                "--saveWorkspace",
-                "--saveShapes",
-                "--saveNormalizations",
-                "-v", "1",
-            ]
-            toy_out_name = f"higgsCombine{n_label_toy}.FitDiagnostics.mH120.123456.root"
-            toy_out_path = os.path.join(workdir, toy_out_name)
-            toy_out_dst = str(dest_mass_dir / toy_out_name)
-            toy_fitdiag_name = f"fitDiagnostics{n_label_toy}.root"
-            toy_fitdiag_path = os.path.join(workdir, toy_fitdiag_name)
-            toy_fitdiag_dst = str(dest_mass_dir / toy_fitdiag_name)
-
-            if not single_toy_only:
-                if caching and os.path.exists(out_dst) and os.path.exists(fitdiag_dst):
-                    sections.append(f"SKIP: cached S+B fit exists: {out_dst}\n")
-                    files_to_copy.append(out_path)
-                    files_to_copy.append(fitdiag_path)
-                elif caching and os.path.exists(out_dst) and os.path.exists(fitdiag_path):
-                    sections.append(
-                        f"SKIP: combine output cached and local fitDiagnostics present; only copying fitDiagnostics: {fitdiag_path}\n"
-                    )
-                    files_to_copy.append(out_path)
-                    files_to_copy.append(fitdiag_path)
-                else:
-                    try:
-                        capture_and_buffer(cmd, logger_suffix=f"truth{truth_label}_fit{fit_label}")
-                    except subprocess.CalledProcessError:
-                        write_log_with_tail(job_log, "".join(sections))
-                        return (
-                            False,
-                            (
-                                f"S+B fit failed for truth {truth_label}, fit {fit_label}, "
-                                f"{cat_name} M{mass} ({era}, {region}); see {job_log}"
-                            ),
-                        )
-
-                    if os.path.exists(out_path):
-                        files_to_copy.append(out_path)
-                    if os.path.exists(fitdiag_path):
-                        files_to_copy.append(fitdiag_path)
-
-            # Always ensure the single-toy fit (with shapes) exists for toy-plotting.
-            if caching and os.path.exists(toy_fitdiag_dst):
-                sections.append(f"SKIP: cached toy-plot fit exists: {toy_fitdiag_dst}\n")
-                files_to_copy.append(toy_fitdiag_path)
-                files_to_copy.append(toy_out_path)
-                continue
-
-            if caching and os.path.exists(toy_fitdiag_path):
-                sections.append(f"SKIP: local toy-plot fitDiagnostics exists; copying: {toy_fitdiag_path}\n")
-                files_to_copy.append(toy_fitdiag_path)
-                files_to_copy.append(toy_out_path)
-                continue
-
+        if caching and os.path.exists(out_dst) and os.path.exists(fitdiag_dst):
+            sections.append(f"SKIP: cached S+B fit exists: {out_dst}\n")
+            files_to_copy.append(out_path)
+            files_to_copy.append(fitdiag_path)
+        elif caching and os.path.exists(out_dst) and os.path.exists(fitdiag_path):
+            sections.append(
+                f"SKIP: combine output cached and local fitDiagnostics present; only copying fitDiagnostics: {fitdiag_path}\n"
+            )
+            files_to_copy.append(out_path)
+            files_to_copy.append(fitdiag_path)
+        else:
             try:
-                capture_and_buffer(cmd_toy, logger_suffix=f"toyplot_truth{truth_label}_fit{fit_label}")
+                capture_and_buffer(cmd, logger_suffix=f"truth{truth_label}_fit{fit_label}")
             except subprocess.CalledProcessError:
-                write_log_with_tail(job_log, "".join(sections))
+                write_log_with_tail(subjob_log, "".join(sections))
                 return (
                     False,
                     (
-                        f"Toy-plot S+B fit failed for truth {truth_label}, fit {fit_label}, "
-                        f"{cat_name} M{mass} ({era}, {region}); see {job_log}"
+                        f"S+B fit failed for truth {truth_label}, fit {fit_label}, "
+                        f"{cat_name} M{mass} ({era}, {region}); see {subjob_log}"
                     ),
                 )
 
-            if os.path.exists(toy_out_path):
-                files_to_copy.append(toy_out_path)
-            if os.path.exists(toy_fitdiag_path):
-                files_to_copy.append(toy_fitdiag_path)
+            if os.path.exists(out_path):
+                files_to_copy.append(out_path)
+            if os.path.exists(fitdiag_path):
+                files_to_copy.append(fitdiag_path)
 
-    write_log_with_tail(job_log, "".join(sections))
+    # Single-toy fit (with shapes) for toy-plotting
+    n_label_toy = f".toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt"
+    cmd_toy = [
+        "combine",
+        "-M", "FitDiagnostics",
+        fit_root_file,
+        "--setParameters", f"{pdf_param}={fit_idx},{pdf_param_new}={fit_idx}",
+        "--freezeParameters", f"{pdf_param},{pdf_param_new}",
+        "--rMin", str(r_min),
+        "--rMax", str(r_max),
+        "-t", "1",
+        "-n", n_label_toy,
+        "--toysFile", toys_file,
+        "--robustFit", "1",
+        "--cminDefaultMinimizerStrategy", "0",
+        # "--skipBOnlyFit",
+        # "--setCrossingTolerance", "0.01",
+        # "--setRobustFitTolerance", "0.3",
+        # "--cminDefaultMinimizerTolerance", "0.1",
+        "--keepFailures",
+        "--saveWorkspace",
+        "--saveShapes",
+        "--saveNormalizations",
+        "-v", "0",
+    ]
+    toy_out_name = f"higgsCombine{n_label_toy}.FitDiagnostics.mH120.123456.root"
+    toy_out_path = os.path.join(workdir, toy_out_name)
+    toy_out_dst = str(dest_mass_dir / toy_out_name)
+    toy_fitdiag_name = f"fitDiagnostics{n_label_toy}.root"
+    toy_fitdiag_path = os.path.join(workdir, toy_fitdiag_name)
+    toy_fitdiag_dst = str(dest_mass_dir / toy_fitdiag_name)
 
-    if os.path.exists(job_log):
-        shutil.copy2(job_log, str(dest_mass_dir))
+    if caching and os.path.exists(toy_fitdiag_dst):
+        sections.append(f"SKIP: cached toy-plot fit exists: {toy_fitdiag_dst}\n")
+        files_to_copy.append(toy_fitdiag_path)
+        files_to_copy.append(toy_out_path)
+    elif caching and os.path.exists(toy_fitdiag_path):
+        sections.append(f"SKIP: local toy-plot fitDiagnostics exists; copying: {toy_fitdiag_path}\n")
+        files_to_copy.append(toy_fitdiag_path)
+        files_to_copy.append(toy_out_path)
+    else:
+        try:
+            capture_and_buffer(cmd_toy, logger_suffix=f"toyplot_truth{truth_label}_fit{fit_label}")
+        except subprocess.CalledProcessError:
+            write_log_with_tail(subjob_log, "".join(sections))
+            return (
+                False,
+                (
+                    f"Toy-plot S+B fit failed for truth {truth_label}, fit {fit_label}, "
+                    f"{cat_name} M{mass} ({era}, {region}); see {subjob_log}"
+                ),
+            )
+
+        if os.path.exists(toy_out_path):
+            files_to_copy.append(toy_out_path)
+        if os.path.exists(toy_fitdiag_path):
+            files_to_copy.append(toy_fitdiag_path)
+
+    write_log_with_tail(subjob_log, "".join(sections))
+
+    if os.path.exists(subjob_log):
+        shutil.copy2(subjob_log, str(dest_mass_dir))
     for src in files_to_copy:
         if os.path.exists(src):
             shutil.copy2(src, str(dest_mass_dir))
 
     mode_note = "single-toy" if single_toy_only else "full"
-    return (True, f"OK sb-fits ({mode_note}): {cat_name} M{mass} ({era}, {region})")
+    return (True, f"OK sb-fit ({mode_note}): truth {truth_label}, fit {fit_label}, {cat_name} M{mass} ({era}, {region})")
 
 
 # ============================================================================
@@ -871,7 +1070,8 @@ def main():
                 Path(cat_out).mkdir(parents=True, exist_ok=True)
                 plot_cmd = [
                     "python3",
-                    f"{basedir}/scripts/utilities/plot_bias_test_result.py",
+                    # f"{basedir}/scripts/utilities/plot_bias_test_result.py",
+                    f"{basedir}/scripts/utilities/plot_bias_test_result__fixed.py",
                     "-i", cat_out,
                     "-o", cat_out,
                     "-c", cat_name,
@@ -919,164 +1119,164 @@ def main():
 
         # Toy + S+B fit plots for representative masses
         for cfg in configs:
-            era = cfg["era"]
-            region = cfg["region"]
-            input_folder = cfg["input_folder"]
-            outfolder = cfg["outfolder"]
-            bkg_fits_dir = str((Path(input_folder) / "ee" / "bkg_fits").resolve())
+             era = cfg["era"]
+             region = cfg["region"]
+             input_folder = cfg["input_folder"]
+             outfolder = cfg["outfolder"]
+             bkg_fits_dir = str((Path(input_folder) / "ee" / "bkg_fits").resolve())
 
-            for cat_id in get_all_category_ids(args.category):
-                cat_name = get_category_name(cat_id)
-                cat_out = f"{outfolder}/{cat_name}_{era}/{run_mode_label}/toy_fits"
-                cat_out_path = Path(cat_out)
+             for cat_id in get_all_category_ids(args.category):
+                 cat_name = get_category_name(cat_id)
+                 cat_out = f"{outfolder}/{cat_name}_{era}/{run_mode_label}/toy_fits"
+                 cat_out_path = Path(cat_out)
 
-                # make output folder if it does not exist
-                if not cat_out_path.exists():
-                    print(f"Creating output folder for toy+fit plots: {cat_out}")
-                    cat_out_path.mkdir(parents=True, exist_ok=True)
+                 # make output folder if it does not exist
+                 if not cat_out_path.exists():
+                     print(f"Creating output folder for toy+fit plots: {cat_out}")
+                     cat_out_path.mkdir(parents=True, exist_ok=True)
 
-                # Get mass directories from input cards folder
-                ee_input_dir = Path(input_folder) / "ee"
-                input_mass_dirs = [d for d in ee_input_dir.iterdir() if d.is_dir() and d.name.replace(".", "").replace("-", "").isdigit()]
-                input_mass_dirs = sorted(input_mass_dirs, key=lambda d: float(d.name))
+                 # Get mass directories from input cards folder
+                 ee_input_dir = Path(input_folder) / "ee"
+                 input_mass_dirs = [d for d in ee_input_dir.iterdir() if d.is_dir() and d.name.replace(".", "").replace("-", "").isdigit()]
+                 input_mass_dirs = sorted(input_mass_dirs, key=lambda d: float(d.name))
                 
-                mass_pairs = []
-                region_range = get_mass_range(region)
-                for d in input_mass_dirs:
-                    try:
-                        mval = float(d.name)
-                        if mval < region_range["min_limit"] or mval > region_range["max_limit"]:
-                            continue
-                        mass_pairs.append((mval, d))
-                    except ValueError:
-                        continue
-                mass_pairs.sort(key=lambda x: x[0])
-                selected_masses = pick_representative_masses([m for m, _ in mass_pairs], n_points=7)
+                 mass_pairs = []
+                 region_range = get_mass_range(region)
+                 for d in input_mass_dirs:
+                     try:
+                         mval = float(d.name)
+                         if mval < region_range["min_limit"] or mval > region_range["max_limit"]:
+                             continue
+                         mass_pairs.append((mval, d))
+                     except ValueError:
+                         continue
+                 mass_pairs.sort(key=lambda x: x[0])
+                 selected_masses = pick_representative_masses([m for m, _ in mass_pairs], n_points=7)
 
-                selected_txt = cat_out_path / f"toy_fit_selected_masses_{region}{fit_tag_label}.txt"
-                with open(selected_txt, "w") as sf:
-                    sf.write(f"Run mode: {run_mode_label}\n")
-                    sf.write(f"Category: {cat_name}\n")
-                    sf.write(f"Era: {era}\n")
-                    sf.write(f"Region: {region}\n")
-                    sf.write("Selected masses for toy+fit plotting:\n")
-                    for m in selected_masses:
-                        sf.write(f"  - M{m:g}\n")
+                 selected_txt = cat_out_path / f"toy_fit_selected_masses_{region}{fit_tag_label}.txt"
+                 with open(selected_txt, "w") as sf:
+                     sf.write(f"Run mode: {run_mode_label}\n")
+                     sf.write(f"Category: {cat_name}\n")
+                     sf.write(f"Era: {era}\n")
+                     sf.write(f"Region: {region}\n")
+                     sf.write("Selected masses for toy+fit plotting:\n")
+                     for m in selected_masses:
+                         sf.write(f"  - M{m:g}\n")
 
-                if selected_masses:
-                    print(
-                        f"Toy+fit example masses for {cat_name} {era} {region} ({run_mode_label}): "
-                        + ", ".join([f"M{m:g}" for m in selected_masses])
-                    )
-                    print(f"Saved mass-point selection to: {selected_txt}")
-                else:
-                    print(f"No mass points found for toy+fit plotting in {cat_out_path}")
+                 if selected_masses:
+                     print(
+                         f"Toy+fit example masses for {cat_name} {era} {region} ({run_mode_label}): "
+                         + ", ".join([f"M{m:g}" for m in selected_masses])
+                     )
+                     print(f"Saved mass-point selection to: {selected_txt}")
+                 else:
+                     print(f"No mass points found for toy+fit plotting in {cat_out_path}")
 
-                for sel_mass in selected_masses:
-                    mass_str = f"{sel_mass:g}"
+                 for sel_mass in selected_masses:
+                     mass_str = f"{sel_mass:g}"
 
-                    # Build output mass directory path for S+B fit results
-                    mass_dir = Path(outfolder) / f"{cat_name}_{era}" / run_mode_label / f"M{mass_str}"
+                     # Build output mass directory path for S+B fit results
+                     mass_dir = Path(outfolder) / f"{cat_name}_{era}" / run_mode_label / f"M{mass_str}"
 
-                    local_mass_dir = None
-                    for d in ee_input_dir.iterdir():
-                        if not d.is_dir():
-                            continue
-                        try:
-                            d_mass = float(d.name)
-                        except ValueError:
-                            continue
-                        if abs(d_mass - sel_mass) < 1e-9:
-                            local_mass_dir = d
-                            break
-                    if local_mass_dir is None:
-                        print(f"WARNING: Could not find local mass directory for M{mass_str} in {ee_input_dir}; skipping toy+fit plots for this mass point.")
-                        continue
+                     local_mass_dir = None
+                     for d in ee_input_dir.iterdir():
+                         if not d.is_dir():
+                             continue
+                         try:
+                             d_mass = float(d.name)
+                         except ValueError:
+                             continue
+                         if abs(d_mass - sel_mass) < 1e-9:
+                             local_mass_dir = d
+                             break
+                     if local_mass_dir is None:
+                         print(f"WARNING: Could not find local mass directory for M{mass_str} in {ee_input_dir}; skipping toy+fit plots for this mass point.")
+                         continue
 
-                    for truth_name in BKG_FUNCTION_NAMES.values():
-                        truth_label = BKG_FUNCTION_LABELS[truth_name]
+                     for truth_name in BKG_FUNCTION_NAMES.values():
+                         truth_label = BKG_FUNCTION_LABELS[truth_name]
 
-                        if abs(args.expectSignal) > 1e-12:
-                            toy_pattern = str(
-                                local_mass_dir
-                                / f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root"
-                            )
-                        else:
-                            toy_pattern = str(
-                                Path(bkg_fits_dir)
-                                / f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root"
-                            )
+                         if abs(args.expectSignal) > 1e-12:
+                             toy_pattern = str(
+                                 local_mass_dir
+                                 / f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root"
+                             )
+                         else:
+                             toy_pattern = str(
+                                 Path(bkg_fits_dir)
+                                 / f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root"
+                             )
 
-                        toy_file = latest_match(toy_pattern)
-                        if toy_file is None:
-                            continue
+                         toy_file = latest_match(toy_pattern)
+                         if toy_file is None:
+                             continue
 
-                        sb_files = []
-                        missing_inputs = False
-                        missing_details = []
-                        for fit_name in BKG_FUNCTION_NAMES.values():
-                            fit_label = BKG_FUNCTION_LABELS[fit_name]
-                            sb_file = (
-                                local_mass_dir
-                                / (
-                                    f"fitDiagnostics.toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt.root"
-                                )
-                            )
-                            if not sb_file.exists():
-                                missing_details.append(f"missing SB file: {sb_file}")
-                                missing_inputs = True
-                            if missing_inputs:
-                                break
-                            sb_files.append(str(sb_file))
+                         sb_files = []
+                         missing_inputs = False
+                         missing_details = []
+                         for fit_name in BKG_FUNCTION_NAMES.values():
+                             fit_label = BKG_FUNCTION_LABELS[fit_name]
+                             sb_file = (
+                                 local_mass_dir
+                                 / (
+                                     f"fitDiagnostics.toyfit_truth{truth_label}_fit{fit_label}_{cat_name}_{era}_{run_mode_label}_alt.root"
+                                 )
+                             )
+                             if not sb_file.exists():
+                                 missing_details.append(f"missing SB file: {sb_file}")
+                                 missing_inputs = True
+                             if missing_inputs:
+                                 break
+                             sb_files.append(str(sb_file))
 
-                        if missing_inputs:
-                            continue
+                         if missing_inputs:
+                             continue
 
-                        # print("DEBUG: for region", region, ", mass ", mass_str, ": toy files = ", toy_file, "SB files = ", sb_files)
+                         # print("DEBUG: for region", region, ", mass ", mass_str, ": toy files = ", toy_file, "SB files = ", sb_files)
 
-                        toy_plot_cmd = [
-                            "python3",
-                            f"{basedir}/scripts/utilities/plot_toy_fit.py",
-                            "--toy-file", str(toy_file),
-                            "--sb-files",
-                        ] + sb_files + [
-                            "--fit-labels", "Chebyshev", "Bernstein", "PolyExp",
-                            "--toy-index", "0",
-                            "--category", cat_name,
-                            "--era", era,
-                            "--region", region,
-                            "--mass", mass_str,
-                            "--truth-label", truth_label,
-                            "--run-label", run_mode_label,
-                            "-o", cat_out,
-                        ]
+                         toy_plot_cmd = [
+                             "python3",
+                             f"{basedir}/scripts/utilities/plot_toy_fit.py",
+                             "--toy-file", str(toy_file),
+                             "--sb-files",
+                         ] + sb_files + [
+                             "--fit-labels", *list(BKG_FUNCTION_LABELS.values()),
+                             "--toy-index", "0",
+                             "--category", cat_name,
+                             "--era", era,
+                             "--region", region,
+                             "--mass", mass_str,
+                             "--truth-label", truth_label,
+                             "--run-label", run_mode_label,
+                             "-o", cat_out,
+                         ]
 
-                        if args.fit_tag:
-                            toy_plot_cmd.extend(["--tag", args.fit_tag])
+                         if args.fit_tag:
+                             toy_plot_cmd.extend(["--tag", args.fit_tag])
 
-                        toy_plot_log = (
-                            f"{cat_out}/toy_fit_{region}_M{mass_str}_truth{truth_label}_{run_mode_label}{fit_tag_label}.log"
-                        )
-                        proc = subprocess.run(
-                            toy_plot_cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                        )
-                        output_text = proc.stdout if proc.stdout is not None else ""
-                        with open(toy_plot_log, "w") as f:
-                            f.write(output_text)
+                         toy_plot_log = (
+                             f"{cat_out}/toy_fit_{region}_M{mass_str}_truth{truth_label}_{run_mode_label}{fit_tag_label}.log"
+                         )
+                         proc = subprocess.run(
+                             toy_plot_cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT,
+                             text=True,
+                         )
+                         output_text = proc.stdout if proc.stdout is not None else ""
+                         with open(toy_plot_log, "w") as f:
+                             f.write(output_text)
 
-                        if proc.returncode == 0:
-                            print(
-                                f"Saved toy+fit plot for {cat_name} {era} {region} M{mass_str} truth {truth_label} "
-                                f"under {cat_out}"
-                            )
-                        else:
-                            print(
-                                f"Toy+fit plotting failed for {cat_name} {era} {region} M{mass_str} truth {truth_label}; "
-                                f"see {toy_plot_log}"
-                            )
+                         if proc.returncode == 0:
+                             print(
+                                 f"Saved toy+fit plot for {cat_name} {era} {region} M{mass_str} truth {truth_label} "
+                                 f"under {cat_out}"
+                             )
+                         else:
+                             print(
+                                 f"Toy+fit plotting failed for {cat_name} {era} {region} M{mass_str} truth {truth_label}; "
+                                 f"see {toy_plot_log}"
+                             )
 
         phase_durations["phase5_plots"] = time.perf_counter() - phase5_start
         print(f"PHASE 5 elapsed: {format_duration(phase_durations['phase5_plots'])}")
@@ -1376,7 +1576,7 @@ def main():
     print("=" * 80 + "\n")
     phase4_start = time.perf_counter()
 
-    sb_jobs = []
+    sb_subjobs = []
     for config_idx, config in enumerate(configs, 1):
         era = config["era"]
         region = config["region"]
@@ -1414,77 +1614,119 @@ def main():
                     continue
 
                 seed_job = successful_lookup[key]
-                sb_jobs.append(
-                    {
-                        "workdir": str(mass_dir.resolve()),
-                        "bkg_fits_dir": seed_job["bkg_fits_dir"],
-                        "root_file": root_file,
-                        "cat_name": cat_name,
-                        "era": era,
-                        "region": region,
-                        "mass": mass,
-                        "fit_tag_label": fit_tag_label,
-                        "fit_toys": args.n_toys,
-                        "outfolder": outfolder,
-                        "caching": args.caching,
-                        "expect_signal": args.expectSignal,
-                    }
-                )
+                bkg_fits_dir = seed_job["bkg_fits_dir"]
+                mass_dependent = abs(args.expectSignal) > 1e-12
 
-    print(f"Total S+B jobs queued: {len(sb_jobs)}")
+                # Resolve generated toys files once per truth model
+                toys_by_truth = {}
+                missing_toy = False
+                for truth_name in BKG_FUNCTION_NAMES.values():
+                    truth_label = BKG_FUNCTION_LABELS[truth_name]
+                    if mass_dependent:
+                        pattern = os.path.join(
+                            str(mass_dir.resolve()),
+                            f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root",
+                        )
+                    else:
+                        pattern = os.path.join(
+                            bkg_fits_dir,
+                            f"higgsCombine.toys_true{truth_label}_{cat_name}_{era}_{run_mode_label}.GenerateOnly.mH120.*.root",
+                        )
+                    candidates = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+                    if not candidates:
+                        missing_toy = True
+                        break
+                    toys_by_truth[truth_name] = os.path.abspath(candidates[0])
 
-    # Pre-check caching: separate jobs into cached and to_run
-    sb_cached_jobs = []
-    sb_jobs_to_run = []
-    for job in sb_jobs:
-        if is_sb_job_fully_cached(job):
-            sb_cached_jobs.append(job)
+                if missing_toy:
+                    continue
+
+                # Expand individual combinations into fine-grained subjobs
+                for truth_idx, truth_name in BKG_FUNCTION_NAMES.items():
+                    truth_label = BKG_FUNCTION_LABELS[truth_name]
+                    toys_file = toys_by_truth[truth_name]
+                    for fit_idx, fit_name in BKG_FUNCTION_NAMES.items():
+                        fit_label = BKG_FUNCTION_LABELS[fit_name]
+                        sb_subjobs.append(
+                            {
+                                "workdir": str(mass_dir.resolve()),
+                                "bkg_fits_dir": bkg_fits_dir,
+                                "root_file": root_file,
+                                "cat_name": cat_name,
+                                "era": era,
+                                "region": region,
+                                "mass": mass,
+                                "fit_tag_label": fit_tag_label,
+                                "fit_toys": args.n_toys,
+                                "outfolder": outfolder,
+                                "caching": args.caching,
+                                "expect_signal": args.expectSignal,
+                                "truth_idx": truth_idx,
+                                "truth_name": truth_name,
+                                "truth_label": truth_label,
+                                "fit_idx": fit_idx,
+                                "fit_name": fit_name,
+                                "fit_label": fit_label,
+                                "toys_file": toys_file,
+                                "single_toy_only": False,
+                            }
+                        )
+
+    print(f"Total S+B individual fit jobs queued: {len(sb_subjobs)}")
+
+    # Pre-check caching: separate subjobs into cached and to_run
+    sb_cached_subjobs = []
+    sb_subjobs_to_run = []
+    for subjob in sb_subjobs:
+        if is_sb_subjob_fully_cached(subjob):
+            sb_cached_subjobs.append(subjob)
         else:
-            sb_jobs_to_run.append(job)
+            sb_subjobs_to_run.append(subjob)
 
-    if sb_cached_jobs:
-        print(f"  {len(sb_cached_jobs)} jobs using cached results")
-    if sb_jobs_to_run:
-        print(f"  {len(sb_jobs_to_run)} jobs to compute")
+    if sb_cached_subjobs:
+        print(f"  {len(sb_cached_subjobs)} jobs using cached results")
+    if sb_subjobs_to_run:
+        print(f"  {len(sb_subjobs_to_run)} jobs to compute")
 
     sb_completed = 0
     sb_failed = 0
-    sb_cached = len(sb_cached_jobs)
+    sb_cached = len(sb_cached_subjobs)
     sb_toyplot_completed = 0
     sb_toyplot_failed = 0
     
-    if sb_jobs_to_run:
+    if sb_subjobs_to_run:
         with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-            futures = {executor.submit(run_sb_bias_fit_job, job): job for job in sb_jobs_to_run}
+            futures = {executor.submit(run_sb_single_fit_subjob, subjob): subjob for subjob in sb_subjobs_to_run}
             for future in as_completed(futures):
-                job = futures[future]
+                subjob = futures[future]
                 try:
                     success, msg = future.result()
                     if success:
                         sb_completed += 1
                         if sb_completed % 10 == 0:
-                            print(f"S+B progress: {sb_completed} completed, {sb_failed} failed (of {len(sb_jobs_to_run)})")
+                            print(f"S+B progress: {sb_completed} completed, {sb_failed} failed (of {len(sb_subjobs_to_run)})")
                     else:
                         sb_failed += 1
                         print(f"FAILED: {msg}")
                 except Exception as e:
                     sb_failed += 1
                     print(
-                        f"EXCEPTION: sb-fits {job['cat_name']} M{job['mass']} ({job['era']}, {job['region']}): {e}"
+                        f"EXCEPTION: sb-fit truth {subjob['truth_label']} fit {subjob['fit_label']} "
+                        f"{subjob['cat_name']} M{subjob['mass']} ({subjob['era']}, {subjob['region']}): {e}"
                     )
 
     # For fully cached jobs, still run the single-toy fit pass used by toy+S+B plotting.
-    if sb_cached_jobs:
-        sb_toyplot_jobs = []
-        for job in sb_cached_jobs:
-            toy_job = dict(job)
-            toy_job["single_toy_only"] = True
-            sb_toyplot_jobs.append(toy_job)
+    if sb_cached_subjobs:
+        sb_toyplot_subjobs = []
+        for subjob in sb_cached_subjobs:
+            toy_subjob = dict(subjob)
+            toy_subjob["single_toy_only"] = True
+            sb_toyplot_subjobs.append(toy_subjob)
 
         with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-            futures = {executor.submit(run_sb_bias_fit_job, job): job for job in sb_toyplot_jobs}
+            futures = {executor.submit(run_sb_single_fit_subjob, subjob): subjob for subjob in sb_toyplot_subjobs}
             for future in as_completed(futures):
-                job = futures[future]
+                subjob = futures[future]
                 try:
                     success, msg = future.result()
                     if success:
@@ -1495,11 +1737,12 @@ def main():
                 except Exception as e:
                     sb_toyplot_failed += 1
                     print(
-                        f"EXCEPTION: toyplot sb-fits {job['cat_name']} M{job['mass']} ({job['era']}, {job['region']}): {e}"
+                        f"EXCEPTION: toyplot sb-fit truth {subjob['truth_label']} fit {subjob['fit_label']} "
+                        f"{subjob['cat_name']} M{subjob['mass']} ({subjob['era']}, {subjob['region']}): {e}"
                     )
 
     print(f"\nS+B fit phase complete: {sb_completed} computed, {sb_cached} cached, {sb_failed} failed")
-    if sb_cached_jobs:
+    if sb_cached_subjobs:
         print(
             f"  Single-toy plotting fits on cached jobs: {sb_toyplot_completed} completed, {sb_toyplot_failed} failed"
         )
@@ -1524,7 +1767,7 @@ def main():
     print(f"  Processed {len(configs)} (era, region) combinations")
     print(f"  Phase 2 (B-only fits): {len(all_jobs)} jobs, {failed} failed")
     print(f"  Phase 3 (toy generation): {toys_completed + toys_failed} jobs, {toys_failed} failed")
-    print(f"  Phase 4 (S+B fits): {len(sb_jobs)} jobs ({sb_completed} computed, {sb_cached} cached, {sb_failed} failed)")
+    print(f"  Phase 4 (S+B fits): {len(sb_subjobs)} jobs ({sb_completed} computed, {sb_cached} cached, {sb_failed} failed)")
     print("=" * 80)
     print("TIMING SUMMARY")
     print(f"  Phase 1 (collect):   {format_duration(phase_durations['phase1_collect'])}")

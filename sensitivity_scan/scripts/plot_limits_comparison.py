@@ -16,7 +16,10 @@ parser.add_argument('-l', '--labels', type=str, nargs='*', default=[], help='Lab
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder')
 parser.add_argument('-r', '--region', type=str, nargs='+', default=['region1'], choices=["region0", "region1", "region2"], help='Mass region(s) (for labeling purposes)')
 parser.add_argument('-m', '--mu', action="store_true", help="Plot limits on mu rather than model-independent ones")
+parser.add_argument('--rescale_full', action='store_true', help='Rescale all limits to full luminosity')
+parser.add_argument('--rescale_muon_lumi', action='store_true', help='Rescale all limits to muon luminosity')
 parser.add_argument('--overlap', action="store_true", help="Load combined region file (limits_results_region0_region1_...) instead of separate files")
+parser.add_argument('--ratio', action='store_true', help='Add a bottom pad with the ratio of the first two limits')
 parser.add_argument('--tag', type=str, default='', help='Tag to append to output folder name')
 
 args = parser.parse_args()
@@ -79,6 +82,9 @@ else:
     input_folders = args.input_folders
     regions_expanded = regions * len(input_folders)
 
+if args.ratio and len(input_folders) != 2:
+    raise ValueError('--ratio requires exactly two input curves after region expansion')
+
 outfolder = args.output_folder
 os.makedirs(outfolder, exist_ok=True)
 
@@ -87,29 +93,42 @@ region_suffix = "_".join(args.region) if len(args.region) > 1 else args.region[0
 overlap_suffix = "_overlap" if args.overlap else ""
 
 branch_specs = [
-    (
-        "expected_50_indep_accept",
-        r"$\sigma(pp \to X) \cdot \mathrm{BR}(X \to ee) \cdot A \cdot \epsilon$ [pb]",
-        "indep_accept",
-    ),
+    # (
+    #     "expected_50_indep_accept",
+    #     r"$\sigma(pp \to X) \cdot \mathrm{BR}(X \to ee) \cdot A \cdot \epsilon$ [pb]",
+    #     "indep_accept",
+    # ),
     (
         "expected_50_indep",
         r"$\sigma(pp \to X) \cdot \mathrm{BR}(X \to ee) \cdot A$ [pb]",
         "indep",
     ),
-    (
-        "expected_50",
-        r"$\mu$",
-        "mu",
-    ),
+    # (
+    #     "expected_50",
+    #     r"$\mu$",
+    #     "mu",
+    # ),
 ]
 
 for branch, y_label, branch_suffix in branch_specs:
-    fig, ax = plt.subplots(figsize=(15 if len(regions) > 1 else 10, 10))
+    fig_width = 15 if len(regions) > 1 else 10
+    fig_height = 13.5 if args.ratio else 10
+    if args.ratio:
+        fig, (ax, ratio_ax) = plt.subplots(
+            2,
+            1,
+            figsize=(fig_width, fig_height),
+            sharex=True,
+            gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.05},
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     # Build 68% expected band keys matching the current branch variant.
     branch_low = branch.replace("expected_50", "expected_16", 1)
     branch_high = branch.replace("expected_50", "expected_84", 1)
+
+    curve_data = []
 
     for fit_tag, folder, label, region in zip(fit_tags, input_folders, labels, regions_expanded):
         fit_tag_label = "" if fit_tag == "" else f"_{fit_tag}"
@@ -128,6 +147,26 @@ for branch, y_label, branch_suffix in branch_specs:
         expected_16 = np.array([float(r_values[mass][branch_low]) for mass in sorted_keys])
         expected_84 = np.array([float(r_values[mass][branch_high]) for mass in sorted_keys])
 
+        if args.rescale_full:
+            lumi_rescale_factor = np.sqrt(58.6 / 6.68)
+            expected_50 /= lumi_rescale_factor
+            expected_16 /= lumi_rescale_factor
+            expected_84 /= lumi_rescale_factor
+        if args.rescale_muon_lumi:
+            expected_50 /= np.sqrt(175 / 58.6)
+            expected_16 /= np.sqrt(175 / 58.6)
+            expected_84 /= np.sqrt(175 / 58.6)
+
+        curve_data.append(
+            {
+                'label': label,
+                'masses': masses,
+                'expected_50': expected_50,
+                'expected_16': expected_16,
+                'expected_84': expected_84,
+            }
+        )
+
         (line,) = ax.plot(masses, expected_50, label=label, marker='o')
         ax.fill_between(
             masses,
@@ -138,8 +177,31 @@ for branch, y_label, branch_suffix in branch_specs:
             linewidth=0,
         )
 
+    if args.rescale_full:
+        ax.set_title("(rescaled to full luminosity)", pad = 40)
+
+    if args.ratio:
+        first_curve = curve_data[0]
+        second_curve = curve_data[1]
+
+        first_map = {float(mass): idx for idx, mass in enumerate(first_curve['masses'])}
+        second_map = {float(mass): idx for idx, mass in enumerate(second_curve['masses'])}
+        common_masses = sorted(set(first_map) & set(second_map))
+
+        if len(common_masses) == 0:
+            raise ValueError('No common mass points found for ratio plot')
+
+        ratio_50 = np.array([
+            first_curve['expected_50'][first_map[mass]] / second_curve['expected_50'][second_map[mass]]
+            for mass in common_masses
+        ])
+        ratio_ax.plot(common_masses, ratio_50, color='black', marker='o', label=f"{first_curve['label']} / {second_curve['label']}")
+        ratio_ax.axhline(1.0, color='gray', linestyle='--', linewidth=1)
+        ratio_ax.set_ylabel('Median ratio')
+        ratio_ax.legend(loc='best')
+        ratio_ax.set_xlabel('M(X) [GeV]')
+
     ax.set_yscale('log')
-    ax.set_xlabel('M(X) [GeV]')
     ax.set_ylabel(y_label)
     hep.cms.label(
         "Preliminary",
@@ -151,6 +213,9 @@ for branch, y_label, branch_suffix in branch_specs:
     )
     ax.legend()
 
+    if not args.ratio:
+        ax.set_xlabel('M(X) [GeV]')
+
     for ext in ['png', 'pdf']:
-        plt.savefig(os.path.join(outfolder, f'limits_comparison_{branch_suffix}_{region_suffix}{overlap_suffix}{tag}.{ext}'))
+        fig.savefig(os.path.join(outfolder, f'limits_comparison_{branch_suffix}_{region_suffix}{overlap_suffix}{tag}.{ext}'))
     plt.close(fig)

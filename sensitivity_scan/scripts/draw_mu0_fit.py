@@ -29,8 +29,17 @@ for arg in vars(args):
 # now retrieve RooRealVar to plot from other workspace
 f1 = ROOT.TFile.Open(args.input, "READ")
 m = f1.Get("w").var("mass")
+
 m_min = m.getMin()
 m_max = m.getMax()
+
+# sigma_mass = 0.025
+# if args.mass > 2.0:
+#     sigma_mass = 0.07
+# if args.mass > 7.1:
+#     sigma_mass = 0.1    
+# m_min, m_max = args.mass - sigma_mass*3, args.mass + sigma_mass*2
+
 print(f"Mass range: {m_min} - {m_max}")
 
 lumi = 6.68
@@ -73,18 +82,18 @@ region_config = {
         # "bkg_labels": ["Non-resonant", "#phi", "#omega", "#eta"],
         # "all_labels": ["#phi", "#omega", "#eta", "Non-resonant", "Signal", "Total S+B"]
         "resonant_bkgs": ["phi", "omega"],
-        "bkg_labels": ["Non-resonant", "#phi", "#omega"],
-        "all_labels": ["#phi", "#omega", "Non-resonant", "Signal", "Total S+B"]
+        "bkg_labels": ["Nonresonant", "#phi", "#omega"],
+        "all_labels": ["#phi", "#omega", "Nonresonant", "Signal", "Total S+B"]
     },
     "region1": {
         "resonant_bkgs": ["jpsi", "psi2s"],
-        "bkg_labels": ["Non-resonant", "J/#psi", "#psi(2S)"],
-        "all_labels": ["J/#psi", "#psi(2S)", "Non-resonant", "Signal", "Total S+B"]
+        "bkg_labels": ["Nonresonant", "J/#psi", "#psi(2S)"],
+        "all_labels": ["J/#psi", "#psi(2S)", "Nonresonant", "Signal", "Total S+B"]
     },
     "region2": {
-        "resonant_bkgs": ["upsilon1s"],
-        "bkg_labels": ["Non-resonant", "#Upsilon(1S)"],
-        "all_labels": ["#Upsilon(1S)", "Non-resonant", "Signal", "Total S+B"]
+        "resonant_bkgs": ["upsilon1s", "upsilon2s"],
+        "bkg_labels": ["Nonresonant", "#Upsilon(1S)", "#Upsilon(2S)"],
+        "all_labels": ["#Upsilon(1S)", "#Upsilon(2S)" "Nonresonant", "Signal", "Total S+B"]
     }
 }
 
@@ -95,19 +104,47 @@ region_config = {
 #         region_config[region]["bkg_labels"] = ["Non-resonant"]
 #         region_config[region]["all_labels"] = ["Non-resonant", "Signal", "Total S+B"]
 
-resonant_bkgs = region_config[args.region]["resonant_bkgs"]
-all_bkgs = ["dy"] + resonant_bkgs + ["total_background"]
-bkg_components = ["dy"] + resonant_bkgs
-bkg_component_labels = region_config[args.region]["bkg_labels"]
+# Label mapping for background/signal components
+component_labels = {
+    "dy": "Nonresonant",
+    "phi": "#phi",
+    "omega": "#omega",
+    "eta": "#eta",
+    "jpsi": "J/#psi",
+    "psi2s": "#psi(2S)",
+    "upsilon1s": "#Upsilon(1S)",
+    "upsilon2s": "#Upsilon(2S)",
+    "Zd": "Signal",
+    "total": "Total S+B",
+    "total_background": "Total B Fit",
+}
+
+candidate_resonant_bkgs = region_config[args.region]["resonant_bkgs"]
+candidate_all_bkgs = ["dy"] + candidate_resonant_bkgs + ["total_background"]
 
 # Build channel name based on era
 channel_name = f"Xee_ee_{cat_id}_{era}"
 
-for bkg_name in all_bkgs:
-    print(f'DEBUG: {f2.Get("norm_fit_b").selectByName(f"{channel_name}/{bkg_name}").first()}')
+norm_fit_b = f2.Get("norm_fit_b")
+shapes_dir_b = f2.Get(f"shapes_fit_b/{channel_name}")
 
-bkgs = {bkg_name : f2.Get(f"shapes_fit_b/{channel_name}/{bkg_name}") for bkg_name in all_bkgs}
-bkg_norms = {bkg_name : f2.Get("norm_fit_b").selectByName(f"{channel_name}/{bkg_name}").first().getValV() for bkg_name in all_bkgs}
+all_bkgs = []
+bkgs = {}
+bkg_norms = {}
+
+for bkg_name in candidate_all_bkgs:
+    obj = f2.Get(f"shapes_fit_b/{channel_name}/{bkg_name}")
+    norm_obj = norm_fit_b.selectByName(f"{channel_name}/{bkg_name}").first() if norm_fit_b else None
+    if obj and norm_obj:
+        print(f'DEBUG: Found {channel_name}/{bkg_name} in fit_b: {norm_obj.getValV():.1f}')
+        all_bkgs.append(bkg_name)
+        bkgs[bkg_name] = obj
+        bkg_norms[bkg_name] = norm_obj.getValV()
+    else:
+        print(f'DEBUG: {channel_name}/{bkg_name} not present in fit_b (skipped)')
+
+bkg_components = [b for b in all_bkgs if b != "total_background"]
+bkg_component_labels = [component_labels.get(b, b) for b in bkg_components]
 
 
 # draw
@@ -120,16 +157,19 @@ c.Divide(1, 2)
 c.cd(1)
 ROOT.gPad.SetPad(0, 0.3, 1, 1)
 ROOT.gPad.SetBottomMargin(0.001)
-ROOT.gPad.SetGrid()
+# ROOT.gPad.SetGrid()
 c.cd(2)
 # ROOT.gPad.SetTopMargin(0)
 ROOT.gPad.SetPad(0, 0, 1, 0.3)
-ROOT.gPad.SetGrid()
+# ROOT.gPad.SetGrid()
 
 c.cd(1)
+
+m.setUnit("GeV")
 frame = m.frame(m_min, m_max)
 frame.SetTitle("")
 frame.GetXaxis().SetTitle("m(ee) [GeV]")
+frame.GetYaxis().SetTitle(f"Events / {round(bkgs['total_background'].GetBinWidth(1), 4)} GeV")
 
 dataset.plotOn(frame, ROOT.RooFit.DataError(error_type), ROOT.RooFit.MarkerSize(0.5))
 
@@ -204,7 +244,7 @@ legend.SetFillStyle(0)
 legend.SetBorderSize(0)
 legend.SetTextSize(0.03)
 legend.AddEntry(dataset, "Data", "p")
-legend.AddEntry(bkgs["total_background"], f"#splitline{{Total B Fit = {bkg_norms['total_background']:.0f}}}{{chi2/ndof = {chi2:.2f} / {(bkgs['total_background'].GetNbinsX() - 1 - n_free_params):.0f} = {reduced_chi2:.2f}}}", "l")
+legend.AddEntry(bkgs["total_background"], f"#splitline{{Total B Fit = {bkg_norms['total_background']:.0f}}}{{#chi^2/ndof = {chi2:.2f} / {(bkgs['total_background'].GetNbinsX() - 1 - n_free_params):.0f} = {reduced_chi2:.2f}}}", "l")
 for bkg_label, (bkg_name, bkg_norm) in zip(bkg_component_labels, bkg_norms.items()):
     legend.AddEntry(bkgs[bkg_name], f"{bkg_label} bkg = {bkg_norm:.0f}", "l")
 # legend.AddEntry(dy_bkg, f"DY bkg = {dy_n:.0f}", "l")
@@ -233,7 +273,7 @@ latex_prelim.DrawLatex(0.18, 0.92, "Preliminary")
 
 # Luminosity and energy label (top right)
 latex.SetTextAlign(31)  # Right align
-latex.DrawLatex(0.91, 0.92, f"{lumi:.2f}" + " fb^{-1} (13.6 TeV)")
+latex.DrawLatex(0.91, 0.92, f"{lumi:.2f}" + " fb^{#font[122]{\55}1} (13.6 TeV)")
 
 # if args.region == "region1":
 #     frame.SetMinimum(8e2)
@@ -305,10 +345,32 @@ line.Draw("same")
 for ext in ['png', 'pdf']:
     c.SaveAs(os.path.join(args.output_folder, "b", f"mu0_fit_b_M{args.mass:.1f}{tag_label}.{ext}"))
 
-all_funcs = resonant_bkgs + ["dy", "Zd", "total"]
-all_distros = {name: f2.Get(f"shapes_fit_s/{channel_name}/{name}") for name in all_funcs}
-all_norms = {name: f2.Get("norm_fit_s").selectByName(f"{channel_name}/{name}").first().getValV() for name in all_funcs}
-all_distro_labels = region_config[args.region]["all_labels"]
+candidate_all_funcs = candidate_resonant_bkgs + ["dy", "Zd", "total"]
+
+norm_fit_s = f2.Get("norm_fit_s")
+all_funcs = []
+all_distros = {}
+all_norms = {}
+
+for name in candidate_all_funcs:
+    obj = f2.Get(f"shapes_fit_s/{channel_name}/{name}")
+    norm_obj = norm_fit_s.selectByName(f"{channel_name}/{name}").first() if norm_fit_s else None
+    if obj and norm_obj:
+        print(f'DEBUG: Found {channel_name}/{name} in fit_s: {norm_obj.getValV():.1f}')
+        all_funcs.append(name)
+        all_distros[name] = obj
+        all_norms[name] = norm_obj.getValV()
+    else:
+        print(f'DEBUG: {channel_name}/{name} not present in fit_s (skipped)')
+
+all_distro_labels = [component_labels.get(name, name) for name in all_funcs]
+# extract best fit r from tree_fit_sb tree in f2
+fit_tree = f2.Get("tree_fit_sb")
+fit_tree.GetEntry(0)
+signal_r = fit_tree.r
+signal_rHiErr = fit_tree.rHiErr
+signal_rLoErr = fit_tree.rLoErr
+print(f"DEBUG: signal_r = {signal_r}, signal_rHiErr = {signal_rHiErr}, signal_rLoErr = {signal_rLoErr}")
 
 # total_distro = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/total")
 # dy_bkg = f2.Get(f"shapes_fit_s/Xee_ee_{cat_id}_2023/dy")
@@ -337,11 +399,20 @@ ROOT.gPad.SetGrid()
 
 c2.cd(1)
 
-frame = m.frame(m_min, m_max)
-frame.SetTitle("")
-frame.GetXaxis().SetTitle("m(ee) [GeV]")
+# m.setUnit("GeV")
+n_bins_fit = all_distros["total"].GetNbinsX()
 
-dataset.plotOn(frame, ROOT.RooFit.DataError(error_type), ROOT.RooFit.MarkerSize(0.5))
+# Force the frame to use the exact number of bins from the fit
+frame = m.frame(
+    ROOT.RooFit.Range(m_min, m_max), ROOT.RooFit.Bins(n_bins_fit)
+)
+# frame = m.frame(m_min, m_max)
+
+frame.SetTitle("") 
+frame.GetXaxis().SetTitle("m(ee) [GeV]")
+# frame.GetYaxis().SetTitle("Events / 6 MeV");
+
+dataset.plotOn(frame, ROOT.RooFit.DataError(error_type), ROOT.RooFit.MarkerSize(0.5), ROOT.RooFit.Binning(n_bins_fit))
 
 frame.Draw()
 ROOT.gPad.SetLogy()
@@ -415,9 +486,9 @@ frame.SetMaximum(data_h.GetMaximum() * 5)
 
 # Make legend
 xmin = 0.5 if args.region == "region0" else 0.535 # if args.region == "region1" else 0.2
-ymin = 0.15 if args.region == "region0" else 0.6 # if args.region == "region1" else 0.2
+ymin = 0.15 if args.region == "region0" else 0.5 # if args.region == "region1" else 0.2
 # yheight = 0.25 if args.region == "region1" else 0.35
-yheight = 0.35 if args.region == "region0" else 0.25
+yheight = 0.35 if args.region == "region0" else 0.35
 legend = ROOT.TLegend(xmin, ymin, xmin + 0.3, ymin + yheight)
 legend.SetFillStyle(0)
 legend.SetBorderSize(0)
@@ -426,7 +497,10 @@ legend.AddEntry(dataset, "Data", "p")
 legend.AddEntry(all_distros["total"], f"#splitline{{Total S+B Fit = {all_norms['total']:.0f}}}{{chi2/ndof = {chi2:.2f} / {(all_distros['total'].GetNbinsX() - 1 - n_free_params):.0f} = {reduced_chi2:.2f}}}", "l")
 for distro_label, (distro_name, norm) in zip(all_distro_labels, all_norms.items()):
     if distro_name != "total":
-        legend.AddEntry(all_distros[distro_name], f"{distro_label} = {norm:.0f}", "l")
+        if distro_label == "Signal":
+            legend.AddEntry(all_distros[distro_name], f"#splitline{{{distro_label} = {norm:.0f}}}{{(r = {signal_r:.2g} +{signal_rHiErr:.2g}/-{signal_rLoErr:.2g})}}", "l")
+        else:
+            legend.AddEntry(all_distros[distro_name], f"{distro_label} = {norm:.0f}", "l")
 # legend.AddEntry(dy_bkg, f"DY bkg = {dy_n:.0f}", "l")
 # legend.AddEntry(jpsi_bkg, f"J/psi bkg = {jpsi_n:.0f}", "l")
 # legend.AddEntry(psi2s_bkg, f"psi(2S) bkg = {psi2s_n:.0f}", "l")
@@ -454,7 +528,7 @@ latex_prelim2.DrawLatex(0.20, 0.91, "Preliminary")
 
 # Luminosity and energy label (top right)
 latex2.SetTextAlign(31)  # Right align
-latex2.DrawLatex(0.90, 0.91, f"{lumi:.2f}" + " fb^{-1} (13.6 TeV)")
+latex2.DrawLatex(0.90, 0.91, f"{lumi:.2f}" + " fb^{#font[122]{\55}1} (13.6 TeV)")
 
 c2.cd(2)
 # compute pulls
@@ -500,7 +574,7 @@ line.SetLineStyle(2)
 line.Draw("same")
 
 for ext in ['png', 'pdf']:
-    c2.SaveAs(os.path.join(args.output_folder, "s", f"mu0_fit_s_M{args.mass:.1f}{tag_label}.{ext}"))
+    c2.SaveAs(os.path.join(args.output_folder, "s", "bernstein", f"mu0_fit_s_M{args.mass:.1f}{tag_label}.{ext}"))
 
 # CLOSE ALL FILES
 f1.Close()

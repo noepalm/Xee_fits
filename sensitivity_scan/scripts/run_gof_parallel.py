@@ -62,8 +62,10 @@ def get_mass_range(region):
     # }
     ranges = {
         "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-        "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
-        "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+        # "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+        "region1": {"min": 2.0, "min_limit": 2.2, "max": 7.0, "max_limit": 6.5},
+        # "region2": {"min": 6.0, "min_limit": 5.5, "max": 15.0, "max_limit": 14.5}, 
+        "region2": {"min": 6.0, "min_limit": 5.5, "max": 12.0, "max_limit": 11.0}, 
     }
     return ranges.get(region, {})
 

@@ -12,12 +12,59 @@ import ROOT
 DEFAULT_ERAS = ["allYears", "2022", "2022EE", "2023", "2023BPix"]
 REGIONS = ["region0", "region1", "region2"]
 
+lumis = {
+    "allYears": 58.6,
+    "2022" : 7.73,
+    "2022EE" : 26.62,
+    "2023" : 14.54,
+    "2023BPix" : 9.68,
+}
+
+
+eras = ["2022", "2022EE", "2023", "2023BPix"]
+
+# 1. Parameter ranges [0, 10] separated by colons
+param_ranges = ":".join(
+    [f"t{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+    + [f"a{i}_{era}_envelope=0,10" for i in range(15) for era in eras]
+)
+
+# 2. Initial values (low orders = 0.001, higher orders = 0)
+set_params = ",".join(
+    [f"t{i}_{era}_envelope=0.001" for i in range(2) for era in eras]
+    + [f"t{i}_{era}_envelope=0" for i in range(2, 15) for era in eras]
+    + [f"a{i}_{era}_envelope=0.001" for i in range(3) for era in eras]
+    + [f"a{i}_{era}_envelope=0" for i in range(3, 15) for era in eras]
+    + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}=1" for era in eras]
+)
+
+# 3. Freeze higher orders
+freeze_params = ",".join(
+    [f"t{i}_{era}_envelope" for i in range(2, 15) for era in eras]
+    + [f"a{i}_{era}_envelope" for i in range(3, 15) for era in eras]
+    + [f"CMS_EXO25020_bkgEnvelopeIdx_{era}" for era in eras]
+)
+
 # Add global extra options here (example values shown but commented out):
 COMMON_EXTRA_ARGS = [
     # "--setParameters", "signal_model_index_2023=0,signal_model_index_2022=0,signal_model_index_2022EE=0,signal_model_index_2023BPix=0,pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0",
     # "--freezeParameters", "signal_model_index_2023,signal_model_index_2022,signal_model_index_2022EE,signal_model_index_2023BPix,pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope",
-    "--setParameters", "pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0",
-    "--freezeParameters", "pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope",
+    # 
+    # "--setParameters", "pdf_index_2022_envelope=0,pdf_index_2022EE_envelope=0,pdf_index_2023_envelope=0,pdf_index_2023BPix_envelope=0",
+    # "--freezeParameters", "pdf_index_2022_envelope,pdf_index_2022EE_envelope,pdf_index_2023_envelope,pdf_index_2023BPix_envelope",
+    #
+    # "--setParameters", ",".join([f"pdf_index_{year}_envelope=0,CMS_EXO25020_bkgEnvelopeIdx_{year}=0" for year in ["2022", "2022EE", "2023", "2023BPix"]]),
+    # "--freezeParameters", ",".join([f"pdf_index_{year}_envelope,CMS_EXO25020_bkgEnvelopeIdx_{year}" for year in ["2022", "2022EE", "2023", "2023BPix"]]),
+    # 
+    "--cminDefaultMinimizerStrategy", "0",
+    # "--freezeParameters", "CMS_scale_e",
+    # "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+    # "--cminRunAllDiscreteCombinations",
+
+    ### for sliding window test
+    # "--setParameters", set_params,
+    # "--setParameterRanges", param_ranges,
+    # "--freezeParameters", freeze_params,
 ]
 
 def cmd_to_string(cmd: list[str]) -> str:
@@ -50,7 +97,7 @@ def cards_folder(folder_tag: str, fit_tag: str, region: str, mass: str) -> str:
 def outfolder(folder_tag: str, fit_tag: str) -> Path:
     return Path(
         f"/eos/home-n/npalmeri/www/DiElectron/sensitivity/{folder_tag}"
-        f"/fitDiagnostics_grid_data_envelope_{fit_tag}_binned/mu0/pvalue"
+        f"/fitDiagnostics_grid_data_envelope_{fit_tag}_binned/mu0/pvalue" #/lowOrders
     )
 
 
@@ -97,26 +144,14 @@ def _run_point(
 
     input_name = input_name_for_era(input_template, era)
     base_args = [
-        "combine",
-        "-M",
-        "Significance",
-        "-d",
-        input_name,
-        "--cminDefaultMinimizerStrategy",
-        "0",
-        "--redefineSignalPOIs",
-        "r",
-        "--rMin",
-        f"{r_range[0]}",
-        "--rMax",
-        f"{r_range[1]}",
-        "--cminDefaultMinimizerTolerance",
-        "0.0001",  # needed for Asimov; variations are too small
-        "--pvalue",
-        "-n",
-        f".{combine_tag}",
-        "-v",
-        "0",
+        "combine", "-M", "Significance",
+        "-d", input_name,
+        "--redefineSignalPOIs", "r",
+        "--rMin", f"{r_range[0]}", "--rMax", f"{r_range[1]}",
+        # "--cminDefaultMinimizerTolerance", "0.0001",  # needed for Asimov; variations are too small
+        "--pvalue", 
+        "-n", f".{combine_tag}", 
+        "-v", "0",
         *COMMON_EXTRA_ARGS,
     ]
 
@@ -211,13 +246,16 @@ def main() -> None:
             args.input_name_template,
             r_range,
         )
+        print(f"[{era}] Found {len(points)} mass points to compute.")
         if not points:
-            print(f"Warning: no mass points found for era {era}")
             continue
 
         combine_tag = build_mode_tag(mode, args.expect_signal)
+        print(f"Launching {len(points)} jobs on {args.nproc} workers...")
+
+        completed = 0
         with ThreadPoolExecutor(max_workers=args.nproc) as executor:
-            futures = [
+            futures = {
                 executor.submit(
                     _run_point,
                     args.folder_tag,
@@ -230,11 +268,17 @@ def main() -> None:
                     mass,
                     r_range,
                     combine_tag,
-                )
+                ): (region, mass)
                 for region, mass, r_range in points
-            ]
+            }
             for future in as_completed(futures):
-                future.result()
+                region, mass = futures[future]
+                completed += 1
+                try:
+                    future.result()
+                    print(f"[{completed}/{len(points)}] Done: {region} M{mass}")
+                except Exception as e:
+                    print(f"[{completed}/{len(points)}] FAILED: {region} M{mass} -> {e}")
 
         # harvest step: take p-value from each processed mass and save them to pickle
         pvalues = []
@@ -258,6 +302,7 @@ def main() -> None:
             pvalue = tree.limit
             pvalues.append(pvalue)
             masses.append(float(mass))
+            infile.Close()
 
         pvalues = np.array(pvalues)
         masses = np.array(masses)
@@ -280,6 +325,8 @@ def main() -> None:
                 str(output_dir),
                 "--out-tag",
                 plot_tag,
+                "--lumi",
+                str(lumis[era]),
             ]
             run_command(plot_cmd, cwd=str(Path(__file__).resolve().parent))
 

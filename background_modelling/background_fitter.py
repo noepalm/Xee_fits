@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
+import random
+import time
 
 from background_config import BackgroundModelConfig, FitRegion, BackgroundFunction
 from shared_config import CategoryConfig
@@ -200,10 +202,13 @@ class BackgroundFitter:
                 continue
             print(f"  Creating {func_config.display_name}...")
             
-            if func_config.name == "bkg_f0":
-                # Bernstein polynomial
+            if func_config.name in ["bkg_f0", "bkg_f9", "bkg_f10", "bkg_f11", "bkg_f18", "bkg_f19", "bkg_f20", "bkg_f21", "bkg_f22", "bkg_f23", "bkg_f29", "bkg_f30"]:
+                # Bernstein polynomial (different degrees)
                 self._create_bernstein_function(func_config)
-            elif func_config.name == "bkg_f1":
+            elif func_config.name in ["bkg_f4", "bkg_f7", "bkg_f8", "bkg_f24", "bkg_f25", "bkg_f26", "bkg_f27", "bkg_f28", "bkg_f31", "bkg_f32", "bkg_f33"]:
+                # Chebyshev polynomial
+                self._create_chebyshev_function(func_config)
+            elif func_config.name in ["bkg_f1", "bkg_f12", "bkg_f13", "bkg_f14"]:
                 # Polynomial × Exponential
                 self._create_poly_exp_function(func_config)
             elif func_config.name == "bkg_f2":
@@ -212,39 +217,12 @@ class BackgroundFitter:
             elif func_config.name == "bkg_f3":
                 # Simple exponential
                 self._create_simple_exp_function(func_config)
-            elif func_config.name == "bkg_f4":
-                # Chebyshev polynomial
-                self._create_chebyshev_function(func_config)
             elif func_config.name == "bkg_f5":
                 # Bernstein + exponential
                 self._create_bernstein_exp_function(func_config)
             elif func_config.name == "bkg_f6":
                 # modified BW
                 self._create_modified_bw(func_config)
-            elif func_config.name == "bkg_f7":
-                # 6th deg Chebyshev
-                self._create_chebyshev_function(func_config)
-            elif func_config.name == "bkg_f8":
-                # 4th deg Chebyshev
-                self._create_chebyshev_function(func_config)
-            elif func_config.name == "bkg_f9":
-                # 4th deg bernstein
-                self._create_bernstein_function(func_config)
-            elif func_config.name == "bkg_f10":
-                # 5th deg bernstein
-                self._create_bernstein_function(func_config)
-            elif func_config.name == "bkg_f11":
-                # 6th deg bernstein
-                self._create_bernstein_function(func_config)
-            elif func_config.name == "bkg_f12":
-                # Polynomial × Exponential, 4th deg
-                self._create_poly_exp_function(func_config)
-            elif func_config.name == "bkg_f13":
-                # Polynomial × Exponential, 6th deg
-                self._create_poly_exp_function(func_config)
-            elif func_config.name == "bkg_f14":
-                # Polynomial × Exponential, 7th deg
-                self._create_poly_exp_function(func_config)
             elif func_config.name == "bkg_f15":
                 # expoenntial of polynomial, 4th deg
                 self._create_exppoly_function(func_config)
@@ -252,7 +230,7 @@ class BackgroundFitter:
                 # Dijet function
                 self._create_dijet_function(func_config)
             elif func_config.name == "bkg_f17":
-                # Dijet function
+                # chebyshev times fermi
                 self._create_chebyshev_times_fermi(func_config)
                 
     def _create_bernstein_function(self, func_config: BackgroundFunction):
@@ -401,6 +379,7 @@ class BackgroundFitter:
         # Create function
         func = ROOT.RooChebychev(f"{func_config.name}{self.category.label}_{self.era}",
                                  f"{func_config.name}{self.category.label}_{self.era}", self.mass_var, param_list)
+        self.background_functions[func_config.name] = func
         
     def _create_chebyshev_times_fermi(self, func_config: BackgroundFunction):
         """Create Chebyshev polynomial function modulated by a Fermi turn-on"""
@@ -544,15 +523,19 @@ class BackgroundFitter:
                 
                 # Set reasonable limits based on parameter type
                 if "mean" in param_name:
-                    limits = (init_val * 0.95, init_val * 1.05)
+                    # limits = (init_val * 0.95, init_val * 1.05)
+                    limits = (init_val * 0.98, init_val * 1.02)
                 elif "sigma" in param_name:
                     # limits = (0.01, 0.2)
                     limits = (init_val * 0.1, init_val * 3) #0.5,2
+                    # limits = (init_val * 0.5, init_val * 2) #0.5,2
                 elif param_name in ["alphaL", "alphaR"]:
                     # limits = (0.1, 10)
                     limits = (init_val * 0.5, init_val * 2)
+                    # limits = (init_val * 0.25, init_val * 8)
                 elif param_name in ["nL", "nR"]:
-                    limits = (0.01, 50)
+                    # limits = (3, 50)
+                    limits = (0.1, 50)
                     # limits = (init_val * 0.5, init_val * 2)
                 else:
                     limits = (0.1, 10)
@@ -599,7 +582,7 @@ class BackgroundFitter:
                 sigma_core = self.workspace.obj(sigma_core_name)
 
                 frac_name = f"{model_name}_core_frac{self.category.label}_{self.era}"
-                core_frac = ROOT.RooRealVar(frac_name, frac_name, 0.0, 0.0, 1.0)
+                core_frac = ROOT.RooRealVar(frac_name, frac_name, 0.6, 0.0, 1.0)
                 self.workspace.Import(core_frac, ROOT.RooCmdArg())
                 core_frac = self.workspace.obj(frac_name)
 
@@ -784,30 +767,380 @@ class BackgroundFitter:
         prefit_values = {}
         params = self.combined_model.getParameters(self.data)
         for param in params:
-            prefit_values[param.GetName()] = param.getValV()
+            prefit_values[param.GetName()] = param.getValV()            
 
-        # # DEBUG: set resonant bkg params to +-inf
-        # for resonant_bkg in self.resonant_backgrounds.values():
-        #     res_params = resonant_bkg.getParameters(self.data)
-        #     for param in res_params:
-        #         param.setRange(0, 1000)
-            
         print("DEBUG: fitting combined model", flush = True)
         print(f"DEBUG: data entries = {self.data.sumEntries()}", flush = True)
         print(f"DEBUG: normalizations:", flush = True)
         for norm_name in self.config.normalization_settings['background_components'].keys():
             print(f"  {norm_name}: {self.workspace.obj(f'{norm_name}{self.category.label}_{self.era}').getValV()}", flush = True)
 
-        # Perform fit
-        fit_result_obj = self.combined_model.fitTo(self.data,
-                                                 ROOT.RooFit.Range(fit_region.name),
-                                                 ROOT.RooFit.Save(),
-                                                 ROOT.RooFit.NumCPU(8),
-                                                 ROOT.RooFit.SumW2Error(True))
+        # Setup fit arguments dynamically for easy commenting/iteration
+        fit_args = [
+            ROOT.RooFit.Range(fit_region.name),
+            ROOT.RooFit.Save(),
+            ROOT.RooFit.NumCPU(8),
+            ROOT.RooFit.SumW2Error(True),
+            ROOT.RooFit.Verbose(False),
+            ROOT.RooFit.PrintLevel(-1),
+            ROOT.RooFit.Warnings(False),
+            ROOT.RooFit.PrintEvalErrors(-1),
+        ]
+
+        # constraint_pdfs = ROOT.RooArgSet()
+        # constraint_objs = []
+
+        # # Do fit (OLD COMMAND)
+        # fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+
+        # # =========================================================================
+        # # START: OPTIONAL GAUSSIAN CONSTRAINTS FOR RESONANT TAILS
+        # # =========================================================================
+        # # Set to False to quickly disable all constraints below
+        # use_constraints = True
         
+        # constraint_pdfs = ROOT.RooArgSet()
+        # constraint_objects = [] # Prevents PyROOT garbage collector from deleting PDFs
+        
+        # if use_constraints:
+        #     print("DEBUG: Building Gaussian constraints for resonant tail parameters", flush=True)
+        #     for res_name, res_model in self.resonant_backgrounds.items():
+                
+        #         if not any(res in res_name for res in ["upsilon1s", "upsilon2s", "omega", "phi"]):
+        #             continue  # Only apply constraints to Upsilon1S/2S and omega, phi
+
+        #         res_params = res_model.getParameters(self.data)
+                
+        #         for param in res_params:
+        #             p_name = param.GetName()
+                    
+        #             # Target tail parameters (alphaL, alphaR, nL, nR)
+        #             if not param.isConstant() and any(tail in p_name for tail in ["alpha", "nL", "nR"]):
+
+        #                 # for omega, phi: only constrain nL/nR
+        #                 if res_name in ["omega", "phi"] and "alpha" in p_name:
+        #                     continue
+                        
+        #                 # 1. Use the current value (from the prompt fit) as the target
+        #                 central_val = 1 if "alpha" in p_name else 10  # Default central value for nL/nR
+                        
+        #                 # 2. Define the sigma (pull strength). Tune these as needed!
+        #                 if "alpha" in p_name:
+        #                     sigma_val = 0.1  # Absolute width for alpha
+        #                 else:
+        #                     sigma_val = 1.0  # Absolute width for n
+                            
+        #                 # Create RooConstVars for mean and sigma
+        #                 mean_var = ROOT.RooConstVar(f"{p_name}_target", f"Target for {p_name}", central_val)
+        #                 sigma_var = ROOT.RooConstVar(f"{p_name}_sigma", f"Sigma for {p_name}", sigma_val)
+                        
+        #                 # Create the Gaussian constraint PDF
+        #                 constraint = ROOT.RooGaussian(
+        #                     f"{p_name}_constraint", f"Constraint on {p_name}",
+        #                     param, mean_var, sigma_var
+        #                 )
+                        
+        #                 constraint_pdfs.add(constraint)
+        #                 constraint_objects.extend([mean_var, sigma_var, constraint])
+                        
+        #                 print(f"  Added constraint for {p_name}: mean = {central_val:.3f}, sigma = {sigma_val:.3f}")
+        # # =========================================================================
+        # # END: GAUSSIAN CONSTRAINTS BLOCK
+        # # =========================================================================        
+
+        # # Inject constraints if they were created
+        # if use_constraints and constraint_pdfs.getSize() > 0:
+        #     fit_args.append(ROOT.RooFit.ExternalConstraints(constraint_pdfs))
+
+
+        # # =========================================================================
+        # # START: ITERATIVE TWO-STEP FIT (REGION 0 ONLY)
+        # # =========================================================================
+        # # Toggle this to quickly enable/disable the iterative approach
+        # use_iterative_fit = False
+        # max_iterations = 30
+        # nll_threshold = 0.01
+        # chi2_threshold = 2.0 #refers to chi2/ndf
+        
+        # if use_iterative_fit and fit_region.name == "region0":
+        #     print("DEBUG: Executing iterative two-step fit for region 0", flush=True)
+            
+        #     all_params = self.combined_model.getParameters(self.data)
+            
+        #     # 1. Catalog initially floating parameters so we don't unfreeze fixed tails
+        #     floating_res = []
+        #     floating_nonres = []
+            
+        #     # Simple string matching to separate them based on resonant names (e.g. 'omega', 'phi')
+        #     res_prefixes = list(self.resonant_backgrounds.keys())
+            
+        #     for param in all_params:
+        #         if param.isConstant():
+        #             continue
+        #         # also exclude normalization parameters (ndy, njpsi, npsi2s, etc.)
+        #         if any (norm in param.GetName() for norm in ["ndy", "njpsi", "npsi2s", "nphi", "nomega", "nupsilon1s", "nupsilon2s"]):
+        #             continue
+                    
+        #         p_name = param.GetName()
+        #         is_res_param = any(res in p_name for res in res_prefixes)
+                
+        #         if is_res_param:
+        #             floating_res.append(param)
+        #         else:
+        #             floating_nonres.append(param)
+
+        #     prev_nll = float('inf')
+        #     fit_result_obj = None
+
+        #     chi2_iter = 999
+        #     n_max_perturbations = 3
+        #     n_iter = 0
+
+        #     # save initial params (for perturbation)
+        #     pars_init = {}
+        #     for param in floating_nonres:
+        #         pars_init[param.GetName()] = param.getValV()
+        #     for param in floating_res:
+        #         pars_init[param.GetName()] = param.getValV()
+
+        #     while chi2_iter > chi2_threshold and n_iter < n_max_perturbations:
+        #         n_iter += 1
+        #         print(f"  [Trial {n_iter}/{n_max_perturbations}]: Attempting alternate-freezing fit (resonant/nonresonant)...", flush=True)
+                
+        #         # only perturb if first iteration failed
+        #         if n_iter > 1:
+        #             for param in floating_nonres:
+        #                 # Randomize within ±30% of current value
+        #                 # rand_val = param.getValV() * (1 + random.uniform(-0.3, 0.3))
+        #                 rand_val = pars_init[param.GetName()] * (1 + random.uniform(-0.1, 0.1))
+        #                 param.setVal(rand_val)
+        #                 print(f"    {param.GetName()} randomized to {rand_val:.4f} (range: [{param.getMin():.4f}, {param.getMax():.4f}])", flush=True)
+        #             for param in floating_res:
+        #                 rand_val = pars_init[param.GetName()] * (1 + random.uniform(-0.1, 0.1))
+        #                 param.setVal(pars_init[param.GetName()])
+
+        #         for iteration in range(1, max_iterations + 1):
+        #             print(f"  [Iteration {iteration}/{max_iterations}]", flush=True)
+                    
+        #             # STEP 1: Float non-resonant, freeze resonant
+        #             for p in floating_res: p.setConstant(True)
+        #             for p in floating_nonres: p.setConstant(False)
+        #             self.combined_model.fitTo(self.data, *fit_args)
+                    
+        #             # STEP 2: Float resonant, freeze non-resonant
+        #             for p in floating_res: p.setConstant(False)
+        #             for p in floating_nonres: p.setConstant(True)
+        #             fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+                    
+        #             if not fit_result_obj:
+        #                 print("  Fit failed to return a result object. Breaking loop.", flush=True)
+        #                 break
+                        
+        #             current_nll = fit_result_obj.minNll()
+        #             nll_diff = abs(prev_nll - current_nll)
+        #             print(f"    NLL: {current_nll:.3f} (delta: {nll_diff:.5f})", flush=True)
+                    
+        #             if nll_diff < nll_threshold:
+        #                 print(f"  Convergence reached at iteration {iteration}.", flush=True)
+        #                 break
+                        
+        #             prev_nll = current_nll
+
+        #         # final global fit with all parameters floating
+        #         for p in all_params: p.setConstant(False)
+        #         fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+
+        #         # compute chi2 on the fly
+        #         # retrieve number of bins
+        #         chi2_iter = self.combined_model.createChi2(self.data, ROOT.RooFit.Range(fit_region.name)).getVal() / (self.data.numEntries() - len(all_params) - 1)
+        #         print(f"  Final chi2/ndf after iterative fit: {chi2_iter:.3f}", flush=True)
+        #         if chi2_iter < chi2_threshold:
+        #             print(f"  Iterative fit successful with chi2/ndf < {chi2_threshold:.1f}. Exiting perturbation loop.", flush=True)
+        #             break
+        #         else:
+        #             print(f"  Iterative fit did not converge to a good chi2/ndf. Current chi2/ndf = {chi2_iter:.3f}. Retrying with init param perturbation...", flush=True)
+
+        #     # finally, unfreeze non-resonant parameters (must be floating in combine)
+        #     for p in floating_nonres: p.setConstant(False)
+        # ### OPTION 1: annealing fit
+        # else:
+        #     print("DEBUG: Executing Brute-Force Multi-Start Annealing", flush=True)
+
+        #     all_floating = [p for p in self.combined_model.getParameters(self.data) if not p.isConstant()]
+            
+        #     res_params = []
+        #     nonres_params = []
+        #     res_prefixes = list(self.resonant_backgrounds.keys())
+            
+        #     for p in all_floating:
+        #         if any(res in p.GetName() for res in res_prefixes):
+        #             res_params.append(p)
+        #         else:
+        #             nonres_params.append(p)
+
+        #     # =====================================================================
+        #     # STEP A: COARSE MULTI-START SEARCH
+        #     # =====================================================================
+        #     print("  [Step A] Randomizing initial conditions to map the global minimum...", flush=True)
+            
+        #     # Freeze resonances to prompt-MC values to stabilize the background search
+        #     for p in res_params: p.setConstant(True)
+
+        #     # # do a few alternate freezing rounds for init
+        #     # for p in nonres_params: p.setConstant(False)
+        #     # for p in res_params: p.setConstant(True)
+        #     # fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+        #     # print("DEBUG: Fitting with resonant frozen, non-resonant floating. Result:", flush=True)
+        #     # fit_result_obj.Print()
+        #     # for p in nonres_params: p.setConstant(True)
+        #     # for p in res_params: p.setConstant(False)
+        #     # fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+        #     # print("DEBUG: Fitting with non-resonant frozen, resonant floating. Result:", flush=True)
+        #     # fit_result_obj.Print()
+
+        #     # unfreeze everything again
+        #     for p in nonres_params: p.setConstant(False)
+        #     for p in res_params: p.setConstant(False)
+
+        #     best_coarse_nll = float('inf')
+        #     best_coarse_chi2 = float('inf')
+        #     best_coarse_snapshot = None
+        #     best_coarse_fit_status = -999
+            
+        #     CHI2_THRESHOLD = 1.15
+        #     ROUNDS_INCREMENT = 15
+        #     n_trials = ROUNDS_INCREMENT # Number of random starts
+        #     n_trial_rounds = 10
+        #     trial = 0 # trial counter
+        #     nround = 0 # round counter (rerunning 20 trials is expensive)
+            
+        #     # save parameter initial values
+        #     pars_init = {}
+        #     for param in nonres_params:
+        #         pars_init[param.GetName()] = param.getValV()
+        #     for param in res_params:
+        #         pars_init[param.GetName()] = param.getValV()
+
+        #     while trial < n_trials:
+        #         trial += 1
+
+        #         # 1. Randomize non-resonant shape parameters across their allowed bounds
+        #         for param in nonres_params:
+        #             # Do not wildly randomize the overall normalizations (ndy, njpsi) 
+        #             if any(norm in param.GetName() for norm in ["ndy", "njpsi", "npsi2s", "nphi", "nomega", "nupsilon1s"]):
+        #                 continue
+
+        #             # update seed -- otherwise same perturbation across all trials
+        #             random.seed(trial + nround * n_trials + int(time.time() * 1000) % 100000)
+        #             rand_val = param.getValV() * (1 + random.uniform(-0.3, 0.3))  # Randomize within ±30% of current value
+        #             # rand_val = pars_init[param.GetName()] * (1 + random.uniform(-0.3, 0.3))  # Randomize within ±30% of current value
+        #             param.setVal(rand_val)
+
+        #         for param in res_params:
+        #             # Do not wildly randomize the overall normalizations (ndy, njpsi) 
+        #             if any(norm in param.GetName() for norm in ["ndy", "njpsi", "npsi2s", "nphi", "nomega", "nupsilon1s"]):
+        #                 continue
+
+        #             rand_val = pars_init[param.GetName()] * (1 + random.uniform(-0.1, 0.1))  # Randomize within ±30% of current value
+        #             param.setVal(rand_val)
+                
+        #         print("DEBUG:   Trial", trial + 1, "/", n_trials, "randomized initial values:", flush=True)
+        #         for param in nonres_params:
+        #             print(f"      {param.GetName()} = {param.getValV():.4f} (range: [{param.getMin():.4f}, {param.getMax():.4f}])", flush=True)
+                    
+        #         # 2. Quick coarse fit 
+        #         res = self.combined_model.fitTo(self.data, *fit_args)
+        #         print("DEBUG:       Fit result: ", flush=True)
+        #         res.Print()
+                
+        #         # 3. Evaluate (Status 3 is acceptable here, it just means HESSE forced pos-def)
+        #         if res and (res.status() == 0 or res.status() == 3):
+        #             trial_nll = res.minNll()
+        #             chi2_temp = self.combined_model.createChi2(self.data, ROOT.RooFit.Range(fit_region.name)).getVal() / (self.data.numEntries() - len(all_floating) - 1)
+                    
+        #             if chi2_temp < best_coarse_chi2:
+        #                 best_coarse_chi2 = chi2_temp
+        #                 best_coarse_nll = trial_nll
+        #                 best_coarse_fit_status = res.status() if res else -1
+        #                 floating_now = self.combined_model.getParameters(self.data).selectByAttrib("Constant", False)
+        #                 best_coarse_snapshot = floating_now.snapshot()
+        #                 print(f"    Trial {trial}/{n_trials}: Found new best coarse chi2/ndf = {chi2_temp:.3f}", flush=True)
+
+        #             # if trial_nll < best_coarse_nll:
+        #             #     best_coarse_nll = trial_nll
+        #             #     floating_now = self.combined_model.getParameters(self.data).selectByAttrib("Constant", False)
+        #             #     best_coarse_snapshot = floating_now.snapshot()
+        #             #     print(f"    Trial {trial+1}/{n_trials}: Found new best coarse NLL = {trial_nll:.3f}", flush=True)
+        #             #     # compute chi2 on the fly 
+        #             #     chi2_temp = self.combined_model.createChi2(self.data, ROOT.RooFit.Range(fit_region.name)).getVal() / (self.data.numEntries() - len(all_floating) - 1)
+        #             #     print(f"    Trial {trial+1}/{n_trials}: Coarse fit chi2/ndf = {chi2_temp:.3f}", flush=True)
+        #             #     best_coarse_fit_status = res.status() if res else -1
+        #         else:
+        #             status = res.status() if res else -1
+        #             print(f"    Trial {trial+1}/{n_trials}: Failed convergence (Status {status})", flush=True)
+                
+        #         # if at the last trial, compute chi2 and check that it's not too bad
+        #         if trial == n_trials:
+        #             # restore best coarse snapshot for final fit
+        #             if best_coarse_snapshot:
+        #                 floating_params = self.combined_model.getParameters(self.data).selectByAttrib("Constant", False)
+        #                 floating_params.assignValueOnly(best_coarse_snapshot)
+        #             else:
+        #                 print("  [Warning] All coarse trials failed. Proceeding with default initialization.", flush=True)
+        #             chi2_iter = self.combined_model.createChi2(self.data, ROOT.RooFit.Range(fit_region.name)).getVal() / (self.data.numEntries() - len(all_floating) - 1)
+        #             print(f"  Final coarse fit chi2/ndf: {chi2_iter:.3f}", flush=True)
+        #             if chi2_iter > CHI2_THRESHOLD:
+        #                 print("  Warning: Coarse fit did not converge to a good chi2/ndf.")
+        #                 if nround < n_trial_rounds - 1:
+        #                     print(f"  Retrying coarse fit with new random initializations (round {nround + 2}/{n_trial_rounds})...", flush=True)
+        #                     n_trials += ROUNDS_INCREMENT
+        #                     nround += 1
+        #                     # reset parameters to initial values
+        #                     for param in nonres_params:
+        #                         param.setVal(pars_init[param.GetName()])
+        #                     for param in res_params:
+        #                         param.setVal(pars_init[param.GetName()])
+        #                 else:
+        #                     print("  ERROR: Maximum trial rounds reached with bad chi2. Check this out.", flush=True)
+        #                     break
+                        
+
+        #     # =====================================================================
+        #     # STEP B: RESTORE BEST AND FLOAT ALL (GLOBAL FIT)
+        #     # =====================================================================
+        #     if best_coarse_snapshot:
+        #         print(f"  [Step B] Restoring best coarse minimum (NLL={best_coarse_nll:.3f}) and floating resonances...", flush=True)
+        #         floating_params = self.combined_model.getParameters(self.data).selectByAttrib("Constant", False)
+        #         floating_params.assignValueOnly(best_coarse_snapshot)
+        #     else:
+        #         print("  [Warning] All coarse trials failed. Proceeding with default initialization.", flush=True)
+
+        #     # # Unfreeze resonances for the final fit
+        #     # for p in res_params: p.setConstant(False)
+            
+        #     # print("  [Step C] Executing final high-precision global fit...", flush=True)
+            
+        #     # # Optional: Tell MINUIT to compute a more rigorous Hessian for the final error matrix
+        #     # ROOT.Math.MinimizerOptions.SetDefaultStrategy(2)
+        #     # ROOT.Math.MinimizerOptions.SetDefaultTolerance(0.001)
+            
+        #     # fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+        #     # print("DEBUG: Final fit result:", flush=True)
+        #     # fit_result_obj.Print()
+
+        # # =========================================================================
+        # # END: ITERATIVE FIT
+        # # =========================================================================
+        
+        # ##### REMOVE ME #######
+        # fit_result_obj = self.combined_model.fitTo(self.data, *fit_args)
+        # print("DEBUG: Final fit result:", flush=True)
+        # fit_result_obj.Print()
+
         # Store results
         result = FitResult("full_bkg_model", fit_region.name)
-        result.fit_status = int(fit_result_obj.status())
+        # result.fit_status = int(best_coarse_fit_status) if not use_iterative_fit else int(fit_result_obj.status())
+        result.fit_status = 999
         
         # Get parameters
         params = self.combined_model.getParameters(self.data)
@@ -829,11 +1162,11 @@ class BackgroundFitter:
             res_params = resonant_bkg.getParameters(self.data)
             for param in res_params:
                 if param.isConstant():
-                    print("  Resonant parameters frozen on prompt MC already, skipping...", flush = True)
+                    print(f"  Resonant parameter {param.GetName()} frozen on prompt MC already, skipping...", flush = True)
                     continue
                 else:
                     param.setConstant(True)
-                    print(f"  Frozen: {param.GetName()} (on MinBias sample)", flush = True)
+                    print(f"  Frozen: {param.GetName()} to data", flush = True)
 
         return result
         
@@ -853,160 +1186,108 @@ class BackgroundFitter:
             print(f"  Frozen: {param.GetName()}")
         
     def fit_floating_resonant_to_prompt(self) -> FitResult:
-        """Fit floating resonant background models to prompt J/psi dataset"""
-        print("Fitting floating resonant background models to prompt J/psi dataset...")
+        """Fit floating resonant background models to prompt dataset(s)"""
+        print("Fitting floating resonant background models to prompt dataset(s)...")
         
-        # # Load prompt J/psi dataset
-        # resonant_file = ROOT.TFile.Open("datasets/dataset_jpsi_test.root") #FIXME: must match output format in dataset_creator.py
-        # if not resonant_file or resonant_file.IsZombie():
-        #     raise FileNotFoundError("Cannot open prompt J/psi dataset file")
-            
-        # resonant_w = resonant_file.Get("w")
-        # if not resonant_w:
-        #     raise ValueError("Workspace 'w' not found in prompt dataset file")
-            
-        # resonant_data = resonant_w.obj(f'data_obs{self.category.label}')
-        # print(f"DEBUG: loading dataset 'data_obs{self.category.label}' from prompt workspace", flush=True)
+        region = self.config.chosen_fit_region
+        res_data_config = region.background_resonant_data
+        result = FitResult("resonant_prompt_fits", region.name)
 
-        # if not resonant_data:
-        #     raise ValueError(f"Data 'data_obs{self.category.label}' not found in prompt workspace")
-
-        resonant_data = self.workspace.data(f"data_obs{self.category.label}_resonant")
-        if not resonant_data:
-            print(f"DEBUG: ERROR LOADING PROMPT DATASET. Workspace content:", flush=True)
-            for obj in self.workspace.allData():
-                print(f"  {obj.GetName()}", flush=True)
-            raise ValueError(f"Prompt dataset 'data_obs{self.category.label}_resonant' not found in workspace")
-            
-        print(f"  Loaded prompt dataset with {resonant_data.numEntries()} entries")
+        print("DEBUG: fitting prompt MC", flush=True)
         
-        for resonant_bkg in self.config.chosen_fit_region.backgrounds:
-            if resonant_bkg not in self.resonant_backgrounds:
-                raise ValueError(f"Resonant background model '{resonant_bkg}' not setup")
+        def apply_post_fit_constraints(model, data, is_individual, freeze=False):
+            """Helper to constrain parameters post-fit to prevent code duplication."""
+            for param in model.getParameters(data):
+                if freeze:
+                    param.setConstant(True)
+                    print(f"  Frozen parameter: {param.GetName()} = {param.getValV():.5f}")
+                elif not param.isConstant():
+                    central_val = param.getValV()
+                    if is_individual:
+                        # 5% core tolerance, strictly freeze tails
+                        if any(x in param.GetName() for x in ["alpha", "nL", "nR"]):
+                            param.setConstant(True)
+                            print(f"  Frozen tail parameter: {param.GetName()} = {central_val:.5f}")
+                        else:
+                            tol = 0.3
+                            param.setRange(central_val*(1 - tol), central_val*(1 + tol))
+                            print(f"  Constrained core: {param.GetName()} to [{param.getMin():.5f}, {param.getMax():.5f}]")
+                    else:
+                        # Legacy tolerance logic for merged fits
+                        tol = 0.3
+                        # if "alphaR" in param.GetName() and "omega" in model.GetName():
+                        #     tol = 0.8
+                        # if any(x in param.GetName() for x in ["nL", "nR"]) and "phi" in model.GetName():
+                        #     tol = 0.8
+                        param.setRange(max(param.getMin(), central_val*(1 - tol)), 
+                                       min(param.getMax(), central_val*(1 + tol)))
 
-        # # Get resonant background models
-        # if "jpsi" not in self.resonant_backgrounds or "psi2s" not in self.resonant_backgrounds:
-        #     raise ValueError("Resonant background models not setup")
-
-        # jpsi_model = self.resonant_backgrounds["jpsi"]
-        # psi2s_model = self.resonant_backgrounds["psi2s"]
-        
-        # # Create fraction parameter for psi(2S) component
-        # fraction_psi2s = ROOT.RooRealVar("fraction_psi2s", "fraction_psi2s", 0.7, 0, 1)
-
-        # # Create combined model
-        # jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s", 
-        #                                 ROOT.RooArgList(jpsi_model, psi2s_model), 
-        #                                 ROOT.RooArgList(fraction_psi2s))
-
-        models = self.resonant_backgrounds.values()
-        fractions = []
-        for model_name, frac in zip(self.config.chosen_fit_region.backgrounds[:-1],
-                                    self.config.chosen_fit_region.background_fractions):
-            frac_var = ROOT.RooRealVar(f"fraction_{model_name}", f"fraction_{model_name}", frac, 0, 1)
-            fractions.append(frac_var)
-
-        print(f"DEBUG: creating addPdf with models:")
-        for model in models:
-            print(model, flush=True)
-        print(f"DEBUG: and fractions:")
-        for frac in fractions:
-            print(frac, flush=True)
-            
-        # FIXME: change model name to combined_resonant_bkg AND FIX THIS IN PLOTTER TOO
-        jpsi_plus_psi2s = ROOT.RooAddPdf("jpsi_plus_psi2s", "jpsi_plus_psi2s",
-                                         ROOT.RooArgList(*models),
-                                         ROOT.RooArgList(*fractions))
-
-        print(f"DEBUG: combined resonant bkg model: {jpsi_plus_psi2s}", flush=True)
-        
-        # Import the combined model into workspace to maintain ownership
-        self.workspace.Import(jpsi_plus_psi2s, ROOT.RooCmdArg())
-        # Get the model back from workspace to ensure proper ownership
-        jpsi_plus_psi2s = self.workspace.obj("jpsi_plus_psi2s")
-        
-        # Store prefit parameter values
-        prefit_values = {}
-        params = jpsi_plus_psi2s.getParameters(resonant_data)
-        for param in params:
-            print(f"DEBUG: resonant param before fit: {param.GetName()} = {param.getValV()} (is constant? {param.isConstant()})", flush=True)
-            prefit_values[param.GetName()] = param.getValV()
-
-        print(f"DEBUG: fitting resonant model in range {self.config.chosen_fit_region.range[0]} - {self.config.chosen_fit_region.range[1]}", flush=True)
-            
-        # Perform fit
-        fit_result_obj = jpsi_plus_psi2s.fitTo(resonant_data, 
-                                               ROOT.RooFit.NumCPU(8), 
-                                               ROOT.RooFit.Range(self.config.chosen_fit_region.name), 
-                                               ROOT.RooFit.Save())
-                                            #    ROOT.RooFit.SumW2Error(True))
-                                            #    ROOT.RooFit.RecoverFromUndefinedRegions(4),
-        
-        print(f"DEBUG: resonant model fit completed", flush=True)
-        print(f"DEBUG: fit_result_obj = {fit_result_obj}", flush=True)
-
-        # Store results
-        print(f"DEBUG: storing fit results", flush=True)
-        result = FitResult("jpsi_plus_psi2s_prompt", self.config.chosen_fit_region.name)
-        if not fit_result_obj:
-            print("Warning: Fit result object is None")
-            result.fit_status = -1
+        # ---------------------------------------------------------
+        # DICT LOGIC: Fit models independently using separate datasets
+        # ---------------------------------------------------------
+        if isinstance(res_data_config, dict):
+            for model_name, _ in res_data_config.items():
+                dataset_name = f"data_obs{self.category.label}_{model_name}"
+                resonant_data = self.workspace.data(dataset_name)
+                
+                if not resonant_data:
+                    raise ValueError(f"Prompt dataset '{dataset_name}' not found in workspace.")
+                    
+                model = self.resonant_backgrounds[model_name]
+                print(f"Fitting {model_name} independently on dataset {dataset_name}...")
+                
+                fit_result_obj = model.fitTo(resonant_data, ROOT.RooFit.NumCPU(8), 
+                                             ROOT.RooFit.Range(region.name), ROOT.RooFit.Save())
+                
+                if fit_result_obj:
+                    result.fit_status = max(result.fit_status, int(fit_result_obj.status()))
+                
+                # # FIXME: all resonances are frozen. just skip the freezing altogether
+                # if "jpsi" in model.GetName() or "psi2s" in model.GetName() or "phi" in model.GetName() or "omega" in model.GetName() or "upsilon1s" in model.GetName() or "upsilon2s" in model.GetName():
+                #     continue
+                # CURRENT IMPLEMENTATION: Just freeze all resonant params (can change limits, add soft constraint, etc)                    
+                apply_post_fit_constraints(model, resonant_data, is_individual=False, freeze=True)
+                
+        # ---------------------------------------------------------
+        # STRING LOGIC: Fit RooAddPdf using a single shared dataset
+        # ---------------------------------------------------------
         else:
-            result.fit_status = int(fit_result_obj.status())
-        
-        # Get parameters
-        print("DEBUG: getting fit parameters", flush=True)
-        params = jpsi_plus_psi2s.getParameters(resonant_data)
-        n_free = params.selectByAttrib("Constant", False).getSize()
-        result.n_free_params = n_free
-        
-        for param in params:
-            print("DEBUG: processing param", param.GetName(), flush=True)
-            param_name = param.GetName()
-            prefit_val = prefit_values.get(param_name)
-            result.add_parameter(param_name, param, prefit_val)
+            resonant_data = self.workspace.data(f"data_obs{self.category.label}_resonant")
+            if not resonant_data:
+                raise ValueError(f"Prompt dataset 'data_obs{self.category.label}_resonant' not found in workspace")
+                
+            models = list(self.resonant_backgrounds.values())
+            fractions = [ROOT.RooRealVar(f"fraction_{m}", f"fraction_{m}", f, 0, 1) 
+                         for m, f in zip(region.backgrounds[:-1], region.background_fractions)]
             
-        self.log_print("Fitted jpsi and psi2s models to prompt data")
-        for param in params:
-            self.log_print(f"param: {param.GetName()}, value: {param.getValV():.5f}, error: {param.getError():.5f} (limits: [{param.getMin():.5g}, {param.getMax():.5g}])")
+            combined_resonant_model = ROOT.RooAddPdf("combined_resonant_bkg", "combined_resonant_bkg",
+                                                     ROOT.RooArgList(*models), ROOT.RooArgList(*fractions))
+                                                     
+            self.workspace.Import(combined_resonant_model, ROOT.RooCmdArg())
+            combined_resonant_model = self.workspace.obj("combined_resonant_bkg")
             
-        # Freeze resonant background parameters after fitting to prompt data
-        # if self.config.chosen_fit_region.name != "region1":
-        print(f"DEBUG: freezing resonant background parameters", flush=True)
-        for model in models:
-            # skip the jpsi
-            # FIXME TEMPORARY: also freezing the psi2s
-            if "jpsi" in model.GetName() or "psi2s" in model.GetName():
-                continue
-            for param in model.getParameters(resonant_data):
-                param.setConstant(True)
+            prefit_values = {p.GetName(): p.getValV() for p in combined_resonant_model.getParameters(resonant_data)}
+            
+            fit_result_obj = combined_resonant_model.fitTo(resonant_data, ROOT.RooFit.NumCPU(8), 
+                                                           ROOT.RooFit.Range(region.name), ROOT.RooFit.Save())
+            fit_result_obj = None
 
-        # # CONSTRAINING resonant background parameters after fitting to prompt data
-        # print(f"DEBUG: constraining resonant background parameters", flush=True)
-        # for model in models:
-        #     for param in model.getParameters(resonant_data):
-        #         if not param.isConstant():
-        #             central_val = param.getValV()
-        #             error = param.getError()
-        #             # Set limits to ±20% fitted value
-        #             tol = 0.2
-        #             new_min = max(param.getMin(), central_val*(1 - tol))
-        #             new_max = min(param.getMax(), central_val*(1 + tol))
-        #             param.setRange(new_min, new_max)
-        #             print(f"  Constrained: {param.GetName()} = {central_val:.5f} ± {error:.5f} to [{new_min:.5f}, {new_max:.5f}]")
+            result.fit_status = int(fit_result_obj.status()) if fit_result_obj else -1
             
-        # for param in jpsi_model.getParameters(resonant_data):
-        #     param.setConstant(True)
-        # for param in psi2s_model.getParameters(resonant_data):
-        #     param.setConstant(True)
+            params = combined_resonant_model.getParameters(resonant_data)
+            result.n_free_params = params.selectByAttrib("Constant", False).getSize()
+            for param in params:
+                result.add_parameter(param.GetName(), param, prefit_values.get(param.GetName()))
+                
+            for model in models:
+                # if "jpsi" in model.GetName() or "psi2s" in model.GetName() or "phi" in model.GetName() or "omega" in model.GetName() or "upsilon1s" in model.GetName() or "upsilon2s" in model.GetName():
+                #     continue
+                # CURRENT IMPLEMENTATION: Just freeze all resonant params (can change limits, add soft constraint, etc)
+                apply_post_fit_constraints(model, resonant_data, is_individual=False, freeze=True)
+                
+            self.resonant_combined_model = combined_resonant_model
+            self.resonant_data = resonant_data
             
-        print(f"  Prompt fit status: {result.fit_status}, free params: {n_free}", flush = True)
-        print("  Resonant background parameters frozen after prompt fit", flush = True)
-        
-        # Store the combined model for potential plotting
-        self.resonant_combined_model = jpsi_plus_psi2s
-        self.resonant_data = resonant_data
-        
         return result
 
     def calculate_integrals(self, fit_region: FitRegion) -> Dict[str, float]:

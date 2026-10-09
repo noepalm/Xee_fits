@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import os
 import argparse
+import ROOT
 
 plt.style.use(hep.style.CMS)
 
@@ -10,6 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--mu', type=float, default=0, help='Value of mu to plot')
 parser.add_argument('-o', '--output_folder', type=str, default='plots', help='Output folder for the plots')
 parser.add_argument('-c', '--category', type=str, default='etaHigh', help='Category to plot (default: etaHigh)')
+parser.add_argument('-e', '--era', type=str, choices=["2022", "2022EE", "2023", "2023BPix"], help='Era to plot')
 parser.add_argument('-t', '--tag', type=str, default="", help='Optional additional tag for output files')
 args = parser.parse_args()
 mu = args.mu
@@ -31,40 +33,65 @@ for folder in os.listdir(outfolder):
 
     # iterate over files in the subfolder
     for file in os.listdir(folder_path):
-        # find fitDiagnostics.log
-        if file == f"fitDiagnostics_{args.category}.log":
-            with open(os.path.join(folder_path, file), 'r') as f:
-                lines = f.readlines()
-                # find the line starting with "Best fit r"
-                for line in lines:
-                    if "Best fit r" in line:
-                        # format is: Best fit r: 0.00867265  -0.00176151/+0.00176533  (68% CL)
-                        # or:        Best fit r: 0.00867265  +-0.00176151  (68% CL)
-                        parts = line.split("Best fit r: ")[1].split()
-                        r_value = float(parts[0].strip())
+
+        # # find fitDiagnostics.log
+        # if file == f"fitDiagnostics_{args.category}.log":
+        #     with open(os.path.join(folder_path, file), 'r') as f:
+        #         lines = f.readlines()
+        #         # find the line starting with "Best fit r"
+        #         for line in lines:
+        #             if "Best fit r" in line:
+        #                 # format is: Best fit r: 0.00867265  -0.00176151/+0.00176533  (68% CL)
+        #                 # or:        Best fit r: 0.00867265  +-0.00176151  (68% CL)
+        #                 parts = line.split("Best fit r: ")[1].split()
+        #                 r_value = float(parts[0].strip())
                         
-                        # Check if symmetric error (+-) or asymmetric (-/+)
-                        if "+-" in parts[1]:
-                            # Symmetric error: extract value after +-
-                            error_val = float(parts[1].split("+-")[1].strip())
-                            r_min = error_val
-                            r_plus = error_val
-                        else:
-                            # Asymmetric error: split by /
-                            r_min = float(parts[1].split("/")[0].strip().strip("-"))
-                            r_plus = float(parts[1].split("/")[1].split()[0].strip().strip("+"))
+        #                 # Check if symmetric error (+-) or asymmetric (-/+)
+        #                 if "+-" in parts[1]:
+        #                     # Symmetric error: extract value after +-
+        #                     error_val = float(parts[1].split("+-")[1].strip())
+        #                     r_min = error_val
+        #                     r_plus = error_val
+        #                 else:
+        #                     # Asymmetric error: split by /
+        #                     r_min = float(parts[1].split("/")[0].strip().strip("-"))
+        #                     r_plus = float(parts[1].split("/")[1].split()[0].strip().strip("+"))
 
-                        r = {
-                            "r_value": r_value,
-                            "r_min": r_min,
-                            "r_plus": r_plus
-                        }
+        #                 r = {
+        #                     "r_value": r_value,
+        #                     "r_min": r_min,
+        #                     "r_plus": r_plus
+        #                 }
 
-                        # retrieve mass value as float
-                        mass = folder[1:]
+        #                 # retrieve mass value as float
+        #                 mass = folder[1:]
                         
-                        r_values[mass] = r
+        #                 r_values[mass] = r
 
+        # find fitDiagnostics_<category>_<era>.root
+        if file == f"fitDiagnostics_{args.category}_{args.era}.root":
+            print(f"DEBUG: found file {file} for mass {folder[1:]}")
+            f = ROOT.TFile.Open(os.path.join(folder_path, file))
+            # retrieve S+B post-fit tree
+            tree = f.Get("tree_fit_sb")
+            # get r, rLoErr, rHiErr from the tree
+            tree.GetEntry(0)
+            r_value = tree.GetLeaf("r").GetValue()
+            r_LoErr = tree.GetLeaf("rLoErr").GetValue()
+            r_HiErr = tree.GetLeaf("rHiErr").GetValue()
+
+            if r_LoErr < 0 or r_HiErr < 0:
+                print(f"WARNING: Negative error values for mass {folder[1:]}: r = {r_value}, rLoErr={r_LoErr}, rHiErr={r_HiErr}. Skipping this mass.")
+                continue
+
+            r = {
+                "r_value": r_value,
+                "r_min": r_LoErr,
+                "r_plus": r_HiErr,
+            }
+
+            mass = folder[1:]
+            r_values[mass] = r
 
 # plot r +- r_min/r_plus for each mass value
 r_central = [r_values[mass]["r_value"] for mass in sorted(r_values.keys(), key=float)]
@@ -97,4 +124,3 @@ suffix = "_injectedSignal" if mu > 0 else ""
 
 for ext in ["png", "pdf"]:
     plt.savefig(os.path.join(outfolder, f"mu_fit{suffix}_results{tag}.{ext}"))
-

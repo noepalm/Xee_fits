@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import mplhep as hep
+import matplotlib.patches as mpatches
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d, PchipInterpolator
@@ -92,8 +93,10 @@ def get_input_folders(era="2023", folder_tag="260226"):
     # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
     # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
     base_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/{folder_tag}/signal_model_allCorrections"
-    input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
-    input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+    # input_folder = f"{base_path}/ztables/era{era}/base_14_full/csv"
+    # input_folder_snap = f"{base_path}/zsnap/era{era}/base_14_full"
+    input_folder = f"{base_path}/ztables/era{era}/base_15_full/csv"
+    input_folder_snap = f"{base_path}/zsnap/era{era}/base_15_full"
 
 
     return input_folder, input_folder_snap
@@ -129,6 +132,7 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
     ID_efficiencies = {}
     reweight_efficiencies = {}
     reweight_relative_efficiencies = {}
+    trigger_PS_reweight_efficiencies = {}
 
     # print("DEBUG: opening snap ", input_folder_snap, " running on era ", era)
 
@@ -238,11 +242,16 @@ def retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era="2023")
                     elif row[1] == "ID":
                         # retrieve cumulative selection efficiency at that step
                         ID_efficiencies[filename.replace('.csv', '')] = clean_string(row[5])
+                    elif row[1] == "TriggerPSReweight":
+                        # save that efficiency too
+                        trigger_PS_reweight_efficiencies[filename.replace('.csv', '')] = clean_string(row[4])
+
     
     # print(f"DEBUG: reweight efficiencies = {reweight_efficiencies}")
     return {
         "ID_efficiencies": ID_efficiencies,
         "reweight_efficiencies": reweight_efficiencies,
+        "trigger_PS_reweight_efficiencies": trigger_PS_reweight_efficiencies,
         "has_trigger_variations": has_trigger_variations,
         "has_reco_variations": has_reco_variations
     }
@@ -345,7 +354,11 @@ def retrieve_producer_efficiencies(input_py):
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260324/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260329/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight"
 # outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260403/use_reco_mass_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope"
-outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260430/use_reco_mass_allCorrections"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260624/use_reco_mass_allCorrections"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260717/use_reco_mass_allCorrections"
+# outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260727/use_reco_mass_allCorrections"
+outfolder = "/eos/home-n/npalmeri/www/DiElectron/signal_model/260807/use_reco_mass_allCorrections"
 
 # -- Interpolate xsec, selection efficiency
 # samples = [
@@ -384,7 +397,8 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     global effs_electronID_up, effs_electronID_down, effs_trigger_up, effs_trigger_down
     global effs_reco_up, effs_reco_down
     global masses_ext, effs_ext, effs_err_ext, effs_old_ext, effs_err_old_ext
-    
+    global trigger_PS_efficiencies, effs_trigger_PS_nominal, effs_trigger_PS_err
+
     # Get folder paths for this era
     input_folder, input_folder_snap = get_input_folders(era=era, folder_tag=folder_tag)
     
@@ -392,15 +406,21 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
     # TODO: Update this if producer efficiencies become era-dependent
     # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15.py"
     # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/signal_model_withScaleSyst_IDSF_triggerSF__updatedSignal/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts.py"
-    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260430/signal_model_allCorrections/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts_perYear.py"
+    # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260624/signal_model_allCorrections/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts_perYear.py"
+    # producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/signal_model_allCorrections/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts_perYear.py"
+    producer_eff_path = f"/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260807/signal_model_allCorrections/zlog/data/MC/Zd_nJet012_pTe5_eta1p2_nanov15_updatedXqcuts_perYear.py"
     producer_efficiencies = retrieve_producer_efficiencies(producer_eff_path)
     
     # Load efficiencies from snap r
     both_efficiencies = retrieve_efficiencies_from_snap(input_folder, input_folder_snap, era=era)
     efficiencies = both_efficiencies["reweight_efficiencies"]
     old_efficiencies = both_efficiencies["ID_efficiencies"]
+    trigger_PS_efficiencies = both_efficiencies["trigger_PS_reweight_efficiencies"]
     has_trigger_variations = both_efficiencies.get("has_trigger_variations", False)
     has_reco_variations = both_efficiencies.get("has_reco_variations", False)
+
+    effs_trigger_PS_nominal = np.array([trigger_PS_efficiencies[sample][0] for sample in samples]) / 100
+    effs_trigger_PS_err = np.array([(trigger_PS_efficiencies[sample][1] + trigger_PS_efficiencies[sample][2])/2 for sample in samples]) / 100    
     
     # Apply producer efficiencies
     print("DEBUG: applying producer efficiencies")
@@ -512,7 +532,8 @@ def _load_efficiency_data(era="2023", folder_tag="260226"):
 # This will populate all the global variables (efficiencies, effs_dict, etc.)
 # masses = np.array([1, 3.1, 5, 5.5, 6, 6.5, 8, 10])
 masses = np.array([0.5, 1, 2, 3.1, 4, 6, 8, 10, 12])
-x = np.linspace(0, 12, 1000)  # for plotting; was 1, 7
+# x = np.linspace(0, 12, 1000)  # for plotting; was 1, 7
+x = np.linspace(0.5, 9.7, 1000)  # for plotting; was 1, 7
 
 # _load_efficiency_data(era="2023", folder_tag="260226")
 
@@ -647,6 +668,13 @@ def pchip_effs(use_old = False, use_crystalball=False, variation=None):
     
     return {"fit_function" : fit_func, "fit_parameters" : []}
 
+def pchip_trigger_PS_effs():
+    """PCHIP interpolation specifically for Trigger PS Reweight efficiencies."""
+    pchip_func = PchipInterpolator(masses, effs_trigger_PS_nominal, extrapolate=True)
+    fit_func = lambda x: pchip_func(x)
+    
+    return {"fit_function": fit_func, "fit_parameters": []}
+
 # Default efficiency function for module usage
 def get_efficiency_function(use_old=False, variation=None, era="2023", folder_tag="260226"):
     """Returns the default (PCHIP interpolation) efficiency function.
@@ -716,40 +744,25 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
     fig, ax = plt.subplots(figsize=(9, 8))
     hep.style.use(hep.style.CMS)
     palette = [
-        "#3f90da",
-        "#ffa90e",
-        "#bd1f01",
-        "#94a4a2",
-        "#832db6",
-        "#a96b59",
-        "#e76300",
-        "#b9ac70",
-        "#717581",
-        "#92dadd"
+        "black",
+        "#5790fc",
+        "#f89c20",
+        "#e42536",
+        "#964a8b",
     ]
+    # palette = [
+    #     "#3f90da",
+    #     "#ffa90e",
+    #     "#bd1f01",
+    #     "#94a4a2",
+    #     "#832db6",
+    #     "#a96b59",
+    #     "#e76300",
+    #     "#b9ac70",
+    #     "#717581",
+    #     "#92dadd"
+    # ]
     ax.set_prop_cycle(color=palette)
-
-    def _series_info(label):
-        label_lower = label.lower()
-        if "electronid" in label_lower and "up" in label_lower:
-            return palette[1], "^", "Electron ID SF up"
-        if "electronid" in label_lower and "down" in label_lower:
-            return palette[2], "v", "Electron ID SF down"
-        if "reco" in label_lower and "up" in label_lower:
-            return palette[5], "s", "Reco SF up"
-        if "reco" in label_lower and "down" in label_lower:
-            return palette[6], "D", "Reco SF down"
-        if "trigger" in label_lower and "up" in label_lower:
-            return palette[3], ">", "Trigger SF up"
-        if "trigger" in label_lower and "down" in label_lower:
-            return palette[4], "<", "Trigger SF down"
-        if "nominal" in label_lower:
-            return palette[0], "o", "Nominal"
-        if "up" in label_lower and "down" not in label_lower:
-            return palette[1], "^", "Up variation"
-        if "down" in label_lower:
-            return palette[2], "v", "Down variation"
-        return palette[0], "o", label
 
     legend_handles = []
 
@@ -778,116 +791,308 @@ def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, pl
     legend_handles.append(
         Line2D([], [], color=nominal_color, marker='o', linestyle='--', markersize=8, label='Nominal')
     )
-    
-    # Plot up/down variation points if available (not for old efficiencies)
-    if not use_old:
-        # Check which variations are available
-        if "new_electronID_up" in effs_dict[extension_flag]:
-            # New naming scheme with separate ID and trigger variations
-            color_electronID_up = '#4292c6'  # Light blue for electronID up
-            color_electronID_down = '#08519c'  # Dark blue for electronID down
-            color_trigger_up = '#fd8d3c'  # Light orange for trigger up
-            color_trigger_down = '#d94801'  # Dark orange for trigger down
-            
-            y_electronID_up, y_err_electronID_up = effs_dict[extension_flag]["new_electronID_up"]
-            y_electronID_down, y_err_electronID_down = effs_dict[extension_flag]["new_electronID_down"]
-            
-            ax.errorbar(
-                mass, y_electronID_up * 100, yerr=y_err_electronID_up * 100, fmt='^', label='_nolegend_',
-                markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
-            )
-            ax.errorbar(
-                mass, y_electronID_down * 100, yerr=y_err_electronID_down * 100, fmt='v', label='_nolegend_',
-                markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
-            )
-            legend_handles.extend([
-                Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Electron ID SF up'),
-                Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Electron ID SF down'),
-            ])
-            
-            if "new_trigger_up" in effs_dict[extension_flag]:
-                y_trigger_up, y_err_trigger_up = effs_dict[extension_flag]["new_trigger_up"]
-                y_trigger_down, y_err_trigger_down = effs_dict[extension_flag]["new_trigger_down"]
-                
-                ax.errorbar(
-                    mass, y_trigger_up * 100, yerr=y_err_trigger_up * 100, fmt='>', label='_nolegend_',
-                    markersize=7, capsize=5, elinewidth=1.5, color=palette[3]
-                )
-                ax.errorbar(
-                    mass, y_trigger_down * 100, yerr=y_err_trigger_down * 100, fmt='<', label='_nolegend_',
-                    markersize=7, capsize=5, elinewidth=1.5, color=palette[4]
-                )
-                legend_handles.extend([
-                    Line2D([], [], color=palette[3], marker='>', linestyle='--', markersize=7, label='Trigger SF up'),
-                    Line2D([], [], color=palette[4], marker='<', linestyle='--', markersize=7, label='Trigger SF down'),
-                ])
-            if "new_reco_up" in effs_dict[extension_flag]:
-                y_reco_up, y_err_reco_up = effs_dict[extension_flag]["new_reco_up"]
-                y_reco_down, y_err_reco_down = effs_dict[extension_flag]["new_reco_down"]
 
-                ax.errorbar(
-                    mass, y_reco_up * 100, yerr=y_err_reco_up * 100, fmt='s', label='_nolegend_',
-                    markersize=7, capsize=5, elinewidth=1.5, color=palette[5]
-                )
-                ax.errorbar(
-                    mass, y_reco_down * 100, yerr=y_err_reco_down * 100, fmt='D', label='_nolegend_',
-                    markersize=7, capsize=5, elinewidth=1.5, color=palette[6]
-                )
-                legend_handles.extend([
-                    Line2D([], [], color=palette[5], marker='s', linestyle='--', markersize=7, label='Reco SF up'),
-                    Line2D([], [], color=palette[6], marker='D', linestyle='--', markersize=7, label='Reco SF down'),
-                ])
-        elif "new_up" in effs_dict[extension_flag]:
-            # Old naming scheme (backward compatibility) - just ID variations as up/down
-            y_up, y_err_up = effs_dict[extension_flag]["new_up"]
-            y_down, y_err_down = effs_dict[extension_flag]["new_down"]
-            
-            ax.errorbar(
-                mass, y_up * 100, yerr=y_err_up * 100, fmt='^', label='_nolegend_',
-                markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
-            )
-            ax.errorbar(
-                mass, y_down * 100, yerr=y_err_down * 100, fmt='v', label='_nolegend_',
-                markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
-            )
-            legend_handles.extend([
-                Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Up variation'),
-                Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Down variation'),
-            ])
-
+    # Pre-evaluate all functions over the dense x grid
+    lines_data = {}
     for label, fit_info in funcs_to_draw.items():
         fit_func = fit_info["fit_function"]
         fit_params = fit_info["fit_parameters"]
-        line_color, _, _ = _series_info(label)
-
-        if len(fit_params) > 0:  # parametric fit with parameters
+        if len(fit_params) > 0:
             y_fit = fit_func(x, *fit_params)
-        else:  # interpolation function with no parameters
+        else:
             y_fit = fit_func(x)
+        lines_data[label] = y_fit * 100
 
-        ax.plot(x, y_fit * 100, linewidth=2, linestyle='--', color=line_color, alpha=0.8, label='_nolegend_')
+    # Draw nominal continuous line
+    nominal_keys = [k for k in lines_data.keys() if "nominal" in k.lower()]
+    for k in nominal_keys:
+        ax.plot(x, lines_data[k], linewidth=2, linestyle='--', color=nominal_color, alpha=0.8, label='_nolegend_')
+
+    # Draw variation envelopes
+    if not use_old:
+        # Define the expected scale factor strings to pair up/down functions
+        variation_mappings = [
+            ("trigger", "Trigger SF", palette[2]),
+            ("reco", "Reco SF", palette[3]),
+            ("electronid", "Electron ID SF", palette[1]),
+        ]
+
+        handled_keys = set()
+        for var_key, var_label, color in variation_mappings:
+            up_key = next((k for k in lines_data.keys() if var_key in k.lower() and "up" in k.lower()), None)
+            down_key = next((k for k in lines_data.keys() if var_key in k.lower() and "down" in k.lower()), None)
+
+            if up_key and down_key:
+                # Plot the envelope
+                ax.fill_between(x, lines_data[down_key], lines_data[up_key], color=color, alpha=0.5, label='_nolegend_')
+                # Use mpatches to add the filled band to the legend
+                legend_handles.append(
+                    mpatches.Patch(color=color, alpha=0.4, label=f'{var_label} variation')
+                )
+                handled_keys.add(up_key)
+                handled_keys.add(down_key)
+
+        # Fallback for old naming scheme with unspecific 'up'/'down' tags
+        if not handled_keys:
+            up_key = next((k for k in lines_data.keys() if "up" in k.lower()), None)
+            down_key = next((k for k in lines_data.keys() if "down" in k.lower()), None)
+            if up_key and down_key:
+                ax.fill_between(x, lines_data[down_key], lines_data[up_key], color=palette[1], alpha=0.4, label='_nolegend_')
+                legend_handles.append(
+                    mpatches.Patch(color=palette[1], alpha=0.4, label='SF variation')
+                )
+                handled_keys.add(up_key)
+                handled_keys.add(down_key)
+
+    # Plot any remaining curves not classified as nominal or paired variations
+    for label, y_fit in lines_data.items():
+        if "nominal" in label.lower() or "up" in label.lower() or "down" in label.lower():
+            continue
+        ax.plot(x, y_fit, linewidth=2, linestyle='--', alpha=0.8, label=label)
 
     ax.set_xlabel("M($Z_D$) [GeV]", fontsize=24)
     ax.set_ylabel("Efficiency [%]", fontsize=24)
-    # Use smaller ymax for final plot, larger for comparison plots
+    
     ymax = 17 if not plot_both and len(funcs_to_draw) < 5 else 20
-    # if maximum is larger than ymax, take max * 1.1
     max_y = max([max(effs_dict[extension_flag][key][0]) for key in effs_dict[extension_flag].keys() if "old" not in key]) * 1.1 * 100
     ymin = -0.1 if not plot_both and len(funcs_to_draw) < 5 else 0
     if use_log:
-        ymin = 1e-6
+        ymin = 1e-4
+        ymax = 10
         ax.set_yscale('log')
     ax.set_ylim(ymin, max_y)
+    ax.set_xlim(0.5, 9.7)
+    ax.tick_params(axis='both', which='major', labelsize=20, length=10)
+    ax.grid()
+    leg_kwargs = {}
+    if not use_log:
+        leg_kwargs["loc"] = "upper left"
+    ax.legend(handles=legend_handles, fontsize=15, **leg_kwargs)
+    
+    hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
+    
+    folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
+    os.makedirs(folder_to_use, exist_ok=True)
+    for ext in [".png", ".pdf"]:
+        plt.savefig(os.path.join(folder_to_use, outname + ext))    
+
+# def plot_effs(funcs_to_draw, outname, use_old = False, use_crystalball=False, plot_both = False, outfolder_arg=None, use_log=False, era="2023"):
+#     fig, ax = plt.subplots(figsize=(9, 8))
+#     hep.style.use(hep.style.CMS)
+#     palette = [
+#         "#3f90da",
+#         "#ffa90e",
+#         "#bd1f01",
+#         "#94a4a2",
+#         "#832db6",
+#         "#a96b59",
+#         "#e76300",
+#         "#b9ac70",
+#         "#717581",
+#         "#92dadd"
+#     ]
+#     ax.set_prop_cycle(color=palette)
+
+#     def _series_info(label):
+#         label_lower = label.lower()
+#         if "electronid" in label_lower and "up" in label_lower:
+#             return palette[1], "^", "Electron ID SF up"
+#         if "electronid" in label_lower and "down" in label_lower:
+#             return palette[2], "v", "Electron ID SF down"
+#         if "reco" in label_lower and "up" in label_lower:
+#             return palette[5], "s", "Reco SF up"
+#         if "reco" in label_lower and "down" in label_lower:
+#             return palette[6], "D", "Reco SF down"
+#         if "trigger" in label_lower and "up" in label_lower:
+#             return palette[3], ">", "Trigger SF up"
+#         if "trigger" in label_lower and "down" in label_lower:
+#             return palette[4], "<", "Trigger SF down"
+#         if "nominal" in label_lower:
+#             return palette[0], "o", "Nominal"
+#         if "up" in label_lower and "down" not in label_lower:
+#             return palette[1], "^", "Up variation"
+#         if "down" in label_lower:
+#             return palette[2], "v", "Down variation"
+#         return palette[0], "o", label
+
+#     legend_handles = []
+
+#     mass = masses_dict["ext"] if use_crystalball else masses_dict["base"]
+#     extension_flag = "ext" if use_crystalball else "base"
+#     old_flag = "old" if use_old else "new"
+#     y, y_err = effs_dict[extension_flag][old_flag]
+
+#     if plot_both:
+#         y_old, y_err_old = effs_dict[extension_flag]["old"]
+#         old_color = palette[5]
+#         ax.errorbar(
+#             mass, y_old * 100, yerr=y_err_old * 100, fmt='o', color=old_color, label='_nolegend_',
+#             markersize=8, capsize=7, elinewidth=2
+#         )
+#         legend_handles.append(
+#             Line2D([], [], color=old_color, marker='o', linestyle='None', markersize=8, label='No reweight')
+#         )
+
+#     # Plot nominal efficiency points
+#     nominal_color = palette[0]
+#     ax.errorbar(
+#         mass, y * 100, yerr=y_err * 100, fmt='o', color=nominal_color, label='_nolegend_',
+#         markersize=8, capsize=7, elinewidth=2
+#     )
+#     legend_handles.append(
+#         Line2D([], [], color=nominal_color, marker='o', linestyle='--', markersize=8, label='Nominal')
+#     )
+    
+#     # Plot up/down variation points if available (not for old efficiencies)
+#     if not use_old:
+#         # Check which variations are available
+#         if "new_electronID_up" in effs_dict[extension_flag]:
+#             # New naming scheme with separate ID and trigger variations
+#             color_electronID_up = '#4292c6'  # Light blue for electronID up
+#             color_electronID_down = '#08519c'  # Dark blue for electronID down
+#             color_trigger_up = '#fd8d3c'  # Light orange for trigger up
+#             color_trigger_down = '#d94801'  # Dark orange for trigger down
+            
+#             y_electronID_up, y_err_electronID_up = effs_dict[extension_flag]["new_electronID_up"]
+#             y_electronID_down, y_err_electronID_down = effs_dict[extension_flag]["new_electronID_down"]
+            
+#             ax.errorbar(
+#                 mass, y_electronID_up * 100, yerr=y_err_electronID_up * 100, fmt='^', label='_nolegend_',
+#                 markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
+#             )
+#             ax.errorbar(
+#                 mass, y_electronID_down * 100, yerr=y_err_electronID_down * 100, fmt='v', label='_nolegend_',
+#                 markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
+#             )
+#             legend_handles.extend([
+#                 Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Electron ID SF up'),
+#                 Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Electron ID SF down'),
+#             ])
+            
+#             if "new_trigger_up" in effs_dict[extension_flag]:
+#                 y_trigger_up, y_err_trigger_up = effs_dict[extension_flag]["new_trigger_up"]
+#                 y_trigger_down, y_err_trigger_down = effs_dict[extension_flag]["new_trigger_down"]
+                
+#                 ax.errorbar(
+#                     mass, y_trigger_up * 100, yerr=y_err_trigger_up * 100, fmt='>', label='_nolegend_',
+#                     markersize=7, capsize=5, elinewidth=1.5, color=palette[3]
+#                 )
+#                 ax.errorbar(
+#                     mass, y_trigger_down * 100, yerr=y_err_trigger_down * 100, fmt='<', label='_nolegend_',
+#                     markersize=7, capsize=5, elinewidth=1.5, color=palette[4]
+#                 )
+#                 legend_handles.extend([
+#                     Line2D([], [], color=palette[3], marker='>', linestyle='--', markersize=7, label='Trigger SF up'),
+#                     Line2D([], [], color=palette[4], marker='<', linestyle='--', markersize=7, label='Trigger SF down'),
+#                 ])
+#             if "new_reco_up" in effs_dict[extension_flag]:
+#                 y_reco_up, y_err_reco_up = effs_dict[extension_flag]["new_reco_up"]
+#                 y_reco_down, y_err_reco_down = effs_dict[extension_flag]["new_reco_down"]
+
+#                 ax.errorbar(
+#                     mass, y_reco_up * 100, yerr=y_err_reco_up * 100, fmt='s', label='_nolegend_',
+#                     markersize=7, capsize=5, elinewidth=1.5, color=palette[5]
+#                 )
+#                 ax.errorbar(
+#                     mass, y_reco_down * 100, yerr=y_err_reco_down * 100, fmt='D', label='_nolegend_',
+#                     markersize=7, capsize=5, elinewidth=1.5, color=palette[6]
+#                 )
+#                 legend_handles.extend([
+#                     Line2D([], [], color=palette[5], marker='s', linestyle='--', markersize=7, label='Reco SF up'),
+#                     Line2D([], [], color=palette[6], marker='D', linestyle='--', markersize=7, label='Reco SF down'),
+#                 ])
+#         elif "new_up" in effs_dict[extension_flag]:
+#             # Old naming scheme (backward compatibility) - just ID variations as up/down
+#             y_up, y_err_up = effs_dict[extension_flag]["new_up"]
+#             y_down, y_err_down = effs_dict[extension_flag]["new_down"]
+            
+#             ax.errorbar(
+#                 mass, y_up * 100, yerr=y_err_up * 100, fmt='^', label='_nolegend_',
+#                 markersize=7, capsize=5, elinewidth=1.5, color=palette[1]
+#             )
+#             ax.errorbar(
+#                 mass, y_down * 100, yerr=y_err_down * 100, fmt='v', label='_nolegend_',
+#                 markersize=7, capsize=5, elinewidth=1.5, color=palette[2]
+#             )
+#             legend_handles.extend([
+#                 Line2D([], [], color=palette[1], marker='^', linestyle='--', markersize=7, label='Up variation'),
+#                 Line2D([], [], color=palette[2], marker='v', linestyle='--', markersize=7, label='Down variation'),
+#             ])
+
+#     for label, fit_info in funcs_to_draw.items():
+#         fit_func = fit_info["fit_function"]
+#         fit_params = fit_info["fit_parameters"]
+#         line_color, _, _ = _series_info(label)
+
+#         if len(fit_params) > 0:  # parametric fit with parameters
+#             y_fit = fit_func(x, *fit_params)
+#         else:  # interpolation function with no parameters
+#             y_fit = fit_func(x)
+
+#         ax.plot(x, y_fit * 100, linewidth=2, linestyle='--', color=line_color, alpha=0.8, label='_nolegend_')
+
+#     ax.set_xlabel("M($Z_D$) [GeV]", fontsize=24)
+#     ax.set_ylabel("Efficiency [%]", fontsize=24)
+#     # Use smaller ymax for final plot, larger for comparison plots
+#     ymax = 17 if not plot_both and len(funcs_to_draw) < 5 else 20
+#     # if maximum is larger than ymax, take max * 1.1
+#     max_y = max([max(effs_dict[extension_flag][key][0]) for key in effs_dict[extension_flag].keys() if "old" not in key]) * 1.1 * 100
+#     ymin = -0.1 if not plot_both and len(funcs_to_draw) < 5 else 0
+#     if use_log:
+#         ymin = 1e-6
+#         ax.set_yscale('log')
+#     ax.set_ylim(ymin, max_y)
+#     ax.tick_params(axis='both', which='major', labelsize=20, length=10)
+#     ax.grid()
+#     ax.legend(handles=legend_handles, fontsize=15)
+#     # add cms label with reduced font size
+#     hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
+    
+#     folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
+#     os.makedirs(folder_to_use, exist_ok=True)
+#     for ext in [".png", ".pdf"]:
+#         plt.savefig(os.path.join(folder_to_use, outname + ext))
+
+def plot_trigger_PS_effs(funcs_to_draw, outname="trigger_PS_efficiency_vs_mass", outfolder_arg=None, era="2023"):
+    fig, ax = plt.subplots(figsize=(9, 8))
+    hep.style.use(hep.style.CMS)
+    
+    # We can just borrow the nominal blue from your palette
+    nominal_color = "#3f90da"
+
+    # Plot the data points
+    ax.errorbar(
+        masses, effs_trigger_PS_nominal * 100, yerr=effs_trigger_PS_err * 100, fmt='o', color=nominal_color, label='_nolegend_',
+        markersize=8, capsize=7, elinewidth=2
+    )
+    
+    legend_handles = [
+        Line2D([], [], color=nominal_color, marker='o', linestyle='None', markersize=8, label='Trigger PS Reweight')
+    ]
+
+    # Plot the interpolations
+    for label, fit_info in funcs_to_draw.items():
+        fit_func = fit_info["fit_function"]
+        y_fit = fit_func(x) # PCHIP takes no extra parameters
+        ax.plot(x, y_fit * 100, linewidth=2, linestyle='--', color=nominal_color, alpha=0.8, label='_nolegend_')
+        legend_handles.append(Line2D([], [], color=nominal_color, linestyle='--', label=label))
+
+    ax.set_xlabel("M($Z_D$) [GeV]", fontsize=24)
+    ax.set_ylabel("Trigger PS Reweight Eff. [%]", fontsize=24)
+    
+    # Range scaled for percentages (0 to ~105 to give a little headroom if it perfectly hits 100%)
+    ax.set_ylim(0, 105)
     ax.tick_params(axis='both', which='major', labelsize=20, length=10)
     ax.grid()
     ax.legend(handles=legend_handles, fontsize=15)
-    # add cms label with reduced font size
+    
     hep.cms.label(label="Preliminary", ax=ax, data=False, year=era, com=13.6, fontsize=18)
     
     folder_to_use = outfolder_arg if outfolder_arg is not None else outfolder
     os.makedirs(folder_to_use, exist_ok=True)
     for ext in [".png", ".pdf"]:
         plt.savefig(os.path.join(folder_to_use, outname + ext))
+
 
 def fit_xsecs(use_old = False):
     if use_old:
@@ -989,6 +1194,7 @@ def plot_acceptances(funcs_to_draw, outname = "acceptance_vs_mass", outfolder_ar
     ax.set_ylabel("Acceptance")
     # ax.set_ylim(0, 1)
     ax.set_ylim(6e-4, 0.15)
+    ax.set_xlim(0.5, 9.7)
     ax.set_yscale('log')
     ax.grid()
     ax.legend()
@@ -1050,6 +1256,7 @@ def plot_xsecs(funcs_to_draw, outname = "xsec_vs_mass", use_old = False, outfold
     if max(xsecs_to_use) > 45:
         y_max = 80
     ax.set_ylim(0, y_max)
+    ax.set_xlim(0.5, 9.7)
     ax.grid()
     ax.legend()
 
@@ -1077,7 +1284,9 @@ if __name__ == "__main__":
         
         # Load efficiency data for this era
         # _load_efficiency_data(era=era, folder_tag="260226")
-        _load_efficiency_data(era=era, folder_tag="260430")
+        # _load_efficiency_data(era=era, folder_tag="260624")
+        # _load_efficiency_data(era=era, folder_tag="260727")
+        _load_efficiency_data(era=era, folder_tag="260807")
         
         print("effs (NEW) = ", effs_nominal)
         print("effs (OLD) = ", effs_old)
@@ -1183,6 +1392,17 @@ if __name__ == "__main__":
                    outname="xsec_vs_mass_final", outfolder_arg=era_outfolder, era=era)
         plot_acceptances(funcs_to_draw={"PCHIP interpolation" : pchip_result_acceptance},
                  outname="acceptance_vs_mass_final", outfolder_arg=era_outfolder, era=era)
+
+        pchip_result_trigger_PS = pchip_trigger_PS_effs()
+
+        print("DEBUG: PS reweight efficiencies (nominal): ", effs_trigger_PS_nominal)
+
+        plot_trigger_PS_effs(
+            funcs_to_draw={"PCHIP interpolation": pchip_result_trigger_PS},
+            outname="trigger_PS_efficiency_vs_mass", 
+            outfolder_arg=era_outfolder, 
+            era=era
+        )                 
         
         print(f"\nCompleted processing for era {era}. Plots saved to: {era_outfolder}\n")
 

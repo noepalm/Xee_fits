@@ -73,13 +73,6 @@ class BackgroundAnalysis:
         signal_folder_tag = getattr(self, 'signal_folder_tag', '')
         # signal_ws_file = f'../signal_modelling/workspaces/{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
         if signal_folder_tag:
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_6p5triggerOnly_newSignal.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_6p5triggerOnly.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_isoCut.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight.root'
-            # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_PUreweight_envelope.root'
             # signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_nanov15_withScaleSyst_IDSF_triggerSF_tighterCuts_newSignal_noWeights.root'
             signal_ws_file = f'../signal_modelling/workspaces/{signal_folder_tag}/era{era}/signal_model_allCorrections.root'
         else:
@@ -206,7 +199,9 @@ class BackgroundAnalysis:
                     print(f"  ✅ Retrieved and renamed to: {dy.GetName()}")
 
         # Create envelope function with era-specific naming (including index)
-        pdf_index_name = f"pdf_index_{era}"
+        # pdf_index_name = f"pdf_index_{era}"
+        print(f"DEBUG: era = {era}")
+        pdf_index_name = f"CMS_EXO25020_bkgEnvelopeIdx_{era}"
         pdf_index = ROOT.RooCategory(pdf_index_name, pdf_index_name)
         envelope_f = ROOT.RooMultiPdf(f"dy{category_label}_{era}", f"dy{category_label}_{era}", 
                                       pdf_index, ROOT.RooArgList(*bkg_funcs))
@@ -220,7 +215,7 @@ class BackgroundAnalysis:
 
         # Import envelope function
         # self.output_workspace.Import(envelope_f, ROOT.RooCmdArg())
-        self.output_workspace.Import(envelope_f, ROOT.RooFit.RenameAllVariablesExcept("envelope", "mass"))
+        self.output_workspace.Import(envelope_f, ROOT.RooFit.RenameAllVariablesExcept("envelope", f"mass, CMS_EXO25020_bkgEnvelopeIdx_{era}"))
         print(f"  ✅ Created envelope: {envelope_f.GetName()} with {len(bkg_funcs)} components")
 
         # Set output workspace file path
@@ -284,6 +279,7 @@ class BackgroundAnalysis:
         self.config.use_reweighting = not args.no_reweighting
         self.config.no_res = args.no_res
         self.config.chosen_fit_region = self.config.get_fit_region(args.fit_region) if args.fit_region else None
+        self.config.blinded = args.blinded
         # TODO FIXME: currently it's Background Config blabla that returns dataset path -- that makes no sense, it's DatasetCreator's duty
         
         # Store reweighting setting for dataset creation
@@ -371,15 +367,39 @@ class BackgroundAnalysis:
                         print(f"  ⚠️  Warning: MinBias dataset {minbias_dataset_name} not found in cached file")
                 
                 # Load resonant dataset if it exists
+                # Load resonant dataset if it exists
                 if self.config.fit_jpsi_prompt:
-                    resonant_dataset_name = f'data_obs{category_config.label}_resonant'
-                    cached_resonant_dataset = cached_workspace.data(resonant_dataset_name)
+                    res_data_config = self.config.chosen_fit_region.background_resonant_data if self.config.chosen_fit_region else ""
                     
-                    if cached_resonant_dataset:
-                        cached_datasets[resonant_dataset_name] = cached_resonant_dataset.Clone()
-                        print(f"  ✅ Cached {resonant_dataset_name}: {cached_datasets[resonant_dataset_name].numEntries()} entries")
+                    suffixes = []
+                    if isinstance(res_data_config, dict):
+                        suffixes = [f"_{bkg}" for bkg in res_data_config.keys()]
                     else:
-                        print(f"  ⚠️  Warning: Resonant dataset {resonant_dataset_name} not found in cached file")
+                        suffixes = ["_resonant"]
+                        
+                    for suffix in suffixes:
+                        resonant_dataset_name = f'data_obs{category_config.label}{suffix}'
+                        
+                        # Note: ensure cached_workspace points to the J/psi file here
+                        cached_resonant_dataset = cached_workspace.data(resonant_dataset_name)
+                        
+                        if cached_resonant_dataset:
+                            cached_datasets[resonant_dataset_name] = cached_resonant_dataset.Clone()
+                            print(f"  ✅ Cached {resonant_dataset_name}: {cached_datasets[resonant_dataset_name].numEntries()} entries")
+                        else:
+                            print(f"  ⚠️  Warning: Resonant dataset {resonant_dataset_name} not found in cached file")
+                            # throw error
+                            raise RuntimeError(f"Resonant dataset {resonant_dataset_name} not found in cached file")
+
+                # if self.config.fit_jpsi_prompt:
+                #     resonant_dataset_name = f'data_obs{category_config.label}_resonant'
+                #     cached_resonant_dataset = cached_workspace.data(resonant_dataset_name)
+                    
+                #     if cached_resonant_dataset:
+                #         cached_datasets[resonant_dataset_name] = cached_resonant_dataset.Clone()
+                #         print(f"  ✅ Cached {resonant_dataset_name}: {cached_datasets[resonant_dataset_name].numEntries()} entries")
+                #     else:
+                #         print(f"  ⚠️  Warning: Resonant dataset {resonant_dataset_name} not found in cached file")
             
             # Close the file now that we have cloned the datasets
             cached_file.Close()
@@ -884,7 +904,7 @@ def create_argument_parser():
     parser.add_argument("--fit_region", default="region1", 
                        choices=["region1", "region0", "region2", "region2_restricted", "full"],
                        help="Pick fit region")
-    parser.add_argument("--bkg_function", default=-1, type=int, choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+    parser.add_argument("--bkg_function", default=-1, type=int, #choices=[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
                        help="Choose background function (0: Bernstein, 1: Poly×Exp, 2: Sum Exp, 3: Simple Exp; 4: Chebyshev, 5: Bernstein + exp, 6: modified BW. -1 for all)")
     parser.add_argument("--input_workspaces", nargs='+', default=[],
                        help="Input workspace files for envelope (only works with bkg_function=-1)")
@@ -909,7 +929,9 @@ def create_argument_parser():
                        help="Skip plot creation")
     parser.add_argument("--plot_all_categories", action="store_true", default=False,
                        help="Create plots for all categories (requires existing fits)")
-    
+    parser.add_argument("--blinded", action="store_true", default=False,
+                       help="Blind data in plots (plot models and pulls only)")
+
     # Workflow options
     parser.add_argument("--full_analysis", action="store_true", default=False,
                        help="Run complete analysis (create datasets + fit + plot)")

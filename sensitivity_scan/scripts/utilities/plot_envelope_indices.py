@@ -9,8 +9,11 @@ hep.style.use("CMS")
 
 region_ranges = {
     "region0": {"min": 0.3, "min_limit": 0.5, "max": 2.4, "max_limit": 2.2},
-    "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
-    "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+    # "region1": {"min": 1.6, "min_limit": 1.8, "max": 5.3, "max_limit": 4.9},
+    # "region2": {"min": 4.5, "min_limit": 4.9, "max": 10.5, "max_limit": 10},
+    "region1": {"min": 2.0, "min_limit": 2.2, "max": 7.0, "max_limit": 6.5},
+    # "region2": {"min": 6.0, "min_limit": 5.5, "max": 15.0, "max_limit": 14.5},
+    "region2": {"min": 6.0, "min_limit": 5.5, "max": 12.0, "max_limit": 11.0}, 
 }
 
 template = "cards/260327/cards_{region}_data_envelope_withScaleSyst_withMeanNuisance_IDSF_triggerSF_finerBinning_tighterCuts_biasTests_bySubera_binned/ee"
@@ -44,7 +47,10 @@ for region in regions:
                 file = ROOT.TFile(f"{subfolder}/higgsCombine_inclusive_{era}_SB.MultiDimFit.mH120.root")
                 tree = file.Get("limit")
                 tree.GetEntry(0)
-                index = getattr(tree,f"pdf_index_{era}_envelope")
+                index = getattr(tree, f"CMS_EXO25020_bkgEnvelopeIdx_{era}", None)
+                if index is None:
+                    # try old name
+                    index = getattr(tree, f"pdf_index_{era}_envelope", None)
                 if era not in results:
                     results[era] = {}
                 results[era][mass] = index
@@ -68,7 +74,9 @@ for region in regions:
     plt.axvline(region_ranges[region]["max_limit"], color='gray', linestyle='--', label=f'{region} max', alpha=0.5)
 
 # indices are either 0 (chebyshev), 1 (bernstein) or 2 (polyexp); change y-axis labels accordingly
-plt.yticks([0, 1, 2], ["Chebyshev", "Bernstein", "PolyExp"], rotation=60)
+# plt.yticks([0, 1, 2], ["Chebyshev", "Bernstein", "PolyExp"], rotation=60) ### OLD
+plt.yticks([0, 1], ["Bernstein", "Chebyshev"], rotation=60)
+
 
 # save plot
 output_dir = Path(args.output_dir)

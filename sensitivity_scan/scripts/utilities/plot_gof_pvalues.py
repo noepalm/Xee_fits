@@ -122,7 +122,7 @@ def main():
 
     fig, ax = plt.subplots(figsize=(10,10))
     plot_curves(ax, gof_obs, args.regions, "Observed GoF", args.region_boundaries, colors)
-    hep.cms.label("Preliminary", loc=0, ax=ax)
+    hep.cms.label("Preliminary", loc=0, ax=ax, com=13.6)
     # ax.set_title(f"Observed GoF vs Mass - {args.cat}, {args.era}")
     fig.tight_layout()
 
@@ -139,7 +139,7 @@ def main():
     ax.set_ylim(1e-9, 1.0)
     ax.set_yscale("log")
 
-    hep.cms.label("Preliminary", loc=0, ax=ax)
+    hep.cms.label("Preliminary", loc=0, ax=ax, com=13.6)
     # ax.set_title(f"GoF p-value vs Mass - {args.cat}, {args.era}")
     ax.axhline(0.05, color="red", linestyle=":", linewidth=1.0, label="p-value = 5%")
     fig.tight_layout()
