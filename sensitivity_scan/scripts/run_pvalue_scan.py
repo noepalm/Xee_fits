@@ -58,8 +58,8 @@ COMMON_EXTRA_ARGS = [
     # 
     "--cminDefaultMinimizerStrategy", "0",
     # "--freezeParameters", "CMS_scale_e",
-    # "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
-    # "--cminRunAllDiscreteCombinations",
+    "--X-rtd", "MINIMIZER_freezeDisassociatedParams",
+    "--cminRunAllDiscreteCombinations",
 
     ### for sliding window test
     # "--setParameters", set_params,

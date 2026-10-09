@@ -176,13 +176,13 @@ class BackgroundModelConfig:
                     (6.0, 8.5),
                     (9.6, 12.0),
                 ], #3.8-11 (original), 4.9-10.5 (first alternative)
-                # backgrounds=["upsilon1s", "upsilon2s"],
-                # background_fractions=[0.7],
-                backgrounds=["upsilon1s"],
-                background_fractions=[],
+                backgrounds=["upsilon1s", "upsilon2s"],
+                background_fractions=[0.7],
+                # backgrounds=["upsilon1s"],
+                # background_fractions=[],
                 # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260807/promptUpsilon_allCorrections/zsnap/era{self.era}/base_7_full/',
-                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/promptUpsilon_allCorrections/zsnap/era{self.era}/base_7_full/',
-                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/signal_model_allCorrections/zsnap/era{self.era}/base_15_full/upsilon/',
+                background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/promptUpsilon_allCorrections/zsnap/era{self.era}/base_7_full/', #DEFAULT, for unblinding (has both Y(1S) and Y(2S))
+                # background_resonant_data = f'/eos/home-n/npalmeri/www/DiElectron/PS_reweighting/nanov15/per_subera/260727/signal_model_allCorrections/zsnap/era{self.era}/base_15_full/upsilon/', # FOR MC TESTS, has Y(1S) only
                 description="High mass background region"
             ),
             "full": FitRegion(
